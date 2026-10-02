@@ -100,9 +100,9 @@
   - 불필요한 플랫폼 수식어와 복잡한 라벨을 모두 제거하고 간결하고 직관적인 **[로그인]** 단일 액션으로 통일.
   - 하단 Keycloak 리다이렉트/콜백 경로 안내 박스 완전 제거.
   - **[개발자 모드 즉시 접속]**: 프로덕션 환경에서는 숨기고 개발/로컬 환경(`localhost`, `dev-*`, non-production)에서만 조건부 렌더링.
-  - **OIDC 로그인 트리거 안정화 및 Issuer Fallback 적용**: 페이지 진입 직후 클릭 시 비동기 설정 미완료로 "인증 설정이 확인되지 않았습니다" 오류가 발생하던 문제를 해결. 클릭 시 실시간 재조회 및 플랫폼 확정 Issuer(`https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306`) 자동 fallback을 탑재하여 100% 즉시 인증 화면으로 안전하게 진입 보장.
-- **슬림 GNB 로그아웃 연동 및 불필요한 플랫폼 연동 모달 완전 제거 (`SidebarGNB.tsx`, `page.tsx`)**:
-  - 현재 로그인된 상담사명 동적 반영 및 하단 프로필 메뉴에 **[로그아웃]** 액션 탑재 (쿠키 만료, 세션 클리어 후 `/login`으로 안전하게 리다이렉트).
+  - **OIDC 로그인 트리거 안정화 및 prompt=login 강제 적용**: 페이지 진입 직후 클릭 시 비동기 설정 미완료로 발생하던 오류를 해결하고 플랫폼 확정 Issuer 자동 fallback을 탑재함. 또한 `prompt: 'login'` 파라미터를 전달하여 Keycloak 세션 잔류로 인한 자동 로그인을 방지하고 항상 Keycloak 로그인 화면이 뜨도록 강제.
+- **슬림 GNB 실제 Keycloak OIDC 로그아웃(RP-Initiated Logout) 연동 및 불필요한 플랫폼 연동 모달 완전 제거 (`SidebarGNB.tsx`, `pkce.ts`, `auth/callback/page.tsx`)**:
+  - GNB [로그아웃] 클릭 시 로컬 쿠키/세션만 지우는 것이 아니라 Keycloak OIDC 로그아웃 엔드포인트(`.../protocol/openid-connect/logout`, `id_token_hint`)로 브라우저를 이동시켜 플랫폼 인증 서버의 세션 쿠키까지 완전히 파기한 후 `/login`으로 안전하게 복귀하도록 구현.
   - 일반 실무 사용자 및 상담사에게 노출될 필요가 없는 내부 개발용 **[SHNEA 플랫폼 연동 관리]** 방패 아이콘 및 팝업 모달(`PlatformIntegrationModal.tsx`)을 완전히 삭제하여 실무 중심의 깔끔한 워크스페이스 확보.
 
 ## 검증 및 Git 상태

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { PhoneCall, Users, Ticket, BarChart3, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
 import { AgentStatus } from '../types';
+import { buildLogoutUrl } from '@/lib/pkce';
 
 interface SidebarGNBProps {
   currentTab: string;
@@ -143,10 +144,23 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
               <div className="pt-1.5 mt-1.5 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    const idToken = typeof window !== 'undefined' ? sessionStorage.getItem('hellow_id_token') : null;
                     document.cookie = 'hellow_logged_in=; path=/; max-age=0';
                     sessionStorage.clear();
-                    window.location.href = '/login';
+
+                    try {
+                      const configRes = await fetch('/api/platform/oidc-config');
+                      const config = configRes.ok ? await configRes.json() : null;
+                      const issuer = config?.issuer || 'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
+                      const clientId = config?.clientId || 'app';
+                      const postLogoutRedirectUri = `${window.location.origin}/login`;
+
+                      const logoutUrl = buildLogoutUrl(issuer, clientId, postLogoutRedirectUri, idToken);
+                      window.location.href = logoutUrl;
+                    } catch {
+                      window.location.href = '/login';
+                    }
                   }}
                   className="w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left text-rose-300 hover:text-rose-200 hover:bg-rose-950/40 transition-colors"
                 >

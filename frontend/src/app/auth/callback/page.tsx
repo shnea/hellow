@@ -90,6 +90,9 @@ function AuthCallbackContent() {
         document.cookie = 'hellow_logged_in=true; path=/; max-age=86400; SameSite=Lax';
         sessionStorage.setItem('hellow_agent_name', agentName);
         sessionStorage.setItem('hellow_access_token', tokenData.access_token);
+        if (tokenData.id_token) {
+          sessionStorage.setItem('hellow_id_token', tokenData.id_token);
+        }
         sessionStorage.setItem('hellow_logged_in', 'true');
         setUserInfo({ name: agentName, email });
 

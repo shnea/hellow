@@ -96,6 +96,7 @@ function LoginContent() {
         clientId,
         redirectUri,
         scopes: activeConfig?.scopes || 'openid profile email',
+        prompt: 'login', // Keycloak 세션 잔류 시에도 항상 ID/PW 로그인 화면 강제
       };
 
       const { url } = await buildAuthorizationUrl(config);

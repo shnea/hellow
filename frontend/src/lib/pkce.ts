@@ -40,6 +40,7 @@ export interface OidcAuthConfig {
   clientId: string;
   redirectUri: string;
   scopes?: string;
+  prompt?: string;
 }
 
 // Keycloak 로그인 URL 빌드
@@ -66,6 +67,7 @@ export async function buildAuthorizationUrl(config: OidcAuthConfig): Promise<{ u
     nonce: nonce,
     code_challenge: challenge,
     code_challenge_method: 'S256',
+    prompt: config.prompt || 'login', // 자동 로그인 방지 및 항상 Keycloak 로그인 화면 강제
   });
 
   return {
@@ -107,4 +109,22 @@ export async function exchangeCodeForToken(
   }
 
   return res.json();
+}
+
+// Keycloak OIDC 로그아웃 URL 빌드 (RP-Initiated Logout)
+export function buildLogoutUrl(
+  issuer: string,
+  clientId: string,
+  postLogoutRedirectUri: string,
+  idToken?: string | null
+): string {
+  const logoutEndpoint = `${issuer.replace(/\/$/, '')}/protocol/openid-connect/logout`;
+  const params = new URLSearchParams({
+    client_id: clientId || 'app',
+    post_logout_redirect_uri: postLogoutRedirectUri,
+  });
+  if (idToken) {
+    params.set('id_token_hint', idToken);
+  }
+  return `${logoutEndpoint}?${params.toString()}`;
 }
