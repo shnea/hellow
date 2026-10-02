@@ -19,14 +19,13 @@ import {
   Star, 
   RefreshCw,
   Radio,
-  Volume2
 } from 'lucide-react';
 import { LiveKitCallSession } from '../../lib/livekit';
 
 interface SessionData {
   sessionId: string;
   queueCode: string;
-  status: 'WAITING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
+  status: 'WAITING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED' | 'CALL_ENDED';
   assignedAgent?: string;
   inquiryType?: string;
   customerName?: string;
@@ -34,6 +33,9 @@ interface SessionData {
 }
 
 export default function CustomerSupportPage() {
+  const [organizationCode,setOrganizationCode]=useState('');
+  const [organizationName,setOrganizationName]=useState('');
+  const requestId=useRef<string>('');
   // 폼 입력 상태
   const [customerName, setCustomerName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -60,9 +62,21 @@ export default function CustomerSupportPage() {
   const [rating, setRating] = useState<number>(5);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
+  useEffect(() => {
+    const code=new URLSearchParams(window.location.search).get('org') || '';
+    // Public URL selects the tenant; the server resolves and validates it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrganizationCode(code);
+    if(!code) {setErrorMessage('조직의 상담 접수 링크로 접속해 주세요.');return;}
+    fetch(`/api/support/organization/${encodeURIComponent(code)}`).then(async response => {
+      if(!response.ok) throw new Error('현재 상담 접수를 지원하는 조직이 아닙니다.');
+      const data=await response.json();setOrganizationName(data.name);
+    }).catch(error=>setErrorMessage(error.message));
+  },[]);
   // 1. 상담 요청 접수
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(submitting || !organizationName) return;
     if (!customerName.trim()) {
       setErrorMessage('성함을 입력해 주세요.');
       return;
@@ -76,14 +90,20 @@ export default function CustomerSupportPage() {
     setErrorMessage('');
 
     try {
-      const res = await fetch('/api/support/request', {
+      if(channel==='CALL') {
+        if(!navigator.mediaDevices?.getUserMedia) throw new Error('음성 상담은 HTTPS와 마이크 지원 브라우저가 필요합니다. 온라인 티켓을 선택할 수 있습니다.');
+        const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop());
+      }
+      if(!requestId.current) requestId.current=crypto.randomUUID();
+      const res = await fetch('/api/support/request' , {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationCode, requestId:requestId.current,
           customerName,
           companyName: customerType === 'B2B' ? companyName : undefined,
           phoneNumber,
-          typeString: customerType === 'B2B' ? 'CORPORATE' : 'INDIVIDUAL',
+          customerType: customerType === 'B2B' ? 'CORPORATE' : 'INDIVIDUAL',
           inquiryType,
           message,
           channel,
@@ -101,7 +121,7 @@ export default function CustomerSupportPage() {
         customerName,
         message,
       });
-      setQueuePosition(data.queuePosition || 1);
+      setQueuePosition(data.waitingPosition || 1);
       setEstimatedWaitSeconds(data.estimatedWaitSeconds || 30);
       setStep('WAITING');
     } catch (err: unknown) {
@@ -115,47 +135,33 @@ export default function CustomerSupportPage() {
   useEffect(() => {
     if (!session?.sessionId || (step !== 'WAITING' && step !== 'IN_CALL')) return;
 
-    const interval = setInterval(async () => {
+    const abort=new AbortController();
+    let timer:ReturnType<typeof setTimeout>;
+    const poll=async () => {
       try {
-        const res = await fetch(`/api/support/session/${session.sessionId}`);
-        if (!res.ok) return;
-
-        const data: SessionData = await res.json();
-        setSession(prev => ({ ...prev, ...data }));
-
-        if (data.status === 'PROCESSING' && step === 'WAITING') {
-          setStep('IN_CALL');
-          setCallDuration(0);
-        } else if (data.status === 'COMPLETED') {
-          setStep('FINISHED');
-        } else if (data.status === 'CANCELLED') {
-          setStep('CANCELLED');
-        }
-      } catch (e) {
-        console.error('Session poll error:', e);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
+        const res=await fetch(`/api/support/session/${session.sessionId}`,{signal:abort.signal,cache:'no-store'});
+        if(!res.ok) throw new Error('상담 상태를 확인하지 못했습니다. 다시 확인 중입니다.');
+        const data:SessionData & {waitingPosition:number;estimatedWaitSeconds:number}=await res.json();
+        if(abort.signal.aborted) return;
+        setErrorMessage('');setSession(prev=>({...prev,...data}));
+        setQueuePosition(data.waitingPosition);setEstimatedWaitSeconds(data.estimatedWaitSeconds);
+        if(data.status==='PROCESSING' && step==='WAITING') {setStep('IN_CALL');setCallDuration(0);}
+        else if(data.status==='COMPLETED'||data.status==='CALL_ENDED') setStep('FINISHED');
+        else if(data.status==='CANCELLED') setStep('CANCELLED');
+      } catch(error) {if(!abort.signal.aborted) setErrorMessage((error as Error).message);}
+      finally {if(!abort.signal.aborted) timer=setTimeout(poll,2000);}
+    };
+    void poll();return ()=>{abort.abort();clearTimeout(timer);};
   }, [session?.sessionId, step]);
 
   // 3. 통화 타이머
   useEffect(() => {
-    if (step !== 'IN_CALL') return;
+    if (step !== 'IN_CALL' || mediaStatus !== 'connected') return;
     const timer = setInterval(() => {
       setCallDuration(prev => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, [step]);
-
-  // 대기 시간 감소 카운트다운 (가상 피드백)
-  useEffect(() => {
-    if (step !== 'WAITING') return;
-    const timer = setInterval(() => {
-      setEstimatedWaitSeconds(prev => (prev > 5 ? prev - 1 : 5));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [step]);
+  }, [step, mediaStatus]);
 
   // 통화 시간 포맷 (MM:SS)
   const formatTime = (secs: number) => {
@@ -182,6 +188,8 @@ export default function CustomerSupportPage() {
       },
     });
     livekitRef.current = sessionManager;
+    // A newly created media session begins in connecting state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMediaStatus('connecting');
 
     // 백엔드에서 LiveKit 룸 접속 토큰 발급
@@ -222,10 +230,11 @@ export default function CustomerSupportPage() {
     }
     if (!session?.sessionId) return;
     try {
-      await fetch(`/api/support/session/${session.sessionId}/cancel`, { method: 'POST' });
+      const response=await fetch(`/api/support/session/${session.sessionId}/cancel`, { method: 'POST' });
+      if(!response.ok) throw new Error('취소 요청에 실패했습니다. 다시 시도해 주세요.');
       setStep('CANCELLED');
     } catch (e) {
-      console.error(e);
+      setErrorMessage((e as Error).message);
     }
   };
 
@@ -236,16 +245,17 @@ export default function CustomerSupportPage() {
     }
     if (!session?.queueCode) return;
     try {
-      await fetch(`/api/queue/${session.queueCode}/complete`, { method: 'POST' });
+      const response=await fetch(`/api/support/session/${session.sessionId}/end-call`, { method: 'POST' });
+      if(!response.ok) throw new Error('통화 종료에 실패했습니다. 다시 시도해 주세요.');
       setStep('FINISHED');
     } catch (e) {
-      console.error(e);
-      setStep('FINISHED');
+      setErrorMessage((e as Error).message);
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+      {errorMessage && <p role="alert" className="p-3 bg-amber-950 text-amber-200">{errorMessage}</p>}
       {/* 헤더 */}
       <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-30 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -434,7 +444,7 @@ export default function CustomerSupportPage() {
                 {/* 제출 버튼 */}
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || !organizationName}
                   className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {submitting ? (

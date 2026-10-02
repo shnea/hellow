@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
 import { exchangeCodeForToken } from '@/lib/pkce';
+import { jwtVerify, createRemoteJWKSet } from 'jose';
+import { apiJson } from '@/lib/api';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -12,7 +14,10 @@ function AuthCallbackContent() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [userInfo, setUserInfo] = useState<{ name: string; email: string } | null>(null);
 
+  const processingRef=useRef(false);
   useEffect(() => {
+    if(processingRef.current) return;
+    processingRef.current=true;
     const processAuth = async () => {
       const code = searchParams.get('code');
       const state = searchParams.get('state');
@@ -34,7 +39,7 @@ function AuthCallbackContent() {
       const storedState = sessionStorage.getItem('oidc_state');
       const storedVerifier = sessionStorage.getItem('oidc_verifier');
 
-      if (storedState && state && storedState !== state) {
+      if (!storedState || !state || storedState !== state) {
         setStatus('ERROR');
         setErrorMessage('보안 상태값(State)이 일치하지 않습니다. 다시 로그인해 주세요.');
         return;
@@ -47,21 +52,11 @@ function AuthCallbackContent() {
       }
 
       try {
-        // OIDC 설정 로드 (실패 시 기본 설정 fallback)
-        let issuer = 'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
-        let clientId = 'app';
-
-        try {
-          const configRes = await fetch('/api/platform/oidc-config');
-          if (configRes.ok) {
-            const config = await configRes.json();
-            if (config.issuer) issuer = config.issuer;
-            if (config.clientId) clientId = config.clientId;
-          }
-        } catch {
-          // fallback 유지
-        }
-
+        const configRes = await fetch('/api/platform/oidc-config');
+        if(!configRes.ok) throw new Error('로그인 설정 조회에 실패했습니다.');
+        const config = await configRes.json();
+        const {issuer,clientId}=config;
+        if(!issuer || !clientId) throw new Error('로그인 설정이 없습니다.');
         const redirectUri = `${window.location.origin}/auth/callback`;
 
         // 토큰 교환
@@ -73,40 +68,22 @@ function AuthCallbackContent() {
           storedVerifier
         );
 
-        // ID 토큰 디코딩 (UTF-8 한글 깨짐 방지 TextDecoder 파싱)
-        let agentName = '인증 상담사';
-        let email = '';
-        if (tokenData.id_token) {
-          try {
-            const base64Url = tokenData.id_token.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const binary = atob(base64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            const decodedJson = new TextDecoder('utf-8').decode(bytes);
-            const payload = JSON.parse(decodedJson);
-            agentName = payload.given_name || payload.name || payload.preferred_username || '상담사';
-            email = payload.email || '';
-          } catch (e) {
-            console.error('Failed to parse id_token payload', e);
-          }
-        }
-
-        // 세션 및 쿠키 보관 (서버 미들웨어 인증 연동)
-        document.cookie = 'hellow_logged_in=true; path=/; max-age=86400; SameSite=Lax';
-        sessionStorage.setItem('hellow_agent_name', agentName);
-        sessionStorage.setItem('hellow_access_token', tokenData.access_token);
-        if (tokenData.id_token) {
-          sessionStorage.setItem('hellow_id_token', tokenData.id_token);
-        }
-        sessionStorage.setItem('hellow_logged_in', 'true');
+        if(!tokenData.id_token) throw new Error('ID 토큰이 없습니다.');
+        const {payload} = await jwtVerify(tokenData.id_token, createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`)), {issuer,audience:clientId});
+        const nonce=sessionStorage.getItem('oidc_nonce');
+        if(!nonce || payload.nonce!==nonce) throw new Error('인증 nonce가 일치하지 않습니다.');
+        sessionStorage.setItem('hellow_access_token',tokenData.access_token);
+        sessionStorage.setItem('hellow_id_token',tokenData.id_token);
+        const me=await apiJson<{name:string}>('/api/me');
+        const agentName=me.name;
+        const email=typeof payload.email==='string' ? payload.email : '';
+        sessionStorage.setItem('hellow_agent_name',agentName);
         setUserInfo({ name: agentName, email });
 
         setStatus('SUCCESS');
 
-        const targetUrl = sessionStorage.getItem('auth_redirect_to') || '/';
+        const requestedUrl = sessionStorage.getItem('auth_redirect_to') || '/';
+        const targetUrl = requestedUrl.startsWith('/') && !requestedUrl.startsWith('//') && !requestedUrl.includes('\\') ? requestedUrl : '/';
         sessionStorage.removeItem('auth_redirect_to');
 
         // 1초 후 워크스페이스로 이동
@@ -114,7 +91,8 @@ function AuthCallbackContent() {
           router.replace(targetUrl);
         }, 1000);
       } catch (err: unknown) {
-        console.error('Token exchange error:', err);
+        sessionStorage.removeItem('hellow_access_token');
+        sessionStorage.removeItem('hellow_id_token');
         setStatus('ERROR');
         setErrorMessage((err as Error).message || '토큰 교환 중 오류가 발생했습니다.');
       } finally {

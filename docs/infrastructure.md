@@ -1,5 +1,11 @@
 # 개발·운영 환경 기준
 
+## 2026-10-03 인증·파일 설정과 배포 경계
+
+[리뷰 수정 결과](review-repair.md)를 현재 부분 구현의 정본으로 읽는다. `PLATFORM_OIDC_ISSUER`, API access token 전용 `HELLOW_API_AUDIENCE`, 첫 조직 생성용 `ADMIN_OIDC_ISSUER`/`ADMIN_OIDC_SUB`, 승인된 `HELLOW_ATTACHMENT_RETENTION_CODE`를 운영 계약에 맞춰 지정한다. 값이 없으면 인증/파일 업로드를 거부한다. ID token이나 공용 웹 client audience를 API audience로 대체하지 않는다.
+
+Compose의 `.env.dev` 주입을 이용하되 실제 비밀값은 커밋하지 않는다. 이전 조직 미지정 데이터는 격리되며 데모 시딩은 기본 비활성화다. V2 migration과 개발 Hibernate update를 운영 이관 검증으로 간주하지 않는다. 원래 개발 DB 및 NAS에는 이번 수정본을 배포하지 않았으며 백업/복구·이전 PUBLIC 파일 정리·실제 연동 수락 후 적용해야 한다.
+
 사용자가 지정한 hellow 프로젝트의 환경·배포 기준이다. 실제 서비스와 배포 파일을 구현할 때 이 문서를 따른다.
 
 ## 실행 환경과 네트워크

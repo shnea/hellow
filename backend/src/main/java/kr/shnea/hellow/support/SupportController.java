@@ -1,170 +1,156 @@
 package kr.shnea.hellow.support;
 
-import kr.shnea.hellow.customer.Customer;
-import kr.shnea.hellow.customer.CustomerRepository;
-import kr.shnea.hellow.queue.QueueItem;
-import kr.shnea.hellow.queue.QueueItemRepository;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import static org.springframework.http.HttpStatus.*;
 
-import java.util.Optional;
-import java.util.UUID;
-
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import java.util.*;
+import kr.shnea.hellow.customer.*;
 import kr.shnea.hellow.livekit.LiveKitService;
+import kr.shnea.hellow.queue.*;
+import kr.shnea.hellow.security.*;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/support")
 public class SupportController {
+  private final QueueItemRepository queues;
+  private final OrganizationRepository organizations;
+  private final LiveKitService media;
 
-    private final QueueItemRepository queueItemRepository;
-    private final CustomerRepository customerRepository;
-    private final LiveKitService liveKitService;
+  public SupportController(
+      QueueItemRepository queues, OrganizationRepository organizations, LiveKitService media) {
+    this.queues = queues;
+    this.organizations = organizations;
+    this.media = media;
+  }
 
-    public SupportController(QueueItemRepository queueItemRepository,
-                             CustomerRepository customerRepository,
-                             LiveKitService liveKitService) {
-        this.queueItemRepository = queueItemRepository;
-        this.customerRepository = customerRepository;
-        this.liveKitService = liveKitService;
-    }
+  @GetMapping("/organization/{publicCode}")
+  public Map<String, String> organization(@PathVariable String publicCode) {
+    var o = publicOrg(publicCode);
+    return Map.of("name", o.getName());
+  }
 
-    @PostMapping("/request")
-    public ResponseEntity<SupportResponse> createSupportRequest(@RequestBody SupportRequest request) {
-        String cleanPhone = request.phoneNumber() != null ? request.phoneNumber().trim() : "";
-        Optional<Customer> existingCustomer = customerRepository.findByPhoneNumber(cleanPhone);
+  public record Request(
+      @NotBlank String organizationCode,
+      @NotBlank @Size(max = 100) String requestId,
+      @NotBlank @Size(max = 100) String customerName,
+      @Size(max = 150) String companyName,
+      @NotBlank @Size(max = 50) String phoneNumber,
+      @NotNull Customer.CustomerType customerType,
+      @NotBlank @Size(max = 100) String inquiryType,
+      @NotBlank @Size(max = 10000) String message,
+      @NotBlank @Pattern(regexp = "CALL|CHAT") String channel) {}
 
-        Customer.CustomerType custType;
-        if (request.customerType() != null) {
-            custType = request.customerType();
-        } else if ("B2B".equalsIgnoreCase(request.typeString()) || "CORPORATE".equalsIgnoreCase(request.typeString())) {
-            custType = Customer.CustomerType.CORPORATE;
-        } else {
-            custType = existingCustomer.map(Customer::getCustomerType).orElse(Customer.CustomerType.INDIVIDUAL);
-        }
+  @PostMapping("/request")
+  @Transactional
+  public Map<String, Object> create(@Valid @RequestBody Request r) {
+    var org =
+        organizations
+            .lockPublicCode(r.organizationCode())
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    // Untrusted public input never confirms an existing customer's identity by phone.
+    String key =
+        UUID.nameUUIDFromBytes(
+                (org.getId() + ":" + r.requestId())
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            .toString();
+    var existing = queues.findByRequestKey(key);
+    if (existing.isPresent()) return response(existing.get());
+    var q =
+        new QueueItem(
+            "queue-" + UUID.randomUUID(),
+            "CHAT".equals(r.channel()) ? QueueItem.ItemType.TICKET : QueueItem.ItemType.CALL,
+            r.customerType(),
+            r.customerName(),
+            r.companyName(),
+            r.phoneNumber(),
+            "웹 접수",
+            "normal",
+            r.message(),
+            true,
+            false,
+            false);
+    q.setOrganizationId(org.getId());
+    q.setSessionId(UUID.randomUUID().toString() + UUID.randomUUID());
+    q.setRequestKey(key);
+    q.setInquiryType(r.inquiryType());
+    queues.save(q);
+    return response(q);
+  }
 
-        boolean isRegistered = existingCustomer.isPresent();
-        boolean isComplainant = existingCustomer.map(Customer::isComplainant).orElse(false);
+  @GetMapping("/session/{sessionId}")
+  public Map<String, Object> status(@PathVariable String sessionId) {
+    return response(session(sessionId));
+  }
 
-        // 컴플레인 키워드 자동 감지
-        String summaryText = (request.message() != null ? request.message() : "") + " " +
-                (request.inquiryType() != null ? request.inquiryType() : "");
-        if (summaryText.contains("환불") || summaryText.contains("불만") ||
-                summaryText.contains("항의") || summaryText.contains("피해") ||
-                summaryText.contains("컴플레인") || "컴플레인".equals(request.inquiryType())) {
-            isComplainant = true;
-        }
+  @PostMapping("/session/{sessionId}/cancel")
+  @Transactional
+  public void cancel(@PathVariable String sessionId) {
+    var q = queues.lockSession(sessionId).orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    requireOrg(q);
+    if (q.getStatus() == QueueItem.QueueStatus.WAITING) q.cancel();
+    else if (q.getStatus() == QueueItem.QueueStatus.PROCESSING) q.endCall();
+    queues.save(q);
+  }
 
-        String code = "queue-web-" + UUID.randomUUID().toString().substring(0, 8);
-        String sessionId = "sess-" + UUID.randomUUID().toString().substring(0, 12);
+  @PostMapping("/session/{sessionId}/end-call")
+  @Transactional
+  public void end(@PathVariable String sessionId) {
+    cancel(sessionId);
+  }
 
-        QueueItem.ItemType itemType = "CHAT".equalsIgnoreCase(request.channel()) ?
-                QueueItem.ItemType.TICKET : QueueItem.ItemType.CALL;
+  @PostMapping("/session/{sessionId}/token")
+  public LiveKitService.LiveKitTokenResponse token(@PathVariable String sessionId) {
+    var q = session(sessionId);
+    if (q.getStatus() != QueueItem.QueueStatus.PROCESSING
+        || q.isCallEnded()
+        || q.getType() != QueueItem.ItemType.CALL)
+      throw new ResponseStatusException(CONFLICT, "연결 가능한 통화가 아닙니다.");
+    return media.createToken(
+        q.getOrganizationId() + "-" + q.getCode(),
+        "customer-" + q.getCode(),
+        q.getCustomerName(),
+        false);
+  }
 
-        String priority = isComplainant ? "urgent" : "normal";
-        String customerName = (request.customerName() != null && !request.customerName().isBlank()) ?
-                request.customerName() : (existingCustomer.map(Customer::getName).orElse("익명 문의 고객"));
+  private Map<String, Object> response(QueueItem q) {
+    long count =
+        queues.countByOrganizationIdAndStatus(q.getOrganizationId(), QueueItem.QueueStatus.WAITING);
+    return Map.of(
+        "sessionId",
+        q.getSessionId(),
+        "queueCode",
+        q.getCode(),
+        "status",
+        q.getStatus() == QueueItem.QueueStatus.PROCESSING && q.isCallEnded()
+            ? "CALL_ENDED"
+            : q.getStatus().name(),
+        "assignedAgent",
+        q.getAssignedAgent() == null ? "" : q.getAssignedAgent(),
+        "waitingPosition",
+        count,
+        "estimatedWaitSeconds",
+        Math.max(30, count * 60));
+  }
 
-        String companyName = (custType == Customer.CustomerType.CORPORATE && request.companyName() != null) ?
-                request.companyName() : (existingCustomer.map(Customer::getCompany).orElse(null));
+  private Organization publicOrg(String code) {
+    return organizations
+        .findByPublicCodeAndActiveTrue(code)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "상담 접수 조직을 찾을 수 없습니다."));
+  }
 
-        QueueItem item = new QueueItem(
-                code,
-                itemType,
-                custType,
-                customerName,
-                companyName,
-                cleanPhone.isBlank() ? "웹 상담 접속" : cleanPhone,
-                "방금 인입 (웹 접수)",
-                priority,
-                request.message(),
-                true,
-                isRegistered,
-                isComplainant
-        );
-        item.setSessionId(sessionId);
-        item.setInquiryType(request.inquiryType() != null ? request.inquiryType() : "웹 실시간 상담");
+  private QueueItem session(String id) {
+    var q = queues.findBySessionId(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    requireOrg(q);
+    return q;
+  }
 
-        queueItemRepository.save(item);
-
-        long waitingCount = queueItemRepository.countByStatus(QueueItem.QueueStatus.WAITING);
-
-        return ResponseEntity.ok(new SupportResponse(
-                sessionId,
-                code,
-                item.getStatus().name(),
-                null,
-                waitingCount,
-                Math.max(30, waitingCount * 60)
-        ));
-    }
-
-    @GetMapping("/session/{sessionId}")
-    public ResponseEntity<SessionStatusResponse> getSessionStatus(@PathVariable String sessionId) {
-        return ResponseEntity.of(queueItemRepository.findBySessionId(sessionId)
-                .map(item -> new SessionStatusResponse(
-                        item.getSessionId(),
-                        item.getCode(),
-                        item.getStatus().name(),
-                        item.getAssignedAgent(),
-                        item.getInquiryType(),
-                        item.getCustomerName(),
-                        item.getSummary(),
-                        item.getCreatedAt().toString()
-                )));
-    }
-
-    @PostMapping("/session/{sessionId}/cancel")
-    public ResponseEntity<Void> cancelSession(@PathVariable String sessionId) {
-        return queueItemRepository.findBySessionId(sessionId)
-                .map(item -> {
-                    item.cancel();
-                    queueItemRepository.save(item);
-                    return ResponseEntity.ok().<Void>build();
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @PostMapping("/session/{sessionId}/token")
-    public ResponseEntity<LiveKitService.LiveKitTokenResponse> getSessionToken(@PathVariable String sessionId) {
-        return queueItemRepository.findBySessionId(sessionId)
-                .map(item -> {
-                    String roomName = item.getCode();
-                    String identity = "customer-" + sessionId.substring(Math.max(0, sessionId.length() - 8));
-                    String name = (item.getCustomerName() != null && !item.getCustomerName().isBlank())
-                            ? item.getCustomerName() : "고객";
-                    return ResponseEntity.ok(liveKitService.createToken(roomName, identity, name, false));
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    public record SupportRequest(
-            String customerName,
-            String companyName,
-            String phoneNumber,
-            Customer.CustomerType customerType,
-            String typeString,
-            String inquiryType,
-            String message,
-            String channel
-    ) {}
-
-    public record SupportResponse(
-            String sessionId,
-            String queueCode,
-            String status,
-            String assignedAgent,
-            long queuePosition,
-            long estimatedWaitSeconds
-    ) {}
-
-    public record SessionStatusResponse(
-            String sessionId,
-            String queueCode,
-            String status,
-            String assignedAgent,
-            String inquiryType,
-            String customerName,
-            String message,
-            String createdAt
-    ) {}
+  private void requireOrg(QueueItem q) {
+    if (q.getOrganizationId() == null
+        || !organizations.findById(q.getOrganizationId()).map(Organization::isActive).orElse(false))
+      throw new ResponseStatusException(NOT_FOUND);
+  }
 }

@@ -8,15 +8,11 @@ import {
   MessageSquare,
   Ticket,
   Quote,
-  CalendarCheck,
-  PhoneForwarded,
   Send,
   CalendarPlus,
   Play,
-  User,
   Clock,
   ArrowRight,
-  CheckCircle,
   X,
   Maximize2,
 } from 'lucide-react';
@@ -25,6 +21,7 @@ import { transferAgents } from '../data/mockData';
 
 interface ContextActionPanelProps {
   timeline: TimelineItem[];
+  readOnly?: boolean;
   customerName: string;
   customerPhone: string;
   onQuoteTimeline: (content: string) => void;
@@ -33,7 +30,7 @@ interface ContextActionPanelProps {
 }
 
 export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
-  timeline,
+  timeline, readOnly=false,
   customerName,
   customerPhone,
   onQuoteTimeline,
@@ -66,14 +63,19 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
     activeFollowUpTab
   );
 
+  useEffect(() => {
+    // Synchronize the explicit transfer action from the call bar.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSubTab(activeFollowUpTab);
+  },[activeFollowUpTab]);
   // Form states for Visit Reservation
   const [visitType, setVisitType] = useState('기술 컨설팅 및 아키텍처 실사');
-  const [visitDate, setVisitDate] = useState('2026-04-06');
+  const [visitDate, setVisitDate] = useState('');
   const [visitTime, setVisitTime] = useState('14:00');
   const [assignedEngineer, setAssignedEngineer] = useState('박성현 수석 (인프라팀)');
 
   // Form states for Callback Schedule
-  const [callbackDate, setCallbackDate] = useState('2026-04-04');
+  const [callbackDate, setCallbackDate] = useState('');
   const [callbackTime, setCallbackTime] = useState('16:00');
   const [callbackReason, setCallbackReason] = useState('대표이사 최종 견적서 검토 후 콜백 통화');
 
@@ -117,7 +119,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
 
   const handleTransfer = (agentName: string, dept: string) => {
     onAddFollowUpAction(
-      '실시간 호전환 완료',
+      '호전환 미연동',
       `${dept} ${agentName} 상담사에게 통화 세션 호전환`
     );
   };
@@ -125,12 +127,12 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
   const handleNotificationSend = () => {
     onAddFollowUpAction(
       '알림톡/SMS 발송',
-      `템플릿: [${notificationTpl}] -> ${customerPhone} 발송 완료`
+      `템플릿: [${notificationTpl}] -> ${customerPhone} 발송 미연동`
     );
   };
 
   return (
-    <aside className="w-96 flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col h-full select-none">
+    <aside className="relative w-96 flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col h-full select-none">
       {/* 1. 상단: 고객 상담 통합 타임라인 헤더 & 필터 */}
       <div className="p-3.5 border-b border-slate-800 bg-slate-950/40">
         <div className="flex items-center justify-between mb-2">
@@ -179,8 +181,9 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
             <div
               key={item.id}
               onDoubleClick={() => setSelectedDetailItem(item)}
+                tabIndex={0} role="button" onKeyDown={event => {if(event.key === "Enter") setSelectedDetailItem(item);}}
               className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl relative group hover:border-slate-700 transition-colors cursor-pointer select-none"
-              title="더블클릭하여 상세 내용을 확인합니다"
+              title="상세 보기"
             >
               {/* Card Top */}
               <div className="flex items-center justify-between text-xs mb-1.5">
@@ -205,7 +208,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                   <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent flex items-end justify-center pb-0.5 pointer-events-none">
                     <span className="text-[10px] text-indigo-400 font-medium tracking-tight flex items-center gap-0.5">
                       <Maximize2 className="w-2.5 h-2.5" />
-                      더블클릭 상세
+                      상세 보기
                     </span>
                   </div>
                 )}
@@ -293,7 +296,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
 
         {/* Tab Content 1: 방문/서비스 예약 */}
         {subTab === 'visit' && (
-          <form onSubmit={handleVisitSubmit} className="p-3 space-y-2.5 text-xs">
+          <fieldset disabled={readOnly}><form onSubmit={handleVisitSubmit} className="p-3 space-y-2.5 text-xs">
             <div>
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                 방문 유형
@@ -315,7 +318,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                   희망 일자
                 </label>
                 <input
-                  type="date"
+                  type="date" required min={new Date().toLocaleDateString("en-CA")}
                   value={visitDate}
                   onChange={(e) => setVisitDate(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -343,7 +346,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                 onChange={(e) => setAssignedEngineer(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
               >
-                <option value="박성현 수석 (인프라팀)">박성현 수석 (인프라팀 - 실시간 가능)</option>
+                <option value="박성현 수석 (인프라팀)">박성현 수석 (인프라팀 - 가용 상태 미연동)</option>
                 <option value="정재원 수석 (네트워크팀)">정재원 수석 (네트워크팀)</option>
                 <option value="한도윤 매니저 (기술영업)">한도윤 매니저 (기술영업)</option>
               </select>
@@ -354,21 +357,21 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
               className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-950 transition-all mt-1"
             >
               <CalendarPlus className="w-3.5 h-3.5" />
-              <span>방문 예약 접수 및 캘린더 등록</span>
+              <span>방문 요청 접수 (일정 미확정)</span>
             </button>
-          </form>
+          </form></fieldset>
         )}
 
         {/* Tab Content 2: 콜백 일정 등록 */}
         {subTab === 'callback' && (
-          <form onSubmit={handleCallbackSubmit} className="p-3 space-y-2.5 text-xs">
+          <fieldset disabled={readOnly}><form onSubmit={handleCallbackSubmit} className="p-3 space-y-2.5 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   재통화 일자
                 </label>
                 <input
-                  type="date"
+                  type="date" required min={new Date().toLocaleDateString("en-CA")}
                   value={callbackDate}
                   onChange={(e) => setCallbackDate(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -406,14 +409,14 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
               <Clock className="w-3.5 h-3.5" />
               <span>대기열 콜백 큐 등록</span>
             </button>
-          </form>
+          </form></fieldset>
         )}
 
         {/* Tab Content 3: 호전환 / 타 부서 이관 */}
         {subTab === 'transfer' && (
           <div className="p-3 space-y-2 text-xs">
             <p className="text-[11px] text-slate-400">
-              실시간 가용 상담사를 선택하여 원클릭으로 통화를 호전환합니다.
+              호전환 연동을 준비 중입니다. 현재 표시된 상담사 목록은 예시이며 통화를 이관하지 않습니다.
             </p>
             <div className="space-y-1.5 max-h-40 overflow-y-auto">
               {transferAgents.map((ag) => (
@@ -439,8 +442,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                   </div>
 
                   <button
-                    disabled={ag.status !== 'available'}
-                    onClick={() => handleTransfer(ag.name, ag.department)}
+                    disabled title="호전환 미연동" onClick={() => handleTransfer(ag.name, ag.department)}
                     className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
                       ag.status === 'available'
                         ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
@@ -486,7 +488,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
             </div>
 
             <button
-              onClick={handleNotificationSend}
+              disabled title="메시지 발송 미연동" onClick={handleNotificationSend}
               className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-950 transition-all mt-1"
             >
               <Send className="w-3.5 h-3.5" />
@@ -499,14 +501,14 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
       {/* 3. 타임라인 상세 보기 모달 */}
       {selectedDetailItem && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          className="absolute inset-0 z-20 bg-slate-900 flex flex-col p-2"
           onClick={() => setSelectedDetailItem(null)}
           role="dialog"
-          aria-modal="true"
+          aria-modal="false"
           aria-labelledby="timeline-detail-title"
         >
           <div
-            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-full animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -575,7 +577,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                 <span className="text-[11px] font-semibold text-slate-400 block mb-1">
                   상담 기록 전체 전문
                 </span>
-                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words max-h-[45vh] overflow-y-auto font-sans select-text">
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words max-h-[55vh] overflow-y-auto font-sans select-text">
                   {selectedDetailItem.content}
                 </div>
               </div>
@@ -584,7 +586,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
             {/* Modal Footer */}
             <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
               <span className="text-[11px] text-slate-500">
-                Esc 키 또는 배경 클릭 시 닫힙니다.
+                Esc 키로 닫을 수 있습니다.
               </span>
               <div className="flex items-center space-x-2">
                 <button

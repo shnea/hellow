@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-사용자 확정: Next.js App Router, TypeScript. Backend는 Java/Spring Boot/PostgreSQL이며 이번 작업은 가상 데이터로 동작하는 UI 프로토타입이다. 개발·운영 실행은 Docker Compose, Nginx 외부 포트 30160을 따른다.
+Next.js App Router, TypeScript, Java 21/Spring Boot 3.4.4/PostgreSQL 17.11. 상담 화면은 인증된 조직의 실제 API 데이터를 사용한다. 개발·운영 실행은 Docker Compose, Nginx 외부 포트 30160을 따른다. 부분 구현·검증·남은 계약은 docs/review-repair.md에 기록한다.
 
 ## Users
 
@@ -25,7 +25,7 @@ web
 ## Capabilities and Constraints
 
 - 직원 Identity는 SHNEA OIDC, 업무 권한은 Organization/Permission/Data Scope로 분리한다.
-- 첫 실시간 채널은 WebRTC. 이번 프로토타입은 실제 통화·인증·서버 저장을 구현했다고 표현하지 않는다.
+- 첫 실시간 채널은 WebRTC. 서버 인증·조직별 저장과 LiveKit 토큰 경계를 구현했다. 실제 OIDC 계약·2인 통화·운영 배포 수락은 남았다.
 - 통화 종료와 상담 기록 완료, 보류와 음소거, 통화 이관과 담당자 변경은 서로 다르다.
 - SHNEA Component·Editor는 공개 연동 계약을 확인하여 재사용한다.
 - 전체 범위·MVP·후속 단계는 요구사항정의서와 golden-path가 정본이다.

@@ -1,101 +1,113 @@
 package kr.shnea.hellow.platform;
 
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import static org.springframework.http.HttpStatus.*;
+
+import java.util.*;
+import kr.shnea.hellow.queue.*;
+import kr.shnea.hellow.security.*;
+import org.springframework.http.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
-import java.util.Map;
-
-/**
- * SHNEA 에디터 첨부파일 어댑터 연동 컨트롤러 (editor.md 표준 준수)
- */
 @RestController
 @RequestMapping("/api/editor/files")
 public class EditorAttachmentController {
+  private final PlatformClient platform;
+  private final PlatformProperties properties;
+  private final AttachmentRepository files;
+  private final QueueItemRepository queues;
+  private final WorkspaceAccess access;
 
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EditorAttachmentController.class);
+  public EditorAttachmentController(
+      PlatformClient platform,
+      PlatformProperties properties,
+      AttachmentRepository files,
+      QueueItemRepository queues,
+      WorkspaceAccess access) {
+    this.platform = platform;
+    this.properties = properties;
+    this.files = files;
+    this.queues = queues;
+    this.access = access;
+  }
 
-    private final PlatformClient platformClient;
-    private final PlatformProperties properties;
+  @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @Transactional
+  public Map<String, Object> upload(
+      @RequestParam MultipartFile file,
+      @RequestParam String queueCode,
+      @RequestParam String requestId,
+      @RequestParam String scope,
+      @RequestParam String kind)
+      throws java.io.IOException {
+    var actor = access.require("consultation:write");
+    var q =
+        queues
+            .lockByCode(actor.organizationId(), queueCode)
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    q.requireOwner(actor.subject());
+    String expectedScope = actor.organizationId() + ":" + queueCode;
+    if (!expectedScope.equals(scope)
+        || !Set.of("image", "file", "video", "audio").contains(kind)
+        || file.isEmpty()
+        || requestId.isBlank()
+        || requestId.length() > 100)
+      throw new ResponseStatusException(BAD_REQUEST, "파일 업로드 입력을 확인해 주세요.");
+    if (properties.getAttachmentRetentionCode().isBlank())
+      throw new ResponseStatusException(SERVICE_UNAVAILABLE, "첨부파일 보존 정책이 아직 설정되지 않았습니다.");
+    var existing =
+        files.findByOrganizationIdAndQueueCodeAndRequestId(
+            actor.organizationId(), queueCode, requestId);
+    if (existing.isPresent()) return response(existing.get(), scope);
+    // Platform request IDs are namespaced by server-verified tenant and interaction.
+    String uploadRequest =
+        UUID.nameUUIDFromBytes(
+                (actor.organizationId() + ":" + queueCode + ":" + requestId)
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            .toString();
+    var result = platform.uploadFile(file, uploadRequest);
+    var attachment =
+        new Attachment(
+            actor.organizationId(),
+            queueCode,
+            result.fileId(),
+            requestId,
+            result.originalName(),
+            kind,
+            result.size(),
+            result.sha256());
+    files.save(attachment);
+    return response(attachment, scope);
+  }
 
-    public EditorAttachmentController(PlatformClient platformClient, PlatformProperties properties) {
-        this.platformClient = platformClient;
-        this.properties = properties;
-    }
+  @GetMapping("/{fileId}/views")
+  public ResponseEntity<Map<String, Object>> views(@PathVariable String fileId) {
+    var actor = access.require("consultation:read");
+    var file =
+        files
+            .findByOrganizationIdAndFileId(actor.organizationId(), fileId)
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    queues
+        .findByOrganizationIdAndCode(actor.organizationId(), file.getQueueCode())
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(platform.getViewTicket(fileId));
+  }
 
-    /**
-     * 에디터 첨부파일 업로드 (POST /api/editor/files)
-     * 응답: { fileId, scope, kind, name, size }
-     */
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<EditorUploadResponse> uploadEditorFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "scope", required = false) String requestedScope,
-            @RequestParam(value = "kind", defaultValue = "file") String kind,
-            @RequestParam(value = "requestId", required = false) String requestId) {
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
-
-        try {
-            log.info("Uploading editor file: name={}, size={}, kind={}, scope={}",
-                    file.getOriginalFilename(), file.getSize(), kind, requestedScope);
-
-            PlatformClient.FileUploadResult result = platformClient.uploadFile(
-                    file.getOriginalFilename() != null ? file.getOriginalFilename() : "editor-file",
-                    file.getBytes(),
-                    "PUBLIC",
-                    "default"
-            );
-
-            String scope = (requestedScope != null && !requestedScope.isBlank()) ? requestedScope :
-                    (properties.getEnvironmentId() != null ?
-                            "env-" + properties.getEnvironmentId().substring(0, 8) : "hellow-consultation-dev");
-
-            log.info("Editor file uploaded successfully: fileId={}, scope={}, kind={}",
-                    result.fileId(), scope, kind);
-
-            return ResponseEntity.ok(new EditorUploadResponse(
-                    result.fileId(),
-                    scope,
-                    kind,
-                    result.originalName(),
-                    result.size()
-            ));
-        } catch (Exception e) {
-            log.error("Failed to upload editor file", e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    /**
-     * 에디터 파일 보기 정보 조회 (GET /api/editor/files/{fileId}/views)
-     * 규칙: 플랫폼 POST /api/v1/files/{fileId}/view-ticket 호출 후 응답 JSON 변경 없이 no-store로 반환
-     */
-    @GetMapping("/{fileId}/views")
-    public ResponseEntity<Map<String, Object>> resolveEditorFile(@PathVariable String fileId) {
-        try {
-            Map<String, Object> viewTicket = platformClient.getViewTicket(fileId);
-            Map<String, Object> responseBody = (viewTicket != null) ? new java.util.HashMap<>(viewTicket) : new java.util.HashMap<>();
-            responseBody.putIfAbsent("fileId", fileId);
-
-            return ResponseEntity.ok()
-                    .cacheControl(CacheControl.noStore())
-                    .body(responseBody);
-        } catch (Exception e) {
-            log.error("Failed to get view ticket for fileId: {}", fileId, e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    public record EditorUploadResponse(
-            String fileId,
-            String scope,
-            String kind,
-            String name,
-            long size
-    ) {}
+  private Map<String, Object> response(Attachment file, String scope) {
+    return Map.of(
+        "fileId",
+        file.getFileId(),
+        "scope",
+        scope,
+        "kind",
+        file.getKind(),
+        "name",
+        file.getName(),
+        "size",
+        file.getSize());
+  }
 }

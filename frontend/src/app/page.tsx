@@ -1,578 +1,205 @@
 'use client';
-
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SidebarGNB } from '@/components/SidebarGNB';
 import { QueuePanel } from '@/components/QueuePanel';
 import { ActiveWorkspace } from '@/components/ActiveWorkspace';
 import { ContextActionPanel } from '@/components/ContextActionPanel';
-import { ToastContainer, ToastMessage } from '@/components/Toast';
-import {
-  mockQueueItems,
-  mockCustomers,
-  mockTimelines,
-} from '@/data/mockData';
-import { AgentStatus, CustomerProfile, CustomerType, QueueItem, TimelineItem } from '@/types';
+import { ToastContainer, type ToastMessage } from '@/components/Toast';
+import { ApiError, apiJson, jsonBody } from '@/lib/api';
+import { documentText, readDocument } from '@/lib/editor-document';
+import { customerProfile, queueItem, requestProfile, timelineItem, type ConsultationDraft, type ServerCustomer, type ServerQueue, type ServerTimeline } from '@/lib/workspace-data';
+import { useCall } from '@/hooks/use-call';
+import type { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
+
+interface Identity { subject: string; name: string; organizations: { id: string; name: string; permissions: string[] }[]; }
+interface SavedConsultation { version: number; categoryMain: string; categorySub: string; tags: string; editorDocument: string; memo: string; }
 
 export default function ConsultationWorkspacePage() {
-  const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-
-  // Global GNB state
-  const [currentTab, setCurrentTab] = useState<string>('workspace');
-  const [agentStatus, setAgentStatus] = useState<AgentStatus>('busy');
-
-  // Queue and Customer state
-  const [queueItems, setQueueItems] = useState<QueueItem[]>(mockQueueItems);
-  const [customers, setCustomers] = useState<Record<string, CustomerProfile>>(mockCustomers);
-  const [selectedQueueId, setSelectedQueueId] = useState<string>('queue-1');
-
-  // Call status
-  const [isCallActive, setIsCallActive] = useState<boolean>(true);
-  const [callDuration, setCallDuration] = useState<number>(252); // Starts at 04:12
-
-  // Timeline and Context state
-  const [timelines, setTimelines] = useState<Record<string, TimelineItem[]>>(mockTimelines);
-  const [quotedText, setQuotedText] = useState<string>('');
-  const [activeFollowUpTab, setActiveFollowUpTab] = useState<'visit' | 'callback' | 'transfer' | 'notification'>('visit');
-
-  // Toast feedback state (up to 5 toasts)
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [organizationId, setOrganizationId] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const queueRef = useRef<QueueItem[]>([]);
+  const synchronized = useRef(false);
+  const [customers, setCustomers] = useState<Record<string, CustomerProfile>>({});
+  const [selected, setSelected] = useState('');
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [timelineError, setTimelineError] = useState('');
+  const [queueError, setQueueError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  const [timelineRefresh, setTimelineRefresh] = useState(0);
+  const generation = useRef(0);
+  const [drafts, setDrafts] = useState<Record<string, ConsultationDraft>>({});
+  const versions = useRef<Record<string, number>>({});
+  const [draftReady, setDraftReady] = useState<Record<string, boolean>>({});
+  const [draftError, setDraftError] = useState('');
+  const [activeCall, setActiveCall] = useState<string | null>(null);
+  const call = useCall(activeCall);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>('online');
+  const [quotedText, setQuotedText] = useState('');
+  const [followupTab, setFollowupTab] = useState<'visit' | 'callback' | 'transfer' | 'notification'>('visit');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  // Add toast helper - retains up to 5 recent toasts
-  const addToast = (type: 'success' | 'info' | 'warning', title: string, message: string) => {
-    const id = Date.now().toString() + Math.random().toString();
-    setToasts((prev) => [...prev.slice(-4), { id, type, title, message }]);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  // 0. 클라이언트 인증 상태 검사 (미로그인 시 /login 강제 리다이렉트)
+  const notify = useCallback((type: ToastMessage['type'], title: string, message: string) => {
+    setToasts(prev => [...prev.slice(-4), { id: crypto.randomUUID(), type, title, message }]);
+  }, []);
   useEffect(() => {
-    const hasCookie = typeof document !== 'undefined' && document.cookie.split(';').some((c) => c.trim().startsWith('hellow_logged_in=true'));
-    const hasSession = typeof window !== 'undefined' && sessionStorage.getItem('hellow_logged_in') === 'true';
-
-    if (!hasCookie && !hasSession) {
-      router.replace('/login');
-    } else {
-      setIsAuthenticated(true);
-    }
-  }, [router]);
-
-  // Initial Load & Real-time Queue Polling
+    const abort = new AbortController();
+    apiJson<Identity>('/api/me', { signal: abort.signal }).then(me => {
+      if(abort.signal.aborted) return;
+      setIdentity(me); sessionStorage.setItem('hellow_agent_name', me.name);
+      const prior = sessionStorage.getItem('hellow_organization_id');
+      const org = me.organizations.find(o => o.id === prior) || me.organizations[0];
+      if (org) { sessionStorage.setItem('hellow_organization_id', org.id); setOrganizationId(org.id); }
+      else setAuthError('로그인은 확인됐지만 활성 조직 권한이 없습니다. 조직 관리자에게 가입·권한 배정을 요청해 주세요.');
+    }).catch(error => { if (!abort.signal.aborted) setAuthError(error.message); });
+    return () => abort.abort();
+  }, []);
   useEffect(() => {
-    if (!isAuthenticated) return;
-
-    // Helper to fetch queue
-    const fetchQueue = () => {
-      fetch('/api/queue')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data)) {
-            const mappedQueue: QueueItem[] = data.map((item: any) => ({
-              id: item.code,
-              type: item.type.toLowerCase(),
-              customerType: item.customerType ? (item.customerType.toLowerCase() === 'corporate' ? 'corporate' : 'individual') : 'individual',
-              customerName: item.customerName,
-              companyName: item.companyName,
-              phoneNumber: item.phoneNumber,
-              waitTimeOrSchedule: item.waitTimeOrSchedule,
-              priority: item.priority ? item.priority.toLowerCase() : 'normal',
-              summary: item.summary,
-              unread: item.unread,
-              isRegistered: item.registered,
-              isComplainant: item.complainant,
-            }));
-
-            setQueueItems((prevQueue) => {
-              // 신규 인입 항목 감지 및 토스트 알림
-              const prevIds = new Set(prevQueue.map((q) => q.id));
-              const newItems = mappedQueue.filter((q) => !prevIds.has(q.id));
-              if (newItems.length > 0 && prevQueue.length > 0) {
-                const newest = newItems[0];
-                addToast(
-                  'info',
-                  '🔔 신규 고객 상담 인입',
-                  `${newest.customerName} 고객님의 ${newest.type === 'call' ? '실시간 통화' : '문의'} 요청이 접수되었습니다.`
-                );
-              }
-              return mappedQueue;
-            });
-
-            // 큐에 있는 고객 정보를 기본 프로필로 채워넣기 (미등록/웹인입 고객 대응)
-            setCustomers((prevCusts) => {
-              const updated = { ...prevCusts };
-              mappedQueue.forEach((item) => {
-                if (!updated[item.id]) {
-                  updated[item.id] = {
-                    id: item.id,
-                    isRegistered: item.isRegistered ?? false,
-                    customerType: (item.customerType as CustomerType) || 'individual',
-                    name: item.customerName,
-                    company: item.companyName || (item.customerType === 'corporate' ? '소속 미지정' : '일반 개인'),
-                    department: '고객지원 요청',
-                    title: '웹 인입 고객',
-                    tier: item.isComplainant ? 'Standard' : 'Standard',
-                    phoneNumber: item.phoneNumber,
-                    email: '',
-                    lastContactDate: '오늘 인입',
-                    totalCalls: 1,
-                    managerName: '배정 중',
-                    customerNotes: item.summary || '웹 진입점에서 실시간 상담 신청 건',
-                    isComplainant: item.isComplainant,
-                  };
-                }
-              });
-              return updated;
-            });
-          }
-        })
-        .catch(() => {});
-    };
-
-    // 1. 초기 로드
-    fetchQueue();
-
-    // 2. 고객 목록 로드
-    fetch('/api/customers')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data) && data.length > 0) {
-          const custMap: Record<string, CustomerProfile> = {};
-          data.forEach((c: any) => {
-            custMap[c.code] = {
-              id: c.code,
-              isRegistered: c.registered,
-              customerType: c.customerType ? (c.customerType.toLowerCase() === 'corporate' ? 'corporate' : 'individual') : 'corporate',
-              name: c.name,
-              title: c.title,
-              company: c.company,
-              department: c.department,
-              tier: c.tier,
-              phoneNumber: c.phoneNumber,
-              email: c.email,
-              lastContactDate: c.lastContactAt ? c.lastContactAt.substring(0, 10) : '이력 없음',
-              totalCalls: c.totalCalls,
-              managerName: c.managerName,
-              customerNotes: c.customerNotes,
-              isComplainant: c.complainant,
-            };
-          });
-          setCustomers((prev) => ({ ...prev, ...custMap }));
+    if (!organizationId) return;
+    const current = ++generation.current;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const [items, profiles] = await Promise.all([
+          apiJson<ServerQueue[]>('/api/queue', { signal: abort.signal }), apiJson<ServerCustomer[]>('/api/customers', { signal: abort.signal }),
+        ]);
+        if (abort.signal.aborted || generation.current !== current) return;
+        const mapped = items.map(queueItem);
+        if (synchronized.current) {
+          const ids = new Set(queueRef.current.map(q => q.id));
+          const incoming = mapped.filter(q => !ids.has(q.id) && q.status === 'WAITING');
+          if (incoming.length) notify('info', '새 상담 요청', `${incoming.length}건의 상담 요청이 접수됐습니다.`);
         }
-      })
-      .catch(() => {});
-
-    // 3. 2.5초 주기 자동 대기열 동기화
-    const queueInterval = setInterval(fetchQueue, 2500);
-    return () => clearInterval(queueInterval);
-  }, [isAuthenticated]);
-
-  // Fetch Timeline when selected customer changes
-  useEffect(() => {
-    if (selectedQueueId) {
-      fetch(`/api/timeline/${selectedQueueId}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data) && data.length > 0) {
-            const mappedTimeline: TimelineItem[] = data.map((t: any) => ({
-              id: 'time-db-' + t.id,
-              date: t.createdAt ? t.createdAt.substring(0, 16).replace('T', ' ') : '최근',
-              channel: t.channel.toLowerCase(),
-              agentName: t.agentName,
-              title: t.title,
-              content: t.content,
-              hasAudio: t.hasAudio,
-              audioDuration: t.audioDuration,
-              tags: t.tags ? t.tags.split(',') : [],
-            }));
-            setTimelines((prev) => ({
-              ...prev,
-              [selectedQueueId]: mappedTimeline,
-            }));
+        synchronized.current = true; queueRef.current = mapped; setQueue(mapped);
+        setCustomers(Object.fromEntries(profiles.map(c => [c.code, customerProfile(c)])));
+        setSelected(previous => previous || mapped[0]?.id || '');
+        const mine = mapped.find(q => q.type === 'call' && q.status === 'PROCESSING' && q.assignedSubject === identity?.subject && !q.callEnded);
+        setActiveCall(mine?.id || null); setQueueError('');
+      } catch (error) {
+        if (!abort.signal.aborted && generation.current === current) {
+          setQueueError(`${(error as Error).message} 표시 중인 정보는 마지막 조회 결과입니다.`);
+          if (error instanceof ApiError && [401, 403].includes(error.status)) {
+            setActiveCall(null); setQueue([]); queueRef.current = []; setCustomers({}); setTimeline([]); setAuthError(error.message);
           }
-        })
-        .catch(() => {});
-    }
-  }, [selectedQueueId]);
-
-  // Live timer for active call
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isCallActive) {
-      interval = setInterval(() => {
-        setCallDuration((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isCallActive]);
-
-  // Current customer profile
-  const currentCustomer = customers[selectedQueueId] || {
-    id: 'unknown',
-    isRegistered: false,
-    customerType: 'individual',
-    name: '미등록 고객',
-    company: '알 수 없음',
-    title: '',
-    tier: 'Standard',
-    phoneNumber: '010-0000-0000',
-    email: '',
-    lastContactDate: '이력 없음',
-    totalCalls: 1,
-    managerName: '이소연 선임',
-  };
-  const currentTimeline = timelines[selectedQueueId] || [];
-
-  // Handlers
-  const handleSelectQueueItem = (id: string) => {
-    setSelectedQueueId(id);
-    const targetItem = queueItems.find((i) => i.id === id);
-    if (targetItem) {
-      if (targetItem.type === 'call') {
-        setIsCallActive(true);
-        setCallDuration(targetItem.id === 'queue-unregistered' ? 45 : 14);
-        setAgentStatus('busy');
-      } else {
-        setIsCallActive(false);
-        setAgentStatus('online');
+        }
+      } finally {
+        if (!abort.signal.aborted && generation.current === current) { setLoading(false); timer = setTimeout(poll, 2500); }
       }
-    }
-  };
-
-  // 상담사 수락 핸들러 (수신 버튼 클릭 시 백엔드 accept 호출 및 통화 활성화)
-  const handleAcceptCall = (item: QueueItem) => {
-    setSelectedQueueId(item.id);
-    setIsCallActive(true);
-    setCallDuration(0);
-    setAgentStatus('busy');
-
-    // 백엔드에 상담사 수락 전송
-    fetch(`/api/queue/${item.id}/accept`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentName: '이소연 선임 (상담1팀)' }),
-    }).catch(() => {});
-
-    addToast('success', '상담 수락 및 연결', `${item.customerName} 고객과의 통화가 시작되었습니다.`);
-  };
-
-  const handleEndCall = () => {
-    setIsCallActive(false);
-    setAgentStatus('online');
-    addToast('warning', '통화 종료', '통화가 종료되었습니다. 상담 내용을 저장해 주세요.');
-  };
-
-  const handleStartCall = () => {
-    setIsCallActive(true);
-    setCallDuration(0);
-    setAgentStatus('busy');
-    addToast('success', '통화 연결', `${currentCustomer.phoneNumber} 고객에게 재발신 연결되었습니다.`);
-  };
-
-  const handleOpenTransfer = () => {
-    setActiveFollowUpTab('transfer');
-  };
-
-  const handleQuoteTimeline = (content: string) => {
-    setQuotedText(content);
-    addToast('info', '이력 인용', '과거 상담 내용이 실시간 메모장에 인용되었습니다.');
-  };
-
-  // 신규 고객 등록 처리 핸들러 (실제 백엔드 API 연동)
-  const handleRegisterCustomer = (data: {
-    customerType: CustomerType;
-    name: string;
-    company: string;
-    title: string;
-    department: string;
-    email: string;
-    tier: 'VIP' | 'Gold' | 'Standard';
-    customerNotes: string;
-    isComplainant: boolean;
-  }) => {
-    const updatedCustomer: CustomerProfile = {
-      ...currentCustomer,
-      isRegistered: true,
-      customerType: data.customerType,
-      name: data.name,
-      company: data.company,
-      title: data.title,
-      department: data.department,
-      email: data.email,
-      tier: data.tier,
-      customerNotes: data.customerNotes,
-      isComplainant: data.isComplainant,
-      lastContactDate: '오늘 등록됨',
     };
-
-    // 1. Update React State
-    setCustomers((prev) => ({
-      ...prev,
-      [selectedQueueId]: updatedCustomer,
-    }));
-
-    setQueueItems((prev) =>
-      prev.map((item) =>
-        item.id === selectedQueueId
-          ? {
-              ...item,
-              customerType: data.customerType,
-              customerName: data.name,
-              companyName: data.company,
-              isRegistered: true,
-              isComplainant: data.isComplainant,
-            }
-          : item
-      )
-    );
-
-    // 2. Persist to Backend API
-    fetch('/api/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerType: data.customerType.toUpperCase(),
-        name: data.name,
-        company: data.company,
-        department: data.department,
-        title: data.title,
-        tier: data.tier,
-        phoneNumber: currentCustomer.phoneNumber,
-        email: data.email,
-        customerNotes: data.customerNotes,
-        complainant: data.isComplainant,
-      }),
-    }).catch(() => {});
-
-    // 3. Add registration event to timeline
-    const registrationRecord: TimelineItem = {
-      id: 'time-reg-' + Date.now(),
-      date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-      channel: 'ticket',
-      agentName: '이소연 선임 (본인)',
-      title: `신규 고객 등록 완료 (${data.customerType === 'corporate' ? '기업 B2B' : '개인 일반'}${data.isComplainant ? ' / 컴플레인' : ''})`,
-      content: `고객명: ${data.name} / 구분: ${data.customerType === 'corporate' ? '기업' : '개인'} / 소속: ${data.company} / 등급: ${data.tier} / 이메일: ${data.email || '미입력'}${data.isComplainant ? ' [주의/컴플레인]' : ''}`,
-      tags: ['신규고객', data.customerType, ...(data.isComplainant ? ['컴플레인'] : [])],
-    };
-
-    setTimelines((prev) => ({
-      ...prev,
-      [selectedQueueId]: [registrationRecord, ...(prev[selectedQueueId] || [])],
-    }));
-
-    addToast('success', '고객 등록 완료 (DB 저장)', `${data.name} (${data.company}) 고객 정보가 정상 등록되었습니다.`);
+    void poll(); return () => { abort.abort(); clearTimeout(timer); };
+  }, [organizationId, identity?.subject, refresh, notify]);
+  const item = queue.find(q => q.id === selected);
+  const selectedQueueCode=item?.id;
+  const customerCode=item?.customerCode;
+  const customer = item ? (item.customerCode ? customers[item.customerCode] : requestProfile(item)) : null;
+  const writable = item?.status === 'PROCESSING' && item.assignedSubject === identity?.subject;
+  const can = (permission: string) => identity?.organizations.find(o => o.id === organizationId)?.permissions.includes(permission) || false;
+  const linkCustomer = (code: string) => { if(code) void run(async () => {
+    if(!item) return;
+    await apiJson(`/api/customers/queue/${item.id}/link`,jsonBody({customerCode:code}));
+    setQueue(prev=>prev.map(q=>q.id===item.id?{...q,customerCode:code}:q));setTimelineRefresh(v=>v+1);
+    notify('success','기존 고객 연결','상담과 고객 이력을 연결했습니다.');
+  }).catch(()=>{}); };
+  useEffect(() => {
+    // Drop context from the previous selection before loading this interaction.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTimeline([]); setTimelineError(''); setQuotedText('');
+    if (!selectedQueueCode) return;
+    const abort = new AbortController();
+    const path = customerCode ? `customer/${customerCode}` : `queue/${selectedQueueCode}`;
+    apiJson<ServerTimeline[]>(`/api/timeline/${path}`, { signal: abort.signal })
+      .then(rows => { if (!abort.signal.aborted) setTimeline(rows.map(timelineItem)); })
+      .catch(error => { if (!abort.signal.aborted) setTimelineError(error.message); });
+    return () => abort.abort();
+  }, [selectedQueueCode, customerCode, timelineRefresh, organizationId]);
+  useEffect(() => {
+    // Reset the prior interaction's load error; actual data arrives asynchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraftError('');
+    if (!selectedQueueCode || !writable || draftReady[selectedQueueCode]) return;
+    const code = selectedQueueCode; const abort = new AbortController();
+    apiJson<SavedConsultation | null>(`/api/consultations/queue/${code}`, { signal: abort.signal }).then(saved => {
+      if (abort.signal.aborted) return;
+      versions.current[code] = saved?.version || 0;
+      if (saved) setDrafts(prev => ({ ...prev, [code]: { categoryMain: saved.categoryMain, categorySub: saved.categorySub,
+        status: 'in_progress', selectedTags: saved.tags?.split(',') || [], memo: saved.editorDocument || saved.memo || '' } }));
+      setDraftReady(prev => ({ ...prev, [code]: true }));
+    }).catch(error => { if (!abort.signal.aborted) setDraftError(error.message); });
+    return () => abort.abort();
+  }, [selectedQueueCode, writable, draftReady]);
+  const run = async (action: () => Promise<void>) => {
+    if (busyRef.current) throw new Error('이전 요청을 처리 중입니다.');
+    busyRef.current = true; setBusy(true); generation.current += 1;
+    try { await action(); }
+    catch (error) { notify('warning', '작업 실패 · 입력 보존', (error as Error).message); throw error; }
+    finally { busyRef.current = false; setBusy(false); setRefresh(value => value + 1); }
   };
-
-  // 기존 고객 정보 수정 핸들러 (실제 백엔드 API 연동)
-  const handleUpdateCustomer = (data: Partial<CustomerProfile>) => {
-    const updatedCustomer: CustomerProfile = {
-      ...currentCustomer,
-      ...data,
-    };
-
-    setCustomers((prev) => ({
-      ...prev,
-      [selectedQueueId]: updatedCustomer,
-    }));
-
-    if (data.name || data.company || data.customerType !== undefined || data.isComplainant !== undefined) {
-      setQueueItems((prev) =>
-        prev.map((item) =>
-          item.id === selectedQueueId
-            ? {
-                ...item,
-                customerType: data.customerType !== undefined ? data.customerType : item.customerType,
-                customerName: data.name || item.customerName,
-                companyName: data.company || item.companyName,
-                isComplainant: data.isComplainant !== undefined ? data.isComplainant : item.isComplainant,
-              }
-            : item
-        )
-      );
-    }
-
-    // Persist update to Backend API
-    fetch(`/api/customers/${selectedQueueId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerType: (updatedCustomer.customerType || 'corporate').toUpperCase(),
-        name: updatedCustomer.name,
-        company: updatedCustomer.company,
-        department: updatedCustomer.department,
-        title: updatedCustomer.title,
-        tier: updatedCustomer.tier,
-        phoneNumber: updatedCustomer.phoneNumber,
-        email: updatedCustomer.email,
-        customerNotes: updatedCustomer.customerNotes,
-        complainant: updatedCustomer.isComplainant || false,
-      }),
-    }).catch(() => {});
-
-    addToast('success', '고객 정보 수정 (DB 저장)', `${updatedCustomer.name} 고객 정보가 성공적으로 업데이트되었습니다.`);
-  };
-
-  const handleAddFollowUpAction = (actionType: string, details: string) => {
-    const newRecord: TimelineItem = {
-      id: 'time-new-' + Date.now(),
-      date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-      channel: actionType.includes('호전환') ? 'call' : actionType.includes('알림톡') ? 'chat' : 'ticket',
-      agentName: '이소연 선임 (본인)',
-      title: `[후속조치] ${actionType}`,
-      content: details,
-      tags: ['후속연계', actionType.split(' ')[0]],
-    };
-
-    setTimelines((prev) => ({
-      ...prev,
-      [selectedQueueId]: [newRecord, ...(prev[selectedQueueId] || [])],
-    }));
-
-    // Persist follow-up to Backend API
-    fetch('/api/followup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerCode: selectedQueueId,
-        actionType,
-        title: `[후속조치] ${actionType}`,
-        details,
-      }),
-    }).catch(() => {});
-
-    addToast('success', `${actionType} 접수 완료 (DB 저장)`, details);
-  };
-
-  const handleSaveConsultation = (data: {
-    categoryMain: string;
-    categorySub: string;
-    status: string;
-    selectedTags: string[];
-    memo: string;
-    isComplete: boolean;
-  }) => {
-    if (data.isComplete) {
-      const completeRecord: TimelineItem = {
-        id: 'time-complete-' + Date.now(),
-        date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-        channel: 'call',
-        agentName: '이소연 선임 (본인)',
-        title: `상담 완료: ${data.categorySub}`,
-        content: `[분류: ${data.categoryMain} > ${data.categorySub}]\n${data.memo}`,
-        tags: data.selectedTags.map((t) => t.replace('#', '')),
-      };
-
-      setTimelines((prev) => ({
-        ...prev,
-        [selectedQueueId]: [completeRecord, ...(prev[selectedQueueId] || [])],
-      }));
-
-      // Complete in backend
-      fetch('/api/consultations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerCode: selectedQueueId,
-          categoryMain: data.categoryMain,
-          categorySub: data.categorySub,
-          status: 'COMPLETED',
-          memo: data.memo,
-          tags: data.selectedTags.join(','),
-          agentName: '이소연 선임 (본인)',
-          callDurationSeconds: callDuration,
-        }),
-      }).catch(() => {});
-
-      fetch(`/api/queue/${selectedQueueId}/complete`, {
-        method: 'POST',
-      }).catch(() => {});
-
-      setQueueItems((prev) => prev.filter((item) => item.id !== selectedQueueId));
-      setIsCallActive(false);
-      setAgentStatus('online');
-
-      addToast(
-        'success',
-        '상담 저장 완료 (DB 영속화)',
-        `${currentCustomer.name || '고객'} 상담 기록이 DB에 저장되고 대기열에서 완료 처리되었습니다.`
-      );
-    } else {
-      // Temporary save
-      fetch('/api/consultations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerCode: selectedQueueId,
-          categoryMain: data.categoryMain,
-          categorySub: data.categorySub,
-          status: 'IN_PROGRESS',
-          memo: data.memo,
-          tags: data.selectedTags.join(','),
-          agentName: '이소연 선임 (본인)',
-          callDurationSeconds: callDuration,
-        }),
-      }).catch(() => {});
-
-      addToast('info', '임시 저장 완료 (DB 저장)', '작성 중인 상담 메모가 데이터베이스에 안전하게 임시 저장되었습니다.');
-    }
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-400 text-xs">
-        로그인 확인 중...
+  const accept = (q: QueueItem) => { void run(async () => {
+    await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`, { method: 'POST' }); setSelected(q.id); setAgentStatus('busy');
+    notify('success', '상담 수락', '배정이 확인됐습니다. 음성 연결 상태는 통화 표시에서 확인해 주세요.');
+  }).catch(() => {}); };
+  const endCall = () => { if (activeCall) void run(async () => {
+    await apiJson(`/api/queue/${activeCall}/end-call`, { method: 'POST' }); setActiveCall(null); setAgentStatus('online');
+    notify('info', '통화 종료', '상담 기록은 후처리 후 별도로 완료해 주세요.');
+  }).catch(() => {}); };
+  const save = async (data: ConsultationDraft & { isComplete: boolean }) => run(async () => {
+    const code = selected;
+    const saved = await apiJson<SavedConsultation>(`/api/consultations/queue/${code}`, jsonBody({ categoryMain: data.categoryMain,
+      categorySub: data.categorySub, expectedVersion: versions.current[code] || 0, memo: documentText(data.memo), editorDocument: readDocument(data.memo),
+      tags: data.selectedTags.join(','), callDurationSeconds: activeCall === code ? call.duration : 0, complete: data.isComplete }, 'PUT'));
+    versions.current[code] = saved.version; setTimelineRefresh(value => value + 1);
+    if (data.isComplete) { setQueue(prev => prev.filter(q => q.id !== code)); queueRef.current = queueRef.current.filter(q => q.id !== code); setSelected(''); }
+    notify('success', data.isComplete ? '상담 저장·완료' : '초안 저장', '서버 저장이 확인됐습니다.');
+  });
+  const changeCustomer = async (data: Partial<CustomerProfile>, register: boolean) => run(async () => {
+    if (!customer || !item) return;
+    const merged = { ...customer, ...data };
+    const result = await apiJson<ServerCustomer>(register ? '/api/customers' : `/api/customers/${customer.id}`, jsonBody({ ...merged,
+      customerType: merged.customerType.toUpperCase(), complainant: merged.isComplainant || false, queueCode: item.id }, register ? 'POST' : 'PUT'));
+    setCustomers(prev => ({ ...prev, [result.code]: customerProfile(result) }));
+    setQueue(prev => prev.map(q => q.id === item.id ? { ...q, customerCode: result.code } : q)); notify('success', '고객 정보 저장', '고객 ID와 상담 연결을 확인했습니다.');
+  });
+  const followup = (type: string, details: string) => { void run(async () => {
+    const actionType = type.includes('방문') ? 'VISIT' : type.includes('콜백') ? 'CALLBACK' : null;
+    if (!actionType) throw new Error('호전환·메시지 발송은 아직 연결되지 않았습니다.');
+    await apiJson('/api/followup', jsonBody({ queueCode: selected, actionType, title: type, details }));
+    setTimelineRefresh(value => value + 1); notify('success', '후속 요청 접수', '요청을 저장했습니다. 일정·담당자 배정은 아직 확정되지 않았습니다.');
+  }).catch(() => {}); };
+  if (!identity || authError || !organizationId) return <main className="min-h-screen bg-slate-950 text-slate-200 grid place-content-center gap-4 p-6">
+    <h1 className="text-xl font-semibold">상담 워크스페이스</h1><p role="status" className="max-w-xl">{authError || '서버에서 로그인·조직 권한을 확인하고 있습니다.'}</p>
+    {authError && <a href="/login" className="text-indigo-300 underline">로그인으로 돌아가기</a>}
+  </main>;
+  return <div className="flex h-screen min-w-[1100px] overflow-hidden bg-slate-950 text-slate-100">
+    <SidebarGNB agentName={identity.name} currentTab="workspace" onTabChange={() => notify('info', '준비 중', '현재 상담 워크스페이스를 먼저 제공합니다.')} agentStatus={agentStatus} onAgentStatusChange={setAgentStatus} />
+    <div className="flex flex-1 flex-col min-w-0">
+      <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
+        <span>{busy ? '서버 처리 중' : activeCall ? `통화 진행 중 · ${call.status === 'connected' ? '음성 연결됨' : call.status === 'error' ? '음성 연결 실패' : '연결 확인 중'}` : '진행 중인 통화 없음'}</span>
+        {activeCall && activeCall !== selected && <button className="text-indigo-300 underline" onClick={() => setSelected(activeCall)}>현재 통화로 돌아가기</button>}</div>
+      {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
+      <div className="flex flex-1 min-h-0">
+        <QueuePanel queueItems={queue} selectedQueueId={selected} onSelectQueueItem={setSelected} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined} />
+        {customer && item ? <div className="flex flex-1 min-w-0"><div className="flex flex-col flex-1 min-w-0">
+          {writable && !item.customerCode && can('customer:write') && <label className="p-2 text-sm text-slate-300">기존 고객 연결 (직원 확인)
+            <select aria-label="기존 고객 연결" value="" disabled={busy || Boolean(queueError)} onChange={event=>linkCustomer(event.target.value)} className="ml-2 bg-slate-800 p-1 rounded">
+              <option value="">고객 선택</option>{Object.values(customers).filter(c=>c.isRegistered).map(c=><option key={c.id} value={c.id}>{c.name} · {c.phoneNumber}</option>)}
+            </select></label>}
+          {!writable && <p className="px-4 py-2 text-sm bg-slate-800">참고 조회 · {item.assignedAgent ? `${item.assignedAgent} 담당` : '상담을 수락하면 기록을 작성할 수 있습니다.'}</p>}
+          {draftError && <p role="alert" className="p-3 text-amber-300">{draftError}<button className="ml-2 underline" onClick={() => {setDraftReady({});setRefresh(v=>v+1);}}>초안 다시 조회</button></p>}
+          {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId}
+            initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} busy={busy}
+            callDuration={activeCall === item.id ? call.duration : 0} isCallActive={activeCall === item.id} mediaStatus={call.status} onMute={call.setMuted} onEndCall={endCall}
+            onStartCall={() => notify('info', '발신 미지원', '현재는 고객이 요청한 웹 음성 상담을 수락할 수 있습니다.')} onOpenTransfer={() => setFollowupTab('transfer')}
+            onSaveConsultation={save} onRegisterCustomer={data => changeCustomer(data, true)} onUpdateCustomer={data => changeCustomer(data, false)} quotedText={quotedText} onClearQuotedText={() => setQuotedText('')} />}
+        </div><div className="flex flex-col w-96 shrink-0">
+          {timelineError && <p role="alert" className="p-2 text-amber-300">{timelineError}<button className="ml-2 underline" onClick={() => setTimelineRefresh(v=>v+1)}>이력 다시 조회</button></p>}
+          <ContextActionPanel key={item.id} timeline={timeline} customerName={customer.name} customerPhone={customer.phoneNumber} readOnly={!writable || !can('followup:write') || busy || Boolean(queueError)}
+            onQuoteTimeline={setQuotedText} onAddFollowUpAction={followup} activeFollowUpTab={followupTab} />
+        </div></div> : <main className="flex-1 grid place-content-center text-slate-400" role="status">{loading ? '대기열을 불러오고 있습니다.' : '상담 요청을 선택해 주세요.'}</main>}
       </div>
-    );
-  }
-
-  return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100 antialiased select-none">
-      {/* 1. 최좌측 글로벌 내비게이션 바 (64px) */}
-      <SidebarGNB
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        agentStatus={agentStatus}
-        onAgentStatusChange={setAgentStatus}
-      />
-
-      {/* 2. 대기열 패널 (Queue, 320px) */}
-      <QueuePanel
-        queueItems={queueItems}
-        selectedQueueId={selectedQueueId}
-        onSelectQueueItem={handleSelectQueueItem}
-        onAcceptCall={handleAcceptCall}
-      />
-
-      {/* 3. 중앙 활성 상담 워크스페이스 (유연 확장, ~48%) */}
-      <ActiveWorkspace
-        customer={currentCustomer}
-        callDuration={callDuration}
-        isCallActive={isCallActive}
-        onEndCall={handleEndCall}
-        onStartCall={handleStartCall}
-        onOpenTransfer={handleOpenTransfer}
-        onSaveConsultation={handleSaveConsultation}
-        onRegisterCustomer={handleRegisterCustomer}
-        onUpdateCustomer={handleUpdateCustomer}
-        quotedText={quotedText}
-        onClearQuotedText={() => setQuotedText('')}
-      />
-
-      {/* 4. 우측 고객 맥락 및 후속 조치 패널 (384px) */}
-      <ContextActionPanel
-        timeline={currentTimeline}
-        customerName={currentCustomer.name || '미등록 고객'}
-        customerPhone={currentCustomer.phoneNumber}
-        onQuoteTimeline={handleQuoteTimeline}
-        onAddFollowUpAction={handleAddFollowUpAction}
-        activeFollowUpTab={activeFollowUpTab}
-      />
-
-      {/* 전역 피드백 토스트 컨테이너 (최대 5개 깔끔하게 표시) */}
-      <ToastContainer toasts={toasts} onDismiss={removeToast} />
-    </div>
-  );
+    </div><ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
+  </div>;
 }

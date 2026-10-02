@@ -13,9 +13,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   Building2,
-  Mail,
-  Calendar,
-  UserCheck,
   Tag,
   FileText,
   Clock,
@@ -30,15 +27,23 @@ import {
   User,
   ShieldAlert,
   Radio,
-  Volume2,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
 import { ShneaConsultationEditor } from './ShneaConsultationEditor';
-import { LiveKitCallSession } from '../lib/livekit';
+import { appendDocument, documentText } from '../lib/editor-document';
+import type { ConsultationDraft } from '../lib/workspace-data';
 
 interface ActiveWorkspaceProps {
   customer: CustomerProfile;
+  queueCode: string;
+  organizationId: string;
+  initialDraft?: ConsultationDraft;
+  onDraftChange: (draft: ConsultationDraft) => void;
+  readOnly?: boolean;
+  busy?: boolean;
+  mediaStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  onMute: (muted: boolean) => Promise<void> | undefined;
   callDuration: number;
   isCallActive: boolean;
   onEndCall: () => void;
@@ -51,7 +56,7 @@ interface ActiveWorkspaceProps {
     selectedTags: string[];
     memo: string;
     isComplete: boolean;
-  }) => void;
+  }) => Promise<void>;
   onRegisterCustomer: (data: {
     customerType: CustomerType;
     name: string;
@@ -62,18 +67,17 @@ interface ActiveWorkspaceProps {
     tier: 'VIP' | 'Gold' | 'Standard';
     customerNotes: string;
     isComplainant: boolean;
-  }) => void;
-  onUpdateCustomer: (data: Partial<CustomerProfile>) => void;
+  }) => Promise<void>;
+  onUpdateCustomer: (data: Partial<CustomerProfile>) => Promise<void>;
   quotedText?: string;
   onClearQuotedText?: () => void;
 }
 
 export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
-  customer,
+  customer, queueCode, organizationId, initialDraft, onDraftChange, readOnly=false, busy=false, mediaStatus, onMute,
   callDuration,
   isCallActive,
   onEndCall,
-  onStartCall,
   onOpenTransfer,
   onSaveConsultation,
   onRegisterCustomer,
@@ -83,93 +87,19 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 }) => {
   // Call controls state
   const [isMuted, setIsMuted] = useState(false);
-  const [isOnHold, setIsOnHold] = useState(false);
-
-  // LiveKit WebRTC 실시간 음성 통화 상태
-  const [mediaStatus, setMediaStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
-  const livekitRef = useRef<LiveKitCallSession | null>(null);
-
-  // 실시간 음성 통화 (LiveKit) 자동 입장 및 양방향 오디오 연결
-  useEffect(() => {
-    if (!isCallActive || !customer?.id) {
-      if (livekitRef.current) {
-        livekitRef.current.disconnect();
-        livekitRef.current = null;
-        setMediaStatus('idle');
-      }
-      return;
-    }
-
-    let isSubscribed = true;
-    const sessionManager = new LiveKitCallSession({
-      onConnected: () => {
-        if (isSubscribed) setMediaStatus('connected');
-      },
-      onDisconnected: () => {
-        if (isSubscribed) setMediaStatus('idle');
-      },
-      onError: (err) => {
-        console.warn('Agent LiveKit connection warning:', err);
-        if (isSubscribed) setMediaStatus('error');
-      },
-    });
-    livekitRef.current = sessionManager;
-    setMediaStatus('connecting');
-
-    // 상담사용 토큰 발급 (대기열/큐 ID 기준)
-    fetch(`/api/queue/${customer.id}/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentName: customer.managerName || '이소연 선임 (상담1팀)' }),
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error('LiveKit 토큰 발급 응답 오류');
-        return res.json();
-      })
-      .then((data) => {
-        if (!isSubscribed) return;
-        return sessionManager.connect(data.url, data.token);
-      })
-      .catch((err) => {
-        console.warn('Agent LiveKit connection skipped or failed:', err);
-        if (isSubscribed) setMediaStatus('error');
-      });
-
-    return () => {
-      isSubscribed = false;
-      sessionManager.disconnect();
-      livekitRef.current = null;
-    };
-  }, [isCallActive, customer?.id]);
+  const isOnHold = false;
 
   const handleToggleMute = async () => {
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-    if (livekitRef.current) {
-      await livekitRef.current.setMuted(nextMuted || isOnHold);
-    }
+    try { await onMute(!isMuted); setIsMuted(!isMuted); }
+    catch { setActionError('마이크 상태를 변경하지 못했습니다. 다시 시도해 주세요.'); }
   };
-
-  const handleToggleHold = async () => {
-    const nextHold = !isOnHold;
-    setIsOnHold(nextHold);
-    if (livekitRef.current) {
-      await livekitRef.current.setMuted(nextHold || isMuted);
-    }
-  };
-
-  const handleEndCallAction = () => {
-    if (livekitRef.current) {
-      livekitRef.current.disconnect();
-      livekitRef.current = null;
-    }
-    onEndCall();
-  };
-
+  // A media hold requires server signaling and both audio directions; mute is not hold.
+  const handleToggleHold = () => setActionError('통화 보류는 아직 지원하지 않습니다. 음소거를 사용할 수 있습니다.');
+  const handleEndCallAction = () => onEndCall();
+  const [actionError, setActionError] = useState('');
   // Customer Info Card Editing/Registration state
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
-  const editorRef = useRef<any>(null);
 
   // Form states for Customer Info
   const [formType, setFormType] = useState<CustomerType>(customer.customerType || 'corporate');
@@ -184,6 +114,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
   // Reset form when customer changes
   useEffect(() => {
+    if(isEditingInfo) return;
+    // Synchronize server profile changes while preserving an open editing form.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormType(customer.customerType || 'corporate');
     setFormName(customer.name || '');
     setFormCompany(customer.company || (customer.customerType === 'individual' ? '개인 (일반)' : ''));
@@ -193,38 +126,29 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
     setFormTier(customer.tier || 'Standard');
     setFormNotes(customer.customerNotes || '');
     setFormIsComplainant(customer.isComplainant || false);
-    setIsEditingInfo(false);
-  }, [customer.id, customer.isRegistered, customer.customerType]);
+  }, [customer, isEditingInfo]);
 
   // Consultation memo form state
-  const [mainCategory, setMainCategory] = useState(consultationCategories[0].main);
-  const [subCategory, setSubCategory] = useState(consultationCategories[0].subs[0]);
+  const [mainCategory, setMainCategory] = useState(initialDraft?.categoryMain || consultationCategories[0].main);
+  const [subCategory, setSubCategory] = useState(initialDraft?.categorySub || consultationCategories[0].subs[0]);
   const [status, setStatus] = useState<'in_progress' | 'completed' | 'escalated'>('in_progress');
-  const [selectedTags, setSelectedTags] = useState<string[]>(
-    customer.isComplainant ? ['#컴플레인', '#환불요청', '#주의고객'] : ['#견적_재검토', '#방문요청']
-  );
-  const [memoText, setMemoText] = useState<string>(
-    customer.isComplainant
-      ? '• 컴플레인 요지: 3월 28일 구독 취소 신청 건이 미반영되어 3월 31일 자동 결제됨\n• 고객 불만: 환불 입금 5일째 지연으로 극심한 불만 제기 중 (즉시 취소 및 보상 요구)\n• 조치 계획: 회계팀 긴급 결재 상신 및 당일 17시 이전 환불 완료 문자 송부 약속'
-      : '• 고객 요청사항: 엔터프라이즈 라이선스 갱신 시 분기 납부 조건 및 추가 50계정 할인율 문의\n• WebRTC 환경: 사내 방화벽 30160 포트 예외 처리 완료 여부 재검토 요청함\n• 차주 월요일 오후 엔지니어 방문 기술 미팅 희망'
-  );
-  const [lastSavedTime, setLastSavedTime] = useState<string>('방금 전');
-
-  // Sync subcategories when main category changes
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialDraft?.selectedTags || []);
+  const [memoText, setMemoText] = useState<string>(initialDraft?.memo || '');
+  const [lastSavedTime, setLastSavedTime] = useState('이번 접속에서 저장하지 않음');
+  const draftChangeRef = useRef(onDraftChange);
+  useEffect(() => {draftChangeRef.current=onDraftChange;}, [onDraftChange]);
   useEffect(() => {
-    const currentCat = consultationCategories.find((c) => c.main === mainCategory);
-    if (currentCat && currentCat.subs.length > 0) {
-      setSubCategory(currentCat.subs[0]);
-    }
-  }, [mainCategory]);
-
+    if (!readOnly) draftChangeRef.current({categoryMain:mainCategory,categorySub:subCategory,status,selectedTags,memo:memoText});
+  }, [mainCategory,subCategory,status,selectedTags,memoText,readOnly]);
   // Handle quoted text insertion from timeline
   useEffect(() => {
     if (quotedText) {
-      setMemoText((prev) => `${prev}\n\n[인용된 과거 상담 이력]\n> ${quotedText}\n`);
+      // The quote is an external action, consumed once by this queue editor.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (!readOnly) setMemoText(prev => appendDocument(prev, `[인용된 과거 상담 이력]\n> ${quotedText}\n`));
       if (onClearQuotedText) onClearQuotedText();
     }
-  }, [quotedText, onClearQuotedText]);
+  }, [quotedText, onClearQuotedText, readOnly]);
 
   // Format call duration MM:SS
   const formatTime = (secs: number) => {
@@ -252,31 +176,23 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
     } else if (templateName === '콜백') {
       tpl = '[부재중 콜백 약속]\n- 고객 부재로 통화 미연결\n- 재통화 희망 일시: 당일 17:00 이후\n- 주요 문의: 정기 점검 일정 확인';
     }
-    setMemoText((prev) => {
-      const trimmed = prev ? prev.trim() : '';
-      return trimmed ? `${trimmed}\n\n${tpl}\n` : `${tpl}\n`;
-    });
+    setMemoText(prev => appendDocument(prev, tpl));
   };
-
-  const handleSave = (isComplete: boolean) => {
-    onSaveConsultation({
-      categoryMain: mainCategory,
-      categorySub: subCategory,
-      status: isComplete ? 'completed' : status,
-      selectedTags,
-      memo: memoText,
-      isComplete,
-    });
-    setLastSavedTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
+  const handleSave = async (isComplete: boolean) => {
+    if(readOnly || busy) return;
+    setActionError('');
+    try {
+      await onSaveConsultation({categoryMain:mainCategory,categorySub:subCategory,status,selectedTags,memo:memoText,isComplete});
+      setLastSavedTime(new Date().toLocaleTimeString('ko-KR'));
+    } catch(error) { setActionError((error as Error).message); }
   };
-
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
       alert('고객명을 입력해 주세요.');
       return;
     }
-    onRegisterCustomer({
+    try { await onRegisterCustomer({
       customerType: formType,
       name: formName.trim(),
       company: formType === 'individual' ? (formCompany.trim() || '개인 고객') : (formCompany.trim() || '미지정 회사'),
@@ -287,12 +203,12 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       customerNotes: formNotes.trim(),
       isComplainant: formIsComplainant,
     });
-    setIsEditingInfo(false);
+    setIsEditingInfo(false); } catch(error) { setActionError((error as Error).message); }
   };
 
-  const handleUpdateSubmit = (e: React.FormEvent) => {
+  const handleUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateCustomer({
+    try { await onUpdateCustomer({
       customerType: formType,
       name: formName.trim() || customer.name,
       company: formType === 'individual' ? (formCompany.trim() || '개인 고객') : (formCompany.trim() || customer.company),
@@ -303,11 +219,12 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       customerNotes: formNotes.trim(),
       isComplainant: formIsComplainant,
     });
-    setIsEditingInfo(false);
+    setIsEditingInfo(false); } catch(error) { setActionError((error as Error).message); }
   };
 
   return (
     <main className="flex-1 flex flex-col h-full bg-slate-900 min-w-0 select-none overflow-hidden">
+      {actionError && <p role="alert" className="p-3 text-amber-200 bg-amber-950">{actionError}</p>}
       {/* 1. 상단 통화 컨트롤러 바 */}
       <div
         className={`px-5 py-2.5 border-b flex items-center justify-between transition-colors ${
@@ -413,6 +330,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             <>
               {/* Mute Button */}
               <button
+                disabled={readOnly || busy}
                 onClick={handleToggleMute}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   isMuted
@@ -426,6 +344,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* Hold Button */}
               <button
+                disabled title="통화 보류 미지원"
                 onClick={handleToggleHold}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   isOnHold
@@ -439,7 +358,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* Transfer Forward Button */}
               <button
+                disabled={readOnly || busy}
                 onClick={onOpenTransfer}
+                title="호전환 미연동"
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
               >
                 <PhoneForwarded className="w-4 h-4 text-indigo-400" />
@@ -448,6 +369,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* End Call Button */}
               <button
+                disabled={readOnly || busy}
                 onClick={handleEndCallAction}
                 className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-rose-950 transition-all"
               >
@@ -457,11 +379,12 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </>
           ) : (
             <button
-              onClick={onStartCall}
+              disabled
+              title="전화 재발신은 아직 연동되지 않았습니다."
               className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
             >
               <Phone className="w-4 h-4" />
-              <span>통화 연결 (재발신)</span>
+              <span>재발신 미연동</span>
             </button>
           )}
         </div>
@@ -513,6 +436,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             {customer.isRegistered ? (
               !isEditingInfo ? (
                 <button
+                disabled={readOnly || busy}
                   type="button"
                   onClick={() => setIsEditingInfo(true)}
                   className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] flex items-center gap-1 border border-slate-700"
@@ -522,6 +446,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                 </button>
               ) : (
                 <button
+                disabled={readOnly || busy}
                   type="button"
                   onClick={() => setIsEditingInfo(false)}
                   className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[11px] flex items-center gap-1"
@@ -615,6 +540,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <span className="text-[11px] font-semibold text-slate-400">고객 유형:</span>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
+                      disabled={readOnly || busy}
                       type="radio"
                       name="editCustomerType"
                       checked={formType === 'corporate'}
@@ -625,6 +551,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
+                      disabled={readOnly || busy}
                       type="radio"
                       name="editCustomerType"
                       checked={formType === 'individual'}
@@ -638,6 +565,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer ml-auto">
                     <input
+                      disabled={readOnly || busy}
                       type="checkbox"
                       checked={formIsComplainant}
                       onChange={(e) => setFormIsComplainant(e.target.checked)}
@@ -651,6 +579,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">고객명</label>
                     <input
+                      disabled={readOnly || busy}
                       type="text"
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
@@ -662,6 +591,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       {formType === 'corporate' ? '회사명' : '소속/분류'}
                     </label>
                     <input
+                      disabled={readOnly || busy}
                       type="text"
                       value={formCompany}
                       onChange={(e) => setFormCompany(e.target.value)}
@@ -677,6 +607,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       {formType === 'corporate' ? (
                         <>
                           <input
+                      disabled={readOnly || busy}
                             type="text"
                             placeholder="부서"
                             value={formDepartment}
@@ -684,6 +615,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                             className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                           />
                           <input
+                      disabled={readOnly || busy}
                             type="text"
                             placeholder="직책"
                             value={formTitle}
@@ -693,6 +625,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                         </>
                       ) : (
                         <input
+                      disabled={readOnly || busy}
                           type="text"
                           placeholder="예: 일반 이용자"
                           value={formTitle}
@@ -705,8 +638,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
                     <select
+                      disabled={readOnly || busy}
                       value={formTier}
-                      onChange={(e) => setFormTier(e.target.value as any)}
+                      onChange={(e) => setFormTier(e.target.value as 'VIP' | 'Gold' | 'Standard')}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="Standard">Standard (일반)</option>
@@ -720,6 +654,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div className="col-span-2">
                     <label className="block text-[11px] text-slate-400 mb-1">이메일</label>
                     <input
+                      disabled={readOnly || busy}
                       type="email"
                       value={formEmail}
                       onChange={(e) => setFormEmail(e.target.value)}
@@ -729,6 +664,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div className="col-span-2">
                     <label className="block text-[11px] text-slate-400 mb-1">고객 특이사항 / 컴플레인 메모</label>
                     <input
+                      disabled={readOnly || busy}
                       type="text"
                       value={formNotes}
                       onChange={(e) => setFormNotes(e.target.value)}
@@ -740,6 +676,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
                 <div className="flex justify-end space-x-2 pt-1">
                   <button
+                disabled={readOnly || busy}
                     type="button"
                     onClick={() => setIsEditingInfo(false)}
                     className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
@@ -747,6 +684,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     취소
                   </button>
                   <button
+                disabled={readOnly || busy}
                     type="submit"
                     className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm shadow-indigo-950"
                   >
@@ -775,6 +713,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <span className="text-[11px] font-semibold text-slate-300">신규 등록 유형:</span>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
+                      disabled={readOnly || busy}
                       type="radio"
                       name="registerCustomerType"
                       checked={formType === 'corporate'}
@@ -785,6 +724,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
+                      disabled={readOnly || busy}
                       type="radio"
                       name="registerCustomerType"
                       checked={formType === 'individual'}
@@ -798,6 +738,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer ml-auto">
                     <input
+                      disabled={readOnly || busy}
                       type="checkbox"
                       checked={formIsComplainant}
                       onChange={(e) => setFormIsComplainant(e.target.checked)}
@@ -813,6 +754,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       고객명 <span className="text-rose-400">*</span>
                     </label>
                     <input
+                      disabled={readOnly || busy}
                       type="text"
                       required
                       placeholder="예: 홍길동"
@@ -827,6 +769,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       {formType === 'corporate' ? '회사명 / 조직명' : '소속 / 구분'}
                     </label>
                     <input
+                      disabled={readOnly || busy}
                       type="text"
                       placeholder={formType === 'corporate' ? '예: (주)한국소프트' : '개인 고객'}
                       value={formCompany}
@@ -842,6 +785,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     {formType === 'corporate' ? (
                       <div className="flex gap-1">
                         <input
+                      disabled={readOnly || busy}
                           type="text"
                           placeholder="부서"
                           value={formDepartment}
@@ -849,6 +793,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                           className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
                         />
                         <input
+                      disabled={readOnly || busy}
                           type="text"
                           placeholder="직책"
                           value={formTitle}
@@ -858,6 +803,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       </div>
                     ) : (
                       <input
+                      disabled={readOnly || busy}
                         type="text"
                         placeholder="예: 일반 소비자"
                         value={formTitle}
@@ -870,8 +816,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
                     <select
+                      disabled={readOnly || busy}
                       value={formTier}
-                      onChange={(e) => setFormTier(e.target.value as any)}
+                      onChange={(e) => setFormTier(e.target.value as 'VIP' | 'Gold' | 'Standard')}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="Standard">Standard (일반)</option>
@@ -885,6 +832,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div className="col-span-2">
                     <label className="block text-[11px] text-slate-400 mb-1">이메일 주소</label>
                     <input
+                      disabled={readOnly || busy}
                       type="email"
                       placeholder="example@email.com"
                       value={formEmail}
@@ -905,6 +853,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
                   <div>
                     <button
+                disabled={readOnly || busy}
                       type="submit"
                       className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
                     >
@@ -927,6 +876,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           <div className="flex items-center space-x-2 text-xs">
             <span className="font-semibold text-slate-400 text-[11px] shrink-0">상담 분류:</span>
             <select
+                      disabled={readOnly || busy}
               value={mainCategory}
               onChange={(e) => {
                 setMainCategory(e.target.value);
@@ -943,6 +893,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </select>
             <span className="text-slate-500 font-semibold">&gt;</span>
             <select
+                      disabled={readOnly || busy}
               value={subCategory}
               onChange={(e) => setSubCategory(e.target.value)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
@@ -964,6 +915,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               const isSelected = selectedTags.includes(tag);
               return (
                 <button
+                disabled={readOnly || busy}
                   key={tag}
                   type="button"
                   onClick={() => toggleTag(tag)}
@@ -984,6 +936,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           {/* 우측: 처리 상태 세그먼트 */}
           <div className="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
+                disabled={readOnly || busy}
               type="button"
               onClick={() => setStatus('in_progress')}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
@@ -995,8 +948,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               진행 중
             </button>
             <button
+                disabled={readOnly || busy || isCallActive}
               type="button"
-              onClick={() => setStatus('completed')}
+              onClick={() => void handleSave(true)}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
                 status === 'completed'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -1006,6 +960,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               상담 완료
             </button>
             <button
+                disabled title="이관·에스컬레이션 미연동"
               type="button"
               onClick={() => setStatus('escalated')}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
@@ -1032,6 +987,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           <div className="flex items-center space-x-1.5">
             <span className="text-[11px] text-slate-400">자주 쓰는 템플릿:</span>
             <button
+                disabled={readOnly || busy}
               type="button"
               onClick={() => insertTemplate('컴플레인')}
               className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded text-[11px] font-semibold transition-colors"
@@ -1039,6 +995,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               ⚠️ 컴플레인 접수
             </button>
             <button
+                disabled={readOnly || busy}
               type="button"
               onClick={() => insertTemplate('견적')}
               className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
@@ -1046,6 +1003,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               + 견적 협의
             </button>
             <button
+                disabled={readOnly || busy}
               type="button"
               onClick={() => insertTemplate('기술')}
               className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
@@ -1053,6 +1011,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               + 기술 장애
             </button>
             <button
+                disabled={readOnly || busy}
               type="button"
               onClick={() => insertTemplate('콜백')}
               className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
@@ -1065,12 +1024,12 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}
         <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
           <ShneaConsultationEditor
-            documentKey={customer.id || 'consultation-doc'}
+            documentKey={queueCode}
             initialText={memoText}
+          queueCode={queueCode}
+          organizationId={organizationId}
+          readOnly={readOnly || busy}
             onChangeText={(txt) => setMemoText(txt)}
-            onReady={(editor) => {
-              editorRef.current = editor;
-            }}
           />
         </div>
       </div>
@@ -1081,12 +1040,13 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           <Clock className="w-3.5 h-3.5" />
           <span>마지막 저장: {lastSavedTime}</span>
           <span className="text-slate-600">|</span>
-          <span className="text-slate-400">입력 글자 수: {memoText.length}자</span>
+          <span className="text-slate-400">입력 글자 수: {documentText(memoText).length}자</span>
         </div>
 
         <div className="flex items-center space-x-2">
           {/* Temporary Save */}
           <button
+                disabled={readOnly || busy}
             type="button"
             onClick={() => handleSave(false)}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium flex items-center gap-1.5 transition-colors border border-slate-700"
@@ -1097,6 +1057,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
           {/* Admin Escalation */}
           <button
+                disabled title="관리자 에스컬레이션 미연동"
             type="button"
             onClick={() => {
               setStatus('escalated');
@@ -1110,12 +1071,14 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
           {/* Complete Consultation */}
           <button
+                disabled={readOnly || busy || isCallActive}
+                title={isCallActive ? '통화를 종료한 뒤 기록을 완료해 주세요.' : '상담 기록 저장 및 완료'}
             type="button"
             onClick={() => handleSave(true)}
             className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>상담 종료 및 완료</span>
+            <span>상담 기록 완료</span>
           </button>
         </div>
       </div>

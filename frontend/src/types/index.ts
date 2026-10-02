@@ -5,6 +5,12 @@ export type CustomerType = 'corporate' | 'individual';
 
 export interface QueueItem {
   id: string;
+  customerCode?: string | null;
+  status?: 'WAITING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
+  assignedSubject?: string | null;
+  assignedAgent?: string | null;
+  callEnded?: boolean;
+  version?: number;
   type: QueueItemType;
   customerType?: CustomerType;
   customerName: string;

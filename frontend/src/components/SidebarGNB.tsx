@@ -6,6 +6,7 @@ import { AgentStatus } from '../types';
 import { buildLogoutUrl } from '@/lib/pkce';
 
 interface SidebarGNBProps {
+  agentName: string;
   currentTab: string;
   onTabChange: (tab: string) => void;
   agentStatus: AgentStatus;
@@ -13,6 +14,7 @@ interface SidebarGNBProps {
 }
 
 export const SidebarGNB: React.FC<SidebarGNBProps> = ({
+  agentName,
   currentTab,
   onTabChange,
   agentStatus,
@@ -100,7 +102,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
         >
           <div className="relative">
             <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-semibold text-slate-200">
-              이선임
+              {agentName}
             </div>
             {/* Live Status indicator dot */}
             <span
@@ -152,14 +154,15 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
                     try {
                       const configRes = await fetch('/api/platform/oidc-config');
                       const config = configRes.ok ? await configRes.json() : null;
-                      const issuer = config?.issuer || 'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
+                      const issuer = config?.issuer;
+                      if(!issuer) throw new Error('OIDC issuer missing');
                       const clientId = config?.clientId || 'app';
                       const postLogoutRedirectUri = config?.postLogoutRedirectUri || `${window.location.origin}/`;
 
                       const logoutUrl = buildLogoutUrl(issuer, clientId, postLogoutRedirectUri, idToken);
                       window.location.href = logoutUrl;
                     } catch {
-                      window.location.href = '/login';
+                      window.location.replace(new URL('/login', window.location.origin).href);
                     }
                   }}
                   className="w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left text-rose-300 hover:text-rose-200 hover:bg-rose-950/40 transition-colors"

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PhoneIncoming, CalendarClock, TicketCheck, PhoneCall, AlertCircle, Sparkles, Filter } from 'lucide-react';
+import { PhoneIncoming, CalendarClock, TicketCheck, PhoneCall, Filter } from 'lucide-react';
 import { QueueItem, QueueItemType } from '../types';
 
 interface QueuePanelProps {
@@ -112,7 +112,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
               {/* Card Header */}
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center space-x-1.5">
-                  {item.type === 'call' && (
+                  {item.type === 'call' && item.status === 'WAITING' && onAcceptCall && (
                     <span className="flex items-center gap-1 text-[11px] font-bold text-rose-400 bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-800/40 animate-pulse">
                       <PhoneIncoming className="w-3 h-3 text-rose-400" />
                       실시간 콜
@@ -178,12 +178,13 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
               </p>
 
               {/* Action Buttons */}
+              {item.status === 'PROCESSING' && <p className="mt-2 text-xs text-slate-300">{item.assignedAgent || '담당 상담사'} · {item.callEnded ? '후처리 중' : '처리 중'}</p>}
               <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
                 <span className="text-[11px] text-indigo-400 font-medium group-hover:underline">
                   {isSelected ? '현재 워크스페이스 활성' : '클릭하여 상담 열기 →'}
                 </span>
 
-                {item.type === 'call' && (
+                {item.status === 'WAITING' && onAcceptCall && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -193,7 +194,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                     className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm shadow-rose-950 active:scale-95 transition-all"
                   >
                     <PhoneCall className="w-3 h-3" />
-                    수신
+                    {item.type === 'call' ? '수신' : '상담 수락'}
                   </button>
                 )}
                 {item.type === 'callback' && (
@@ -204,7 +205,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                     }}
                     className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-600/50 rounded text-[11px] font-medium transition-colors"
                   >
-                    즉시 발신
+                    요청 보기
                   </button>
                 )}
               </div>
@@ -217,9 +218,9 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
       <div className="p-3 border-t border-slate-800 bg-slate-950/60 text-slate-400 text-[11px] flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>대기열 자동 배정 수신 중</span>
+          <span>대기열 주기 조회</span>
         </div>
-        <span className="text-slate-400">평균 대기: 42초</span>
+        <span className="text-slate-400">{queueItems.length}건</span>
       </div>
     </section>
   );

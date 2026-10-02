@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { emptyDocument, fromMarkdown, parseDocument, type EditorDocument } from '@shnea/editor';
+import { emptyDocument, fromMarkdown, parseDocument, type EditorDocument, type AttachmentAdapter, type AttachmentRef } from '@shnea/editor';
 import '@shnea/editor/style.css';
 import { AlertCircle } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
 
 // SSR 비활성화로 클라이언트 전용 렌더링
 const ShneaEditor = dynamic(
@@ -14,45 +15,12 @@ const ShneaEditor = dynamic(
 
 interface ShneaConsultationEditorProps {
   documentKey: string;
+  queueCode: string;
+  organizationId: string;
   initialText?: string;
   onChangeText?: (text: string) => void;
-  onReady?: (editor: any) => void;
+
   readOnly?: boolean;
-}
-
-// EditorDocument에서 사람이 읽을 수 있는 일반 텍스트 추출
-function extractPlainText(doc: EditorDocument): string {
-  if (!doc || !doc.content) return '';
-  const lines: string[] = [];
-
-  const visit = (node: any): string => {
-    if (!node) return '';
-    if (node.type === 'text') {
-      return node.text || '';
-    }
-    if (node.type === 'hardBreak') {
-      return '\n';
-    }
-    if (node.content && Array.isArray(node.content)) {
-      const textParts = node.content.map(visit).join('');
-      if (node.type === 'paragraph' || node.type === 'heading') {
-        lines.push(textParts);
-      } else if (node.type === 'listItem' || node.type === 'taskItem') {
-        lines.push((node.attrs?.checked ? '[x] ' : '• ') + textParts);
-      } else if (node.type === 'codeBlock') {
-        lines.push(textParts);
-      } else {
-        return textParts;
-      }
-    }
-    return '';
-  };
-
-  if (Array.isArray(doc.content.content)) {
-    doc.content.content.forEach(visit);
-    return lines.join('\n').trim();
-  }
-  return '';
 }
 
 // 문자열을 EditorDocument로 안전하게 변환
@@ -61,7 +29,7 @@ function textToDocument(text: string): EditorDocument {
   const trimmed = text.trim();
 
   // 만약 JSON 포맷으로 저장된 문서라면 parseDocument 파싱
-  if (trimmed.startsWith('{"format":"shnea-editor"')) {
+  if (trimmed.startsWith('{')) {
     try {
       return parseDocument(JSON.parse(trimmed));
     } catch {
@@ -79,21 +47,21 @@ function textToDocument(text: string): EditorDocument {
 }
 
 export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = ({
-  documentKey,
+  documentKey, queueCode, organizationId,
   initialText = '',
   onChangeText,
-  onReady,
   readOnly = false,
 }) => {
   const [mounted, setMounted] = useState(false);
   const [editorValue, setEditorValue] = useState<EditorDocument>(() => textToDocument(initialText));
   const [editorError, setEditorError] = useState<string | null>(null);
-  const editorRef = useRef<any>(null);
 
   // 내부 에코 방지용 Ref (자신이 보낸 텍스트로 인한 불필요한 재렌더링 방지)
   const lastEmittedTextRef = useRef<string>(initialText);
 
   useEffect(() => {
+    // SSR cannot mount this browser-only editor; initialize after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -107,26 +75,29 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
     }
 
     const newDoc = textToDocument(initialText);
+    // A template/quote is an external document replacement, not editor typing.
     setEditorValue(newDoc);
     lastEmittedTextRef.current = initialText;
   }, [initialText, mounted, documentKey]);
 
   // SHNEA 공식 에디터 첨부파일 어댑터 (editor.md 표준 규격 준수)
-  const attachments = useMemo(() => ({
+  const attachments = useMemo<AttachmentAdapter>(() => ({
     platformImageOrigin: 'https://platform.shnea.kr',
-    scope: () => 'hellow-consultation-dev',
-    async upload(file: File, context: any) {
+    scope: () => `${organizationId}:${queueCode}`,
+    async upload(file, context) {
       const body = new FormData();
       body.set('file', file);
       const kind = context.kind || (file.type.startsWith('image/') ? 'image' : 'file');
-      const scope = context.scope || 'hellow-consultation-dev';
+      const scope = `${organizationId}:${queueCode}`;
       body.set('kind', kind);
       body.set('scope', scope);
-      if (context.requestId) body.set('requestId', context.requestId);
+      body.set('queueCode', queueCode);
+      body.set('requestId', context.requestId || crypto.randomUUID());
 
-      const response = await fetch('/api/editor/files', {
+      const response = await apiFetch('/api/editor/files', {
         method: 'POST',
         body,
+        signal: context.signal,
       });
 
       if (!response.ok) {
@@ -142,8 +113,8 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
         size: Number.isSafeInteger(resData.size) ? resData.size : file.size,
       };
     },
-    async resolve(file: any, signal?: AbortSignal) {
-      const response = await fetch(`/api/editor/files/${encodeURIComponent(file.fileId)}/views`, {
+    async resolve(file: AttachmentRef, signal?: AbortSignal) {
+      const response = await apiFetch(`/api/editor/files/${encodeURIComponent(file.fileId)}/views`, {
         signal,
       });
       if (!response.ok) {
@@ -153,7 +124,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
       if (!data.fileId) data.fileId = file.fileId;
       return data;
     },
-  }), []);
+  }), [queueCode, organizationId]);
 
   if (!mounted) {
     return (
@@ -296,14 +267,10 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
             fontSize: 13.5,
             lineHeight: 1.65,
           }}
-          onReady={(editor) => {
-            editorRef.current = editor;
-            if (onReady) onReady(editor);
-          }}
           onChange={({ document }) => {
             setEditorValue(document);
             if (onChangeText) {
-              const plain = extractPlainText(document);
+              const plain = JSON.stringify(document);
               lastEmittedTextRef.current = plain;
               onChangeText(plain);
             }

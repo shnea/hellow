@@ -28,7 +28,7 @@ FROM gradle:8.12-jdk21 AS api-builder
 WORKDIR /workspace
 COPY backend/settings.gradle.kts backend/build.gradle.kts ./
 COPY backend/src ./src
-RUN gradle --no-daemon build -x test && cp build/libs/*-SNAPSHOT.jar /app.jar
+RUN gradle --no-daemon build && cp build/libs/*-SNAPSHOT.jar /app.jar
 
 FROM eclipse-temurin:21-jre-alpine AS api
 RUN apk add --no-cache curl tzdata && addgroup -S app && adduser -S -G app app

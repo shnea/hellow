@@ -1,92 +1,126 @@
 package kr.shnea.hellow.customer;
 
-import org.springframework.http.ResponseEntity;
+import static org.springframework.http.HttpStatus.*;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import java.util.*;
+import kr.shnea.hellow.queue.*;
+import kr.shnea.hellow.security.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
-import java.util.UUID;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/customers")
 public class CustomerController {
+  private final CustomerRepository customers;
+  private final QueueItemRepository queues;
+  private final WorkspaceAccess access;
 
-    private final CustomerRepository customerRepository;
+  public CustomerController(
+      CustomerRepository customers, QueueItemRepository queues, WorkspaceAccess access) {
+    this.customers = customers;
+    this.queues = queues;
+    this.access = access;
+  }
 
-    public CustomerController(CustomerRepository customerRepository) {
-        this.customerRepository = customerRepository;
-    }
+  @GetMapping
+  public List<Customer> all() {
+    return customers.findByOrganizationId(access.require("customer:read").organizationId());
+  }
 
-    @GetMapping
-    public List<Customer> getAll() {
-        return customerRepository.findAll();
-    }
+  @GetMapping("/{code}")
+  public Customer get(@PathVariable String code) {
+    return owned(access.require("customer:read"), code);
+  }
 
-    @GetMapping("/{code}")
-    public ResponseEntity<Customer> getByCode(@PathVariable String code) {
-        return customerRepository.findByCode(code)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
+  public record CustomerRequest(
+      @NotBlank @Pattern(regexp = "CORPORATE|INDIVIDUAL") String customerType,
+      @NotBlank @Size(max = 100) String name,
+      @Size(max = 150) String company,
+      @Size(max = 100) String department,
+      @Size(max = 100) String title,
+      @Pattern(regexp = "VIP|Gold|Standard") String tier,
+      @NotBlank @Size(max = 50) String phoneNumber,
+      @Size(max = 255) String email,
+      @Size(max = 10000) String customerNotes,
+      boolean complainant,
+      String queueCode) {}
 
-    public record CustomerRequest(
-            String customerType,
-            String name,
-            String company,
-            String department,
-            String title,
-            String tier,
-            String phoneNumber,
-            String email,
-            String customerNotes,
-            boolean complainant
-    ) {}
+  @PostMapping
+  @Transactional
+  public Customer register(@Valid @RequestBody CustomerRequest r) {
+    var actor = access.require("customer:write");
+    if (r.queueCode() == null) throw new ResponseStatusException(BAD_REQUEST, "등록할 상담을 지정해 주세요.");
+    var q =
+        queues
+            .lockByCode(actor.organizationId(), r.queueCode())
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    q.requireOwner(actor.subject());
+    if (q.getCustomerCode() != null) return owned(actor, q.getCustomerCode());
+    Customer c =
+        new Customer(
+            "cust-" + UUID.randomUUID(),
+            Customer.CustomerType.valueOf(r.customerType()),
+            true,
+            r.name(),
+            r.company(),
+            r.department(),
+            r.title(),
+            r.tier(),
+            r.phoneNumber(),
+            r.email(),
+            actor.name(),
+            r.customerNotes(),
+            r.complainant());
+    c.setOrganizationId(actor.organizationId());
+    customers.save(c);
+    q.linkCustomer(c);
+    queues.save(q);
+    return c;
+  }
 
-    @PostMapping
-    public ResponseEntity<Customer> register(@RequestBody CustomerRequest request) {
-        Customer.CustomerType type = "INDIVIDUAL".equalsIgnoreCase(request.customerType())
-                ? Customer.CustomerType.INDIVIDUAL
-                : Customer.CustomerType.CORPORATE;
+  @PutMapping("/{code}")
+  @Transactional
+  public Customer update(@PathVariable String code, @Valid @RequestBody CustomerRequest r) {
+    var actor = access.require("customer:write");
+    var c = owned(actor, code);
+    c.updateInfo(
+        Customer.CustomerType.valueOf(r.customerType()),
+        r.name(),
+        r.company(),
+        r.department(),
+        r.title(),
+        r.tier(),
+        r.email(),
+        r.customerNotes(),
+        r.complainant());
+    return customers.save(c);
+  }
 
-        String code = "cust-" + UUID.randomUUID().toString().substring(0, 8);
-        Customer customer = new Customer(
-                code,
-                type,
-                true,
-                request.name(),
-                request.company(),
-                request.department(),
-                request.title(),
-                request.tier(),
-                request.phoneNumber(),
-                request.email(),
-                "이소연 선임 (본인)",
-                request.customerNotes(),
-                request.complainant()
-        );
+  public record LinkRequest(@NotBlank String customerCode) {}
 
-        return ResponseEntity.ok(customerRepository.save(customer));
-    }
+  @PostMapping("/queue/{code}/link")
+  @Transactional
+  public Customer link(@PathVariable String code, @Valid @RequestBody LinkRequest request) {
+    var actor = access.require("customer:write");
+    var q =
+        queues
+            .lockByCode(actor.organizationId(), code)
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    q.requireOwner(actor.subject());
+    if (q.getCustomerCode() != null && !q.getCustomerCode().equals(request.customerCode()))
+      throw new ResponseStatusException(CONFLICT, "이미 연결된 고객을 임의로 바꿀 수 없습니다.");
+    var customer = owned(actor, request.customerCode());
+    q.linkCustomer(customer);
+    queues.save(q);
+    return customer;
+  }
 
-    @PutMapping("/{code}")
-    public ResponseEntity<Customer> update(@PathVariable String code, @RequestBody CustomerRequest request) {
-        return customerRepository.findByCode(code)
-                .map(customer -> {
-                    Customer.CustomerType type = "INDIVIDUAL".equalsIgnoreCase(request.customerType())
-                            ? Customer.CustomerType.INDIVIDUAL
-                            : Customer.CustomerType.CORPORATE;
-
-                    customer.updateInfo(
-                            type,
-                            request.name(),
-                            request.company(),
-                            request.department(),
-                            request.title(),
-                            request.tier(),
-                            request.email(),
-                            request.customerNotes(),
-                            request.complainant()
-                    );
-                    return ResponseEntity.ok(customerRepository.save(customer));
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
+  private Customer owned(WorkspaceAccess.Actor actor, String code) {
+    return customers
+        .findByOrganizationIdAndCode(actor.organizationId(), code)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+  }
 }

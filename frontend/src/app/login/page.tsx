@@ -6,7 +6,6 @@ import {
   Headphones, 
   ArrowRight, 
   AlertCircle, 
-  UserCheck, 
   Lock,
   LogIn
 } from 'lucide-react';
@@ -19,32 +18,9 @@ function LoginContent() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentOrigin, setCurrentOrigin] = useState('');
   const [oidcConfig, setOidcConfig] = useState<OidcAuthConfig | null>(null);
-  const [isDevMode, setIsDevMode] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setCurrentOrigin(window.location.origin);
-
-      // 이미 로그인되어 있는 상태라면 메인 또는 지정 경로로 이동
-      const hasCookie = document.cookie.split(';').some((c) => c.trim().startsWith('hellow_logged_in=true'));
-      const hasSession = sessionStorage.getItem('hellow_logged_in') === 'true';
-      if (hasCookie || hasSession) {
-        router.replace(redirectTo);
-        return;
-      }
-
-      // 개발 환경 여부 판단 (로컬호스트, dev- 도메인, 개발 파라미터)
-      const isLocalOrDev = 
-        process.env.NODE_ENV !== 'production' ||
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname.startsWith('dev-') ||
-        window.location.search.includes('dev=true');
-      setIsDevMode(isLocalOrDev);
-    }
-
     // OIDC 설정 로드
     fetch('/api/platform/oidc-config')
       .then((res) => (res.ok ? res.json() : null))
@@ -55,11 +31,6 @@ function LoginContent() {
       })
       .catch(() => {});
   }, [redirectTo, router]);
-
-  // 동적 콜백 URL 계산
-  const callbackUrl = currentOrigin
-    ? `${currentOrigin}/auth/callback`
-    : 'https://dev-hellow.shnea.kr/auth/callback';
 
   // OIDC 로그인 시작
   const handleLogin = async () => {
@@ -82,10 +53,10 @@ function LoginContent() {
         }
       }
 
-      // 2. 플랫폼 환경 기본 Issuer Fallback 적용
+      // 설정된 환경 issuer만 사용
       const issuer =
-        activeConfig?.issuer ||
-        'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
+        activeConfig?.issuer;
+      if (!issuer) throw new Error('로그인 환경이 설정되지 않았습니다. 관리자에게 문의해 주세요.');
       const clientId = activeConfig?.clientId || 'app';
       const redirectUri = typeof window !== 'undefined'
         ? `${window.location.origin}/auth/callback`
@@ -109,15 +80,6 @@ function LoginContent() {
       setError((err as Error).message || '로그인 URL 생성 중 오류가 발생했습니다.');
       setLoading(false);
     }
-  };
-
-  // 개발자 모드 즉시 접속 (개발 환경에서만 노출)
-  const handleDevBypassLogin = () => {
-    // 쿠키 및 세션 스토리지 동시 설정
-    document.cookie = 'hellow_logged_in=true; path=/; max-age=86400; SameSite=Lax';
-    sessionStorage.setItem('hellow_agent_name', '이소연 선임 (상담1팀)');
-    sessionStorage.setItem('hellow_logged_in', 'true');
-    router.replace(redirectTo);
   };
 
   return (
@@ -169,25 +131,6 @@ function LoginContent() {
                 {!loading && <ArrowRight className="w-4 h-4 ml-0.5" />}
               </button>
 
-              {/* 개발자 모드 즉시 접속: 개발 환경에서만 표시 */}
-              {isDevMode && (
-                <>
-                  <div className="relative flex py-1.5 items-center">
-                    <div className="flex-grow border-t border-slate-800"></div>
-                    <span className="flex-shrink mx-2 text-[10px] text-slate-500 font-mono">DEV MODE</span>
-                    <div className="flex-grow border-t border-slate-800"></div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleDevBypassLogin}
-                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/80 hover:bg-slate-800/80 text-slate-300 hover:text-white text-xs font-medium transition flex items-center justify-center gap-2"
-                  >
-                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>개발자 모드 즉시 접속</span>
-                  </button>
-                </>
-              )}
             </div>
           </div>
         </div>

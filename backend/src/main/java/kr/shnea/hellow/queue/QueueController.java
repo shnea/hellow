@@ -1,84 +1,93 @@
 package kr.shnea.hellow.queue;
 
+import static org.springframework.http.HttpStatus.*;
+
+import java.util.*;
 import kr.shnea.hellow.livekit.LiveKitService;
-import org.springframework.http.ResponseEntity;
+import kr.shnea.hellow.security.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/queue")
 public class QueueController {
+  private final QueueItemRepository queues;
+  private final WorkspaceAccess access;
+  private final MembershipRepository members;
+  private final LiveKitService media;
 
-    private final QueueItemRepository queueItemRepository;
-    private final LiveKitService liveKitService;
+  public QueueController(
+      QueueItemRepository queues,
+      WorkspaceAccess access,
+      MembershipRepository members,
+      LiveKitService media) {
+    this.queues = queues;
+    this.access = access;
+    this.members = members;
+    this.media = media;
+  }
 
-    public QueueController(QueueItemRepository queueItemRepository, LiveKitService liveKitService) {
-        this.queueItemRepository = queueItemRepository;
-        this.liveKitService = liveKitService;
-    }
+  @GetMapping
+  public List<QueueItem> list() {
+    var actor = access.require("queue:read");
+    return queues.findByOrganizationIdAndStatusInOrderByCreatedAtDesc(
+        actor.organizationId(),
+        List.of(QueueItem.QueueStatus.WAITING, QueueItem.QueueStatus.PROCESSING));
+  }
 
-    @GetMapping
-    public List<QueueItem> getActiveItems(@RequestParam(required = false) String status) {
-        if ("waiting".equalsIgnoreCase(status)) {
-            return queueItemRepository.findByStatusOrderByCreatedAtDesc(QueueItem.QueueStatus.WAITING);
-        }
-        return queueItemRepository.findByStatusInOrderByCreatedAtDesc(
-                List.of(QueueItem.QueueStatus.WAITING, QueueItem.QueueStatus.PROCESSING)
-        );
-    }
+  @PostMapping("/{code}/accept")
+  @Transactional
+  public QueueItem accept(@PathVariable String code) {
+    var actor = access.require("queue:accept");
+    members
+        .lockActive(
+            actor.organizationId(), access.identity().getIssuer().toString(), actor.subject())
+        .orElseThrow(() -> new ResponseStatusException(FORBIDDEN));
+    var q = lock(actor, code);
+    if (q.getStatus() == QueueItem.QueueStatus.PROCESSING
+        && actor.subject().equals(q.getAssignedSubject())) return q;
+    if (q.getType() == QueueItem.ItemType.CALL
+        && queues.existsByOrganizationIdAndAssignedSubjectAndStatusAndCallEndedFalseAndType(
+            actor.organizationId(),
+            actor.subject(),
+            QueueItem.QueueStatus.PROCESSING,
+            QueueItem.ItemType.CALL))
+      throw new ResponseStatusException(CONFLICT, "진행 중인 통화를 먼저 종료해 주세요.");
+    q.acceptBy(actor.subject(), actor.name());
+    return queues.save(q);
+  }
 
-    @PostMapping("/{code}/accept")
-    public ResponseEntity<QueueItem> acceptQueueItem(
-            @PathVariable String code,
-            @RequestBody(required = false) AcceptRequest request) {
-        String agent = (request != null && request.agentName() != null) ? request.agentName() : "홍상담 매니저 (상담1팀)";
-        return queueItemRepository.findByCode(code)
-                .map(item -> {
-                    item.accept(agent);
-                    QueueItem saved = queueItemRepository.save(item);
-                    return ResponseEntity.ok(saved);
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
+  @PostMapping("/{code}/token")
+  public LiveKitService.LiveKitTokenResponse token(@PathVariable String code) {
+    var actor = access.require("queue:accept");
+    var q =
+        queues
+            .findByOrganizationIdAndCode(actor.organizationId(), code)
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    q.requireOwner(actor.subject());
+    if (q.isCallEnded() || q.getType() != QueueItem.ItemType.CALL)
+      throw new ResponseStatusException(CONFLICT, "활성 음성 통화가 아닙니다.");
+    return media.createToken(
+        actor.organizationId() + "-" + q.getCode(),
+        "agent-" + actor.subject(),
+        actor.name(),
+        false);
+  }
 
-    @PostMapping("/{code}/token")
-    public ResponseEntity<LiveKitService.LiveKitTokenResponse> getQueueToken(
-            @PathVariable String code,
-            @RequestBody(required = false) TokenRequest request) {
-        return queueItemRepository.findByCode(code)
-                .map(item -> {
-                    String roomName = item.getCode();
-                    String agentName = (request != null && request.agentName() != null && !request.agentName().isBlank())
-                            ? request.agentName()
-                            : (item.getAssignedAgent() != null ? item.getAssignedAgent() : "상담사");
-                    String identity = "agent-" + agentName.replaceAll("[^a-zA-Z0-9가-힣]", "_");
-                    return ResponseEntity.ok(liveKitService.createToken(roomName, identity, agentName, true));
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
+  @PostMapping("/{code}/end-call")
+  @Transactional
+  public QueueItem end(@PathVariable String code) {
+    var actor = access.require("queue:accept");
+    var q = lock(actor, code);
+    q.requireOwner(actor.subject());
+    q.endCall();
+    return queues.save(q);
+  }
 
-    @PostMapping("/{code}/complete")
-    public ResponseEntity<Void> completeQueueItem(@PathVariable String code) {
-        return queueItemRepository.findByCode(code)
-                .map(item -> {
-                    item.complete();
-                    queueItemRepository.save(item);
-                    return ResponseEntity.ok().<Void>build();
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    @PostMapping("/{code}/cancel")
-    public ResponseEntity<Void> cancelQueueItem(@PathVariable String code) {
-        return queueItemRepository.findByCode(code)
-                .map(item -> {
-                    item.cancel();
-                    queueItemRepository.save(item);
-                    return ResponseEntity.ok().<Void>build();
-                })
-                .orElse(ResponseEntity.notFound().build());
-    }
-
-    public record AcceptRequest(String agentName) {}
-    public record TokenRequest(String agentName) {}
+  private QueueItem lock(WorkspaceAccess.Actor actor, String code) {
+    return queues
+        .lockByCode(actor.organizationId(), code)
+        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+  }
 }

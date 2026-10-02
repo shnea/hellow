@@ -1,5 +1,20 @@
 # 작업 인계 기록
 
+## 2026-10-03 리뷰 수정 인계
+
+현재 상태의 정본은 [f65216d 리뷰 수정 결과](review-repair.md)다. 아래 과거 완료 기록 중 공개 API·개발 로그인·PUBLIC 파일·목업 성공·독립 Queue complete 및 실제 연동 완료 표현은 이번 수정으로 대체한다.
+
+- 서버 Bearer JWT 검증, 명시적 API audience, Organization/Membership/Permission/ORG 범위, 담당 상담·파일 권한을 도입했다. 누락된 운영 계약은 거부한다.
+- Queue 행 잠금과 담당자 동시 CALL 제약, 상담별 초안 upsert/version, 저장·이력·완료 단일 트랜잭션을 구현했다. 미등록 고객은 실제 등록/연결 이후 Customer code를 사용한다.
+- Editor JSON과 작성 중 초안 보존, 실제 타임라인 재조회, 선택 맥락과 활성 미디어 분리, 순차 폴링/오래된 응답 폐기, 실패 표시를 적용했다. 미연동 액션은 성공 처리하지 않는다.
+- PRIVATE 소유 파일과 스트리밍 청크, 짧은 LiveKit 참가 토큰·서버 제거 재시도를 구현했다. 기존 조직 미지정 데이터와 PUBLIC 파일은 임의 이관하지 않았다.
+- 검증: Java 21/Gradle 8.12.1 서버 테스트 12개 PostgreSQL 17.11에서 통과. Frontend 테스트 8개·lint·production build 통과. 격리된 합성 조직/고객/JWT로 초안 저장·새로고침 복구·우측 이력과 편집기 동시 표시 확인. Nginx 설정 검증 통과.
+- 문서 검사: Markdown 77개·로컬 링크 213개·영역 14개·요구사항 85장·스킬 해시 64개 통과. Git diff whitespace 검사 통과.
+- Impeccable detector의 기존 스타일 경고 12개는 유지. 이번 변경은 안전한 기능 복구에 한정하며 시각 스타일 전면 개선을 완료했다고 보지 않는다.
+- `.agents` 기준 문서 쓰기 권한 요청은 사용자가 거절했다. core/scope/validation의 과거 미구현 상태 문구는 이번 구현에 맞춰 갱신하지 못했다. 이 절과 review-repair.md를 먼저 읽는다.
+- 남은 일: 실제 OIDC API audience·첫 조직 Membership·파일 보존 정책 계약, 관리자 UI/TEAM·SELF·ACD, 미등록 상담 과거 이력의 고객 소급 연결, 기존 PUBLIC 파일 정리, 운영 DB migration/restore, HTTPS/2인 통화·실제 권한 회수 후 참가자 제거 검증.
+- 운영 및 원래 개발 스택은 재배포하지 않았다. 분리된 검증 서버·DB만 사용했다.
+
 ## 완료한 작업
 
 - 요구사항정의서 1~85장을 검토해 골든패스 원본의 core.md, 14개 영역, skills.md, decisions.md, 영역 색인을 작성했다. [핵심 기준](../.agents/skills/golden-path/references/core.md)부터 읽는다. 원문 요구사항은 수정하지 않았다.

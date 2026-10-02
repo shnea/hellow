@@ -85,7 +85,7 @@ export async function exchangeCodeForToken(
   code: string,
   redirectUri: string,
   verifier: string
-): Promise<any> {
+): Promise<{access_token:string;id_token?:string;expires_in:number;token_type:string}> {
   const tokenEndpoint = `${issuer.replace(/\/$/, '')}/protocol/openid-connect/token`;
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
