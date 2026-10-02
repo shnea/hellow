@@ -1,0 +1,2 @@
+# Preserve vendored Impeccable bytes for provenance and SHA256 verification.
+/.agents/skills/impeccable/** -text

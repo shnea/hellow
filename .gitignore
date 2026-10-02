@@ -1,0 +1,12 @@
+# Local editor state
+.idea/
+
+# Plaintext environment files; encrypted files remain eligible for tracking
+.env
+.env.dev
+.env.prod
+.env.*.local
+
+# Local age private keys (store private keys outside the repository)
+keys.txt
+*.agekey
