@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
+import { ShneaConsultationEditor } from './ShneaConsultationEditor';
 
 interface ActiveWorkspaceProps {
   customer: CustomerProfile;
@@ -126,6 +127,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       : '• 고객 요청사항: 엔터프라이즈 라이선스 갱신 시 분기 납부 조건 및 추가 50계정 할인율 문의\n• WebRTC 환경: 사내 방화벽 30160 포트 예외 처리 완료 여부 재검토 요청함\n• 차주 월요일 오후 엔지니어 방문 기술 미팅 희망'
   );
   const [lastSavedTime, setLastSavedTime] = useState<string>('방금 전');
+  const [editorMode, setEditorMode] = useState<'shnea' | 'text'>('shnea');
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -957,25 +959,58 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-200 flex items-center gap-1">
               <FileText className="w-3.5 h-3.5 text-indigo-400" />
-              실시간 상담 기록
+              상담 기록
             </span>
             <div className="h-4 w-px bg-slate-700" />
-            <button
-              type="button"
-              onClick={() => setMemoText((prev) => prev + '\n- ')}
-              className="p-1 hover:bg-slate-700 rounded text-slate-300"
-              title="글머리 기호 삽입"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setMemoText((prev) => prev + ' **강조** ')}
-              className="p-1 hover:bg-slate-700 rounded text-slate-300"
-              title="굵게 표시"
-            >
-              <Bold className="w-3.5 h-3.5" />
-            </button>
+
+            {/* Mode Toggle */}
+            <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-700 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setEditorMode('shnea')}
+                className={`px-2 py-0.5 rounded font-medium transition ${
+                  editorMode === 'shnea'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="SHNEA 공식 에디터 (플랫폼 파일/이미지 드래그 첨부 지원)"
+              >
+                SHNEA 에디터
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditorMode('text')}
+                className={`px-2 py-0.5 rounded font-medium transition ${
+                  editorMode === 'text'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                빠른 메모
+              </button>
+            </div>
+
+            {editorMode === 'text' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMemoText((prev) => prev + '\n- ')}
+                  className="p-1 hover:bg-slate-700 rounded text-slate-300"
+                  title="글머리 기호 삽입"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMemoText((prev) => prev + ' **강조** ')}
+                  className="p-1 hover:bg-slate-700 rounded text-slate-300"
+                  title="굵게 표시"
+                >
+                  <Bold className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+
             <div className="h-4 w-px bg-slate-700" />
             <button
               type="button"
@@ -1029,15 +1064,23 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* Large Scrollable Textarea */}
-        <div className="flex-1 relative border-x border-b border-slate-700 rounded-b-xl overflow-hidden bg-slate-950/80 focus-within:border-indigo-500 transition-colors">
-          <textarea
-            value={memoText}
-            onChange={(e) => setMemoText(e.target.value)}
-            placeholder="통화 중 상담 내용, 고객 요구사항, 합의된 조치 사항을 상세히 기록하세요..."
-            className="w-full h-full p-3.5 text-xs text-slate-200 bg-transparent resize-none focus:outline-none font-mono leading-relaxed select-text"
+        {/* Editor Body */}
+        {editorMode === 'shnea' ? (
+          <ShneaConsultationEditor
+            documentKey={customer.id || 'consultation-doc'}
+            initialText={memoText}
+            onChangeText={(txt) => setMemoText(txt)}
           />
-        </div>
+        ) : (
+          <div className="flex-1 relative border-x border-b border-slate-700 rounded-b-xl overflow-hidden bg-slate-950/80 focus-within:border-indigo-500 transition-colors">
+            <textarea
+              value={memoText}
+              onChange={(e) => setMemoText(e.target.value)}
+              placeholder="통화 중 상담 내용, 고객 요구사항, 합의된 조치 사항을 상세히 기록하세요..."
+              className="w-full h-full p-3.5 text-xs text-slate-200 bg-transparent resize-none focus:outline-none font-mono leading-relaxed select-text"
+            />
+          </div>
+        )}
       </div>
 
       {/* 4. 하단 고정 액션 바 */}

@@ -72,32 +72,49 @@
     - 2단계: 8MB 청크 분할 전송 (`PATCH /api/v1/files/uploads/{id}`, `Upload-Offset`, `X-Chunk-SHA256`)
     - 3단계: 업로드 완료 확정 (`POST /api/v1/files/uploads/{id}/complete`)
     - 4단계: 영구 File ID 및 뷰어 URL(`.../content/original`) 획득 및 클라이언트에 안전하게 전달.
-  - **OIDC 규격 제공 (`GET /api/platform/oidc-config`)**: Keycloak Realm Issuer 및 Public Client `app` (Code + PKCE S256) 메타데이터 연동 정보 제공.
-  - **프론트엔드 플랫폼 연동 UI/UX 구현**:
-    - `PlatformIntegrationModal.tsx`: 좌측 슬림 GNB 하단의 방패(`ShieldCheck`) 아이콘 클릭 시 열리는 플랫폼 연동 관리 팝업 (실시간 연결 상태, 프로젝트/환경 UUID, 발급된 API 권한 배지, Keycloak 메타데이터 링크, 파일 직접 테스트 업로드).
-    - `ActiveWorkspace.tsx`: 실시간 상담 기록 에디터 툴바에 `[📎 첨부파일]` 버튼 탑재. 파일 선택 즉시 플랫폼 File API로 업로드되어 `[📎 플랫폼 첨부: 파일명.ext (xx KB)]`가 메모에 자동 삽입.
+- **SHNEA Keycloak OIDC 통합 로그인 화면 및 PKCE 콜백 구현 (`/login`, `/auth/callback`, `lib/pkce.ts`)**:
+  - **Keycloak 유효 콜백 URL 확정 및 설정**:
+    - 개발 도메인: `https://dev-hellow.shnea.kr/auth/callback`
+    - 로컬 개발 테스트: `http://localhost:30160/auth/callback`
+    - `.env.dev`의 `PLATFORM_OIDC_REDIRECT_URI`를 `https://dev-hellow.shnea.kr/auth/callback`으로 확정 갱신.
+  - 로그인 화면([`/login`](file:///E:/JetBrains/IntelliJ/hellow/frontend/src/app/login/page.tsx)):
+    - SHNEA 플랫폼 계정 로그인(Code + PKCE S256, `openid profile email`), Keycloak 등록용 콜백 URL 원클릭 복사 도구, 개발 모드 즉시 접속 바이패스 지원.
+  - 콜백 처리 페이지([`/auth/callback`](file:///E:/JetBrains/IntelliJ/hellow/frontend/src/app/auth/callback/page.tsx)):
+    - 인가 코드(Code) 및 세션 verifier를 이용한 토큰 교환, ID 토큰 디코딩(`given_name`, `email`), 상담사 세션 활성화 및 메인 워크스페이스 자동 이동.
+  - 슬림 GNB 프로필 메뉴에 `[로그인 / 계정 변경]` 바로가기 링크 탑재.
+- **SHNEA 공식 에디터(`@shnea/editor@0.1.0-alpha.11`) 패키지 설치 및 첨부 어댑터 연동 (`editor.md` 표준 준수)**:
+  - `shnea-editor-0.1.0-alpha.11.tgz` 다운로드 및 SHA-256 체크섬(`b0f9e9c283346046a62526349d89f696b76e17ce40dac0e33312f56f08d0ca56`) 무결성 검증 후 설치.
+  - `Dockerfile`: `web-deps` 단계에 `shnea-editor-0.1.0-alpha.11.tgz` 포함하여 `npm ci` 멀티스테이지 빌드 지원.
+  - 백엔드 첨부 API ([`EditorAttachmentController.java`](file:///E:/JetBrains/IntelliJ/hellow/backend/src/main/java/kr/shnea/hellow/platform/EditorAttachmentController.java)):
+    - `POST /api/editor/files`: 플랫폼 File API 연동 후 에디터 첨부 스펙(`{ fileId, scope, kind, name, size }`) 반환.
+    - `GET /api/editor/files/{fileId}/views`: 플랫폼 `POST /api/v1/files/{fileId}/view-ticket` 호출 후 응답 JSON 변경 없이 `no-store` 반환.
+  - 프론트엔드 에디터 컴포넌트 ([`ShneaConsultationEditor.tsx`](file:///E:/JetBrains/IntelliJ/hellow/frontend/src/components/ShneaConsultationEditor.tsx), [`ActiveWorkspace.tsx`](file:///E:/JetBrains/IntelliJ/hellow/frontend/src/components/ActiveWorkspace.tsx)):
+    - `@shnea/editor/react`의 `ShneaEditor` 및 `style.css` 연동, 클라이언트 SSR 마운트 제어.
+    - 상담 메모장 상단에 `[SHNEA 에디터]` vs `[빠른 메모]` 탭 전환 지원.
 
 ## 검증 및 Git 상태
 
-- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건.
+- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 4종(`○ /`, `○ /auth/callback`, `○ /login`, `○ /support`) 생성 완료.
 - `backend`: Gradle 8.12 / Java 21 컴파일 및 bootJar 빌드 성공 (`hellow-dev-api`).
 - Docker Compose 4개 컨테이너 정상 가동 및 헬스체크 통과:
   - `hellow-dev-db-1` (Up, healthy, `0.0.0.0:30161->5432/tcp`)
   - `hellow-dev-api-1` (Up, healthy, `8080/tcp`)
   - `hellow-dev-web-1` (Up, healthy, `3000/tcp`)
   - `hellow-dev-nginx-1` (Up, `0.0.0.0:30160->8080/tcp`)
-- 플랫폼 실제 연동 검증 (E2E 통과):
-  - `curl.exe -s http://localhost:30160/api/platform/context` -> `verified: true`, `kind: "DEV"`, 10개 권한 스코프 정상 응답 확인.
-  - `curl.exe -s http://localhost:30160/api/platform/oidc-config` -> Keycloak Issuer(`https://platform.shnea.kr/auth/realms/p-...`), Client `app` 정상 확인.
-  - `curl.exe -s -X POST http://localhost:30160/api/platform/files/upload` -> 실제 파일 전송 시 플랫폼 세션 생성/청크/완료 성공 및 File UUID(`b664649a-54ab-43bd-a9c2-0150d93df7dd`) 및 원문 뷰 URL 발급 확인.
-  - `curl.exe -s -I http://localhost:30160/support` -> `HTTP/1.1 200 OK` 확인.
+- 플랫폼 & 에디터 실제 연동 검증 (E2E 통과):
+  - `curl.exe -s -I http://localhost:30160/login` -> `HTTP/1.1 200 OK` 확인.
+  - `curl.exe -s -I http://localhost:30160/auth/callback` -> `HTTP/1.1 200 OK` 확인.
+  - `curl.exe -s -X POST http://localhost:30160/api/editor/files` -> 에디터 첨부 규격(`{fileId, scope, kind, name, size}`) 응답 확인.
+  - `curl.exe -s http://localhost:30160/api/editor/files/{fileId}/views` -> 플랫폼 view-ticket 원문 응답 확인.
+  - `curl.exe -s http://localhost:30160/api/platform/context` -> `verified: true`, `kind: "DEV"` 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
 
 ## 남은 일과 다음 시작점
 
-- 상담사 화면(`http://localhost:30160`)의 좌측 GNB 하단 방패 아이콘을 클릭하여 플랫폼 연동 상태 팝업을 확인하고, 상담 에디터의 [첨부파일] 버튼을 통해 파일 업로드를 직접 테스트한다.
-- Keycloak OIDC 실제 브라우저 로그인 플로우(Code + PKCE S256) 및 세션 쿠키 연동을 테스트한다.
+- 플랫폼 관리자 화면(인증 설정 → 로그인 주소)에 콜백 URL(`https://dev-hellow.shnea.kr/auth/callback` 및 `http://localhost:30160/auth/callback`)을 등록한 후 실제 Keycloak OIDC 로그인을 테스트한다.
+- 상담 워크스페이스에서 SHNEA 공식 에디터의 서식 입력과 첨부파일 동작을 점검한다.
 - LiveKit 실시간 음성 통신 연동, SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
 - 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
+
 
 

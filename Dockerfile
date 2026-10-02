@@ -2,7 +2,7 @@
 FROM node:24-bookworm-slim AS web-deps
 WORKDIR /app
 ENV TZ=Asia/Seoul NEXT_TELEMETRY_DISABLED=1
-COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json frontend/shnea-editor-0.1.0-alpha.11.tgz ./
 RUN npm ci
 
 FROM node:24-bookworm-slim AS web-builder

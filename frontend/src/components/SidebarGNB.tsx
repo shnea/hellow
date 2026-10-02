@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PhoneCall, Users, Ticket, BarChart3, Settings, ShieldCheck, ChevronUp, ExternalLink } from 'lucide-react';
+import { PhoneCall, Users, Ticket, BarChart3, Settings, ShieldCheck, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
 import { AgentStatus } from '../types';
 
 interface SidebarGNBProps {
@@ -149,6 +149,15 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
                     <span>{statusConfig[st].label}</span>
                   </button>
                 ))}
+              </div>
+              <div className="pt-1.5 mt-1.5 border-t border-slate-800">
+                <a
+                  href="/login"
+                  className="w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>로그인 / 계정 변경</span>
+                </a>
               </div>
             </div>
           </>
