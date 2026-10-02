@@ -1,0 +1,136 @@
+'use client';
+
+import React, { useState } from 'react';
+import { PhoneCall, Users, Ticket, BarChart3, Settings, ShieldCheck, ChevronUp } from 'lucide-react';
+import { AgentStatus } from '../types';
+
+interface SidebarGNBProps {
+  currentTab: string;
+  onTabChange: (tab: string) => void;
+  agentStatus: AgentStatus;
+  onAgentStatusChange: (status: AgentStatus) => void;
+}
+
+export const SidebarGNB: React.FC<SidebarGNBProps> = ({
+  currentTab,
+  onTabChange,
+  agentStatus,
+  onAgentStatusChange,
+}) => {
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+
+  const menuItems = [
+    { id: 'workspace', label: '상담 워크스페이스', icon: PhoneCall },
+    { id: 'customers', label: '고객·거래처 디렉터리', icon: Users },
+    { id: 'tickets', label: '티켓 & 상담 이력', icon: Ticket },
+    { id: 'stats', label: '상담 통계·리포트', icon: BarChart3 },
+    { id: 'settings', label: '시스템 설정', icon: Settings },
+  ];
+
+  const statusConfig: Record<AgentStatus, { label: string; color: string; bg: string }> = {
+    online: { label: '온라인 (상담가능)', color: 'bg-emerald-500', bg: 'text-emerald-400' },
+    busy: { label: '통화 중 (집중)', color: 'bg-rose-500', bg: 'text-rose-400' },
+    away: { label: '자리비움 (휴식/식사)', color: 'bg-amber-500', bg: 'text-amber-400' },
+    offline: { label: '퇴근 / 오프라인', color: 'bg-slate-500', bg: 'text-slate-400' },
+  };
+
+  return (
+    <aside className="w-16 flex-shrink-0 bg-slate-950 text-slate-300 flex flex-col items-center py-3 border-r border-slate-800 select-none z-30">
+      {/* Brand Logo */}
+      <div className="flex flex-col items-center mb-6 group cursor-pointer" title="hellow CRM">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-950">
+          <span className="text-lg tracking-tighter">h:</span>
+        </div>
+        <span className="text-[10px] font-semibold text-indigo-400 tracking-wider mt-1">hellow</span>
+      </div>
+
+      {/* Main Navigation Tabs */}
+      <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onTabChange(item.id)}
+              className={`relative group w-full h-12 rounded-xl flex items-center justify-center transition-all ${
+                isActive
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/50'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900'
+              }`}
+              title={item.label}
+              aria-label={item.label}
+            >
+              <Icon className="w-5 h-5" />
+              {isActive && (
+                <span className="absolute left-0 w-1 h-5 bg-white rounded-r-full" />
+              )}
+              {/* Tooltip on hover */}
+              <span className="absolute left-16 ml-2 px-2.5 py-1 bg-slate-900 text-slate-100 text-xs rounded-md shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity whitespace-nowrap z-50 border border-slate-700">
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Security Badge */}
+      <div className="mb-4 text-slate-600 hover:text-slate-400 cursor-pointer" title="SHNEA OIDC 테넌트 보호 모드">
+        <ShieldCheck className="w-4 h-4" />
+      </div>
+
+      {/* Agent Profile & Status */}
+      <div className="relative w-full px-2">
+        <button
+          onClick={() => setStatusMenuOpen(!statusMenuOpen)}
+          className="relative w-full flex flex-col items-center p-1 rounded-xl hover:bg-slate-900 transition-colors"
+          title="상담사 상태 변경"
+        >
+          <div className="relative">
+            <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-semibold text-slate-200">
+              이선임
+            </div>
+            {/* Live Status indicator dot */}
+            <span
+              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ring-2 ring-slate-950 ${statusConfig[agentStatus].color}`}
+            />
+          </div>
+          <ChevronUp className="w-3 h-3 text-slate-500 mt-1" />
+        </button>
+
+        {/* Status Dropdown Modal */}
+        {statusMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setStatusMenuOpen(false)}
+            />
+            <div className="absolute bottom-14 left-2 w-52 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 text-xs z-50 text-slate-200">
+              <div className="px-2 py-1.5 border-b border-slate-800 mb-1">
+                <p className="font-semibold text-slate-100">이소연 선임상담사</p>
+                <p className="text-[11px] text-slate-400">CS 1팀 (ext. 1012)</p>
+              </div>
+              <div className="space-y-1">
+                {(Object.keys(statusConfig) as AgentStatus[]).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => {
+                      onAgentStatusChange(st);
+                      setStatusMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left transition-colors ${
+                      agentStatus === st ? 'bg-indigo-950/80 text-indigo-300 font-medium' : 'hover:bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${statusConfig[st].color}`} />
+                    <span>{statusConfig[st].label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </aside>
+  );
+};

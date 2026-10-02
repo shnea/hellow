@@ -1,0 +1,212 @@
+import { CustomerProfile, QueueItem, TimelineItem, ConsultationCategory } from '../types';
+
+export const mockQueueItems: QueueItem[] = [
+  {
+    id: 'queue-1',
+    type: 'call',
+    customerName: '김지우',
+    companyName: '주식회사 테크솔루션',
+    phoneNumber: '010-8842-1205',
+    waitTimeOrSchedule: '대기 01:28',
+    priority: 'urgent',
+    summary: '엔터프라이즈 라이선스 갱신 및 WebRTC 연동 추가 문의 (인바운드 인입 중)',
+    unread: true,
+  },
+  {
+    id: 'queue-2',
+    type: 'callback',
+    customerName: '박민호',
+    companyName: '스마트물류시스템',
+    phoneNumber: '010-2391-7741',
+    waitTimeOrSchedule: '오늘 14:30 약속',
+    priority: 'urgent',
+    summary: '서버 이전 관련 데이터 마이그레이션 일정 재조율 요청',
+  },
+  {
+    id: 'queue-3',
+    type: 'ticket',
+    customerName: '이수연',
+    companyName: '글로벌리테일',
+    phoneNumber: '010-5512-9903',
+    waitTimeOrSchedule: '42분 전 접수',
+    priority: 'normal',
+    summary: '[티켓 #TK-2026-089] 결제 모듈 Webhook 전송 실패 에러 로그 분석 요청',
+  },
+  {
+    id: 'queue-4',
+    type: 'callback',
+    customerName: '정성훈',
+    companyName: '네오바이오텍',
+    phoneNumber: '010-9182-3320',
+    waitTimeOrSchedule: '오늘 16:00 약속',
+    priority: 'low',
+    summary: '월간 사용량 리포트 열람 권한 추가 요청',
+  },
+];
+
+export const mockCustomers: Record<string, CustomerProfile> = {
+  'queue-1': {
+    id: 'cust-1',
+    name: '김지우',
+    title: '대표이사',
+    company: '주식회사 테크솔루션',
+    tier: 'VIP',
+    phoneNumber: '010-8842-1205',
+    email: 'jw.kim@techsolution.kr',
+    lastContactDate: '2026-03-25 (8일 전)',
+    totalCalls: 14,
+    managerName: '이소연 선임 (본인)',
+  },
+  'queue-2': {
+    id: 'cust-2',
+    name: '박민호',
+    title: '기술이사',
+    company: '스마트물류시스템',
+    tier: 'Gold',
+    phoneNumber: '010-2391-7741',
+    email: 'mh.park@smartlogis.co.kr',
+    lastContactDate: '2026-03-28 (5일 전)',
+    totalCalls: 8,
+    managerName: '이소연 선임 (본인)',
+  },
+  'queue-3': {
+    id: 'cust-3',
+    name: '이수연',
+    title: '개발팀장',
+    company: '글로벌리테일',
+    tier: 'Standard',
+    phoneNumber: '010-5512-9903',
+    email: 'sy.lee@globalretail.com',
+    lastContactDate: '2026-04-01 (2일 전)',
+    totalCalls: 3,
+    managerName: '한도윤 매니저',
+  },
+  'queue-4': {
+    id: 'cust-4',
+    name: '정성훈',
+    title: '경영지원 실장',
+    company: '네오바이오텍',
+    tier: 'Gold',
+    phoneNumber: '010-9182-3320',
+    email: 'sh.jung@neobiotech.kr',
+    lastContactDate: '2026-03-15 (18일 전)',
+    totalCalls: 6,
+    managerName: '이소연 선임 (본인)',
+  },
+};
+
+export const mockTimelines: Record<string, TimelineItem[]> = {
+  'queue-1': [
+    {
+      id: 'time-1',
+      date: '2026.03.25 14:20',
+      channel: 'email',
+      agentName: '한도윤 매니저',
+      title: '엔터프라이즈 v2.5 견적서 및 보안 설문서 송부',
+      content:
+        '테크솔루션 보안 심의용 인프라 다이어그램 및 SOPS 암호화 보안 기준서를 첨부하여 이메일 송부 완료. 4월 초 대표 미팅 후 최종 라이선스 갱신 계약서 날인 예정.',
+      tags: ['견적서발송', '보안질문지', 'VIP'],
+    },
+    {
+      id: 'time-2',
+      date: '2026.03.22 10:15',
+      channel: 'call',
+      agentName: '이소연 선임',
+      title: '정기 점검 사전 통화 (통화 완료: 05분 42초)',
+      content:
+        '통화 요약: LiveKit 실시간 음성 품질 점검 결과 양호. 분기 서버 유지보수 일정 안내하였으며 차주 중 추가 라이선스 상담 콜백 요청함.',
+      hasAudio: true,
+      audioDuration: '05:42',
+      tags: ['정기점검', '음질체크'],
+    },
+    {
+      id: 'time-3',
+      date: '2026.03.18 16:40',
+      channel: 'chat',
+      agentName: 'AI 챗봇 → 박상담',
+      title: '실시간 WebRTC 동시 접속 제한 및 포트 문의',
+      content:
+        '문의 내역: 사내 방화벽에서 Nginx 호스트 포트 30160 접근 시 방화벽 예외 처리 가이드 요청. 기술 문서 링크 안내 후 세션 종료.',
+      tags: ['방화벽', '포트안내'],
+    },
+    {
+      id: 'time-4',
+      date: '2026.02.10 11:00',
+      channel: 'ticket',
+      agentName: '시스템 자동',
+      title: '엔터프라이즈 신규 도입 계약 최초 승인',
+      content: '신규 고객사 온보딩 완료. 조직 ID: org_techsolution_01. 기본 테넌트 환경 프로비저닝 완료.',
+      tags: ['온보딩', '신규계약'],
+    },
+  ],
+  'queue-2': [
+    {
+      id: 'time-2-1',
+      date: '2026.03.28 15:30',
+      channel: 'call',
+      agentName: '이소연 선임',
+      title: '데이터 마이그레이션 1차 사전 협의',
+      content: '기존 오라클 DB에서 PostgreSQL로 데이터 이전 관련 스키마 호환성 질문. 엔지니어 방문 컨설팅 필요 협의.',
+      tags: ['마이그레이션', '방문요청'],
+    },
+  ],
+  'queue-3': [
+    {
+      id: 'time-3-1',
+      date: '2026.04.01 17:00',
+      channel: 'ticket',
+      agentName: '이수연 고객',
+      title: '결제 웹훅 에러 500 응답 수신',
+      content: 'PG사 결제 후 callback 엔드포인트에서 500 에러 간헐적 발생. 헤더 인증 실패 의심.',
+      tags: ['긴급', '결제오류'],
+    },
+  ],
+  'queue-4': [
+    {
+      id: 'time-4-1',
+      date: '2026.03.15 09:30',
+      channel: 'email',
+      agentName: '이소연 선임',
+      title: '2월 사용량 청구 내역서 송부',
+      content: '월간 통화량 1,200건 분량 청구서 발행 안내.',
+      tags: ['청구서', '정산'],
+    },
+  ],
+};
+
+export const consultationCategories: ConsultationCategory[] = [
+  {
+    main: '제품 및 솔루션 문의',
+    subs: ['엔터프라이즈 도입 견적', '라이선스 갱신/추가', '신규 기능(WebRTC) 상담', '도입 제안서 요청'],
+  },
+  {
+    main: '계약 및 요금 정산',
+    subs: ['정기 청구서 재발행', '결제 수단 변경', '계약 해지 및 환불 문의', '세금계산서 발급'],
+  },
+  {
+    main: '기술 지원 및 API 연동',
+    subs: ['API 인증 및 Webhook 장애', '실시간 음성 연결 불안정', '사내 방화벽 및 포트 예외', '데이터 마이그레이션'],
+  },
+  {
+    main: '불만 및 서비스 개선',
+    subs: ['상담 지연 불만', '시스템 장애 보상 요구', '사용자 UX 개선 건의'],
+  },
+];
+
+export const quickTags = [
+  '#견적_재검토',
+  '#방문요청',
+  '#가격협상',
+  '#보안검토',
+  '#API연동',
+  '#장애대응',
+  '#VIP케어',
+  '#호전환필요',
+];
+
+export const transferAgents = [
+  { id: 'ag-1', name: '박성현 수석', department: '인프라/기술팀', status: 'available', ext: '1042' },
+  { id: 'ag-2', name: '최수진 대리', department: '계약/정산팀', status: 'busy', ext: '1088' },
+  { id: 'ag-3', name: '한도윤 매니저', department: '영업/CRM팀', status: 'available', ext: '1021' },
+  { id: 'ag-4', name: '김보람 팀장', department: '고객성공(CS)팀', status: 'away', ext: '1005' },
+];

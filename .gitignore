@@ -10,3 +10,9 @@
 # Local age private keys (store private keys outside the repository)
 keys.txt
 *.agekey
+
+# Frontend dependencies and builds
+**/node_modules/
+**/.next/
+**/out/
+**/build/
