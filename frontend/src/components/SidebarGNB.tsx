@@ -130,7 +130,9 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
             />
             <div className="absolute bottom-14 left-2 w-52 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 text-xs z-50 text-slate-200">
               <div className="px-2 py-1.5 border-b border-slate-800 mb-1">
-                <p className="font-semibold text-slate-100">이소연 선임상담사</p>
+                <p className="font-semibold text-slate-100">
+                  {typeof window !== 'undefined' ? (sessionStorage.getItem('hellow_agent_name') || '이소연 선임상담사') : '이소연 선임상담사'}
+                </p>
                 <p className="text-[11px] text-slate-400">CS 1팀 (ext. 1012)</p>
               </div>
               <div className="space-y-1">
@@ -151,13 +153,18 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
                 ))}
               </div>
               <div className="pt-1.5 mt-1.5 border-t border-slate-800">
-                <a
-                  href="/login"
-                  className="w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                <button
+                  type="button"
+                  onClick={() => {
+                    document.cookie = 'hellow_logged_in=; path=/; max-age=0';
+                    sessionStorage.clear();
+                    window.location.href = '/login';
+                  }}
+                  className="w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left text-rose-300 hover:text-rose-200 hover:bg-rose-950/40 transition-colors"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>로그인 / 계정 변경</span>
-                </a>
+                  <LogIn className="w-3.5 h-3.5 text-rose-400 rotate-180" />
+                  <span>로그아웃</span>
+                </button>
               </div>
             </div>
           </>

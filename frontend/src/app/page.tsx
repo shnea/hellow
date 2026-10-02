@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { SidebarGNB } from '@/components/SidebarGNB';
 import { QueuePanel } from '@/components/QueuePanel';
 import { ActiveWorkspace } from '@/components/ActiveWorkspace';
@@ -15,6 +16,9 @@ import {
 import { AgentStatus, CustomerProfile, CustomerType, QueueItem, TimelineItem } from '@/types';
 
 export default function ConsultationWorkspacePage() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+
   // Global GNB state
   const [currentTab, setCurrentTab] = useState<string>('workspace');
   const [agentStatus, setAgentStatus] = useState<AgentStatus>('busy');
@@ -47,8 +51,22 @@ export default function ConsultationWorkspacePage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // 0. 클라이언트 인증 상태 검사 (미로그인 시 /login 강제 리다이렉트)
+  useEffect(() => {
+    const hasCookie = typeof document !== 'undefined' && document.cookie.split(';').some((c) => c.trim().startsWith('hellow_logged_in=true'));
+    const hasSession = typeof window !== 'undefined' && sessionStorage.getItem('hellow_logged_in') === 'true';
+
+    if (!hasCookie && !hasSession) {
+      router.replace('/login');
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, [router]);
+
   // Initial Load & Real-time Queue Polling
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     // Helper to fetch queue
     const fetchQueue = () => {
       fetch('/api/queue')
@@ -503,6 +521,14 @@ export default function ConsultationWorkspacePage() {
       addToast('info', '임시 저장 완료 (DB 저장)', '작성 중인 상담 메모가 데이터베이스에 안전하게 임시 저장되었습니다.');
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-400 text-xs">
+        로그인 확인 중...
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100 antialiased select-none">

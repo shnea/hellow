@@ -76,18 +76,22 @@ function AuthCallbackContent() {
           }
         }
 
-        // 세션 보관
-        sessionStorage.setItem('hellow_agent_name', `${agentName} (OIDC 인증)`);
+        // 세션 및 쿠키 보관 (서버 미들웨어 인증 연동)
+        document.cookie = 'hellow_logged_in=true; path=/; max-age=86400; SameSite=Lax';
+        sessionStorage.setItem('hellow_agent_name', agentName);
         sessionStorage.setItem('hellow_access_token', tokenData.access_token);
         sessionStorage.setItem('hellow_logged_in', 'true');
         setUserInfo({ name: agentName, email });
 
         setStatus('SUCCESS');
 
-        // 1.5초 후 워크스페이스로 이동
+        const targetUrl = sessionStorage.getItem('auth_redirect_to') || '/';
+        sessionStorage.removeItem('auth_redirect_to');
+
+        // 1초 후 워크스페이스로 이동
         setTimeout(() => {
-          router.push('/');
-        }, 1500);
+          router.replace(targetUrl);
+        }, 1000);
       } catch (err: unknown) {
         console.error('Token exchange error:', err);
         setStatus('ERROR');

@@ -92,28 +92,37 @@
     - `@shnea/editor/react`의 `ShneaEditor` 및 `style.css` 연동, 클라이언트 SSR 마운트 제어.
     - 상담 메모장 상단에 `[SHNEA 에디터]` vs `[빠른 메모]` 탭 전환 지원.
 
+- **미인증 접근 차단 및 무조건 로그인 리다이렉트 체계 구축 (`frontend/src/middleware.ts`, `frontend/src/app/page.tsx`)**:
+  - Next.js 미들웨어(`middleware.ts`): 서버 사이드에서 `hellow_logged_in` 인증 쿠키 검사, 비로그인 시 `/` 등 보호된 상담사 라우트 접근을 즉시 `HTTP 307`로 `/login` 리다이렉트.
+  - 외부 고객용 웹 상담 접수 화면(`/support`), 인증 콜백(`/auth/callback`), 로그인 화면(`/login`), 백엔드 API(`/api/*`)는 비로그인 접근 정상 허용.
+  - 메인 워크스페이스(`page.tsx`): 클라이언트 마운트 시 세션/쿠키 이중 검사 및 미인증 플리커링 방지 가드 적용.
+- **로그인 화면 정돈 및 단순화 (`frontend/src/app/login/page.tsx`)**:
+  - 불필요한 플랫폼 수식어와 복잡한 라벨을 모두 제거하고 간결하고 직관적인 **[로그인]** 단일 액션으로 통일.
+  - 하단 Keycloak 리다이렉트/콜백 경로 안내 박스 완전 제거.
+  - **[개발자 모드 즉시 접속]**: 프로덕션 환경에서는 숨기고 개발/로컬 환경(`localhost`, `dev-*`, non-production)에서만 조건부 렌더링.
+- **슬림 GNB 로그아웃 연동 (`SidebarGNB.tsx`)**:
+  - 현재 로그인된 상담사명 동적 반영 및 하단 프로필 메뉴에 **[로그아웃]** 액션 탑재 (쿠키 만료, 세션 클리어 후 `/login`으로 안전하게 리다이렉트).
+
 ## 검증 및 Git 상태
 
-- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 4종(`○ /`, `○ /auth/callback`, `○ /login`, `○ /support`) 생성 완료.
+- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 5종(`○ /`, `○ /_not-found`, `○ /auth/callback`, `○ /login`, `○ /support`) 및 `Proxy (Middleware)` 생성 완료.
 - `backend`: Gradle 8.12 / Java 21 컴파일 및 bootJar 빌드 성공 (`hellow-dev-api`).
 - Docker Compose 4개 컨테이너 정상 가동 및 헬스체크 통과:
   - `hellow-dev-db-1` (Up, healthy, `0.0.0.0:30161->5432/tcp`)
   - `hellow-dev-api-1` (Up, healthy, `8080/tcp`)
   - `hellow-dev-web-1` (Up, healthy, `3000/tcp`)
   - `hellow-dev-nginx-1` (Up, `0.0.0.0:30160->8080/tcp`)
-- 플랫폼 & 에디터 실제 연동 검증 (E2E 통과):
-  - `curl.exe -s -I http://localhost:30160/login` -> `HTTP/1.1 200 OK` 확인.
-  - `curl.exe -s -I http://localhost:30160/auth/callback` -> `HTTP/1.1 200 OK` 확인.
-  - `curl.exe -s -X POST http://localhost:30160/api/editor/files` -> 에디터 첨부 규격(`{fileId, scope, kind, name, size}`) 응답 확인.
-  - `curl.exe -s http://localhost:30160/api/editor/files/{fileId}/views` -> 플랫폼 view-ticket 원문 응답 확인.
-  - `curl.exe -s http://localhost:30160/api/platform/context` -> `verified: true`, `kind: "DEV"` 확인.
+- 인증 가드 및 화면 라이브 검증:
+  - 비로그인 `curl.exe -s -i http://localhost:30160/` -> `HTTP/1.1 307 Temporary Redirect` (Location: `/login`) 즉시 리다이렉트 확인.
+  - 인증 쿠키 첨부 `curl.exe -s -i -H "Cookie: hellow_logged_in=true" http://localhost:30160/` -> `HTTP/1.1 200 OK` 정상 렌더링 확인.
+  - 외부 고객용 화면 `curl.exe -s -i http://localhost:30160/support` -> `HTTP/1.1 200 OK` 비로그인 정상 접근 확인.
+  - 로그인 화면 `http://localhost:30160/login` -> "로그인" 단일 액션 정돈, Keycloak 리다이렉트 박스 완전 제거, 개발 환경 조건부 버튼 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
 
 ## 남은 일과 다음 시작점
 
-- 플랫폼 관리자 화면(인증 설정 → 로그인 주소)에 콜백 URL(`https://dev-hellow.shnea.kr/auth/callback` 및 `http://localhost:30160/auth/callback`)을 등록한 후 실제 Keycloak OIDC 로그인을 테스트한다.
-- 상담 워크스페이스에서 SHNEA 공식 에디터의 서식 입력과 첨부파일 동작을 점검한다.
-- LiveKit 실시간 음성 통신 연동, SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
+- 플랫폼 관리자 화면에 등록된 Keycloak OIDC 실제 브라우저 로그인 및 세션 워크스페이스 진입 테스트.
+- LiveKit 실시간 음성 통신 연동 (`MVP-03`), SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
 - 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
 
 
