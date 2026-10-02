@@ -118,15 +118,17 @@
 - **에디터 가로 너비(Width) 75ch 제한 해제 및 100% 꽉 채움 적용 (`ShneaConsultationEditor.tsx`)**:
   - `@shnea/editor` 기본 스타일에 내장된 `:is(.shnea-editor .tiptap) p { max-width: 75ch; }` 때문에 긴 텍스트 입력 시 에디터 너비의 절반 지점에서 아래 줄로 뚝 떨어지던 현상을 완벽히 해결.
   - `.shnea-editor .tiptap`의 `p`, `h1`~`h6`, `blockquote`, `pre`, `ul`, `ol`, `div`, `section` 전역에 `max-width: 100% !important;`를 부여하여 화면 가로 너비 끝까지 시원하게 채워지도록 확장.
-- **에디터 수직 높이(Height) 극대화 및 상단 영역 슬림화 (`ActiveWorkspace.tsx`, `ShneaConsultationEditor.tsx`)**:
+- **에디터 수직 높이(Height) 극대화 및 내부 컨테이너(`.se-body`) 100% 확장 (`ActiveWorkspace.tsx`, `ShneaConsultationEditor.tsx`)**:
   - **고객 정보 카드 기본 접힘(`isInfoExpanded: false`)**: 상단 헤더 바(36px)에 고객명, 등급, 전화번호, 기업/개인 배지가 이미 모두 노출되므로 평소에는 닫아두어 약 200px 이상의 수직 공간을 즉시 확보.
   - **상담 분류·태그·상태 1행 통합 바**: 기존에 세로 110px 이상을 차지하던 3열 그리드와 태그 칩 영역을 단일 슬림 행(36px)으로 통합 재설계하여 추가 70px 이상 확보.
-  - **에디터 뷰포트 점유율 75% 이상 확장**: 화면 대부분을 에디터 본문이 차지하며, 넘칠 경우 에디터 내부에서 매끄럽게 스크롤되도록 `flex: 1 1 0%; min-height: 480px; overflow-y: auto;` 적용.
-- **에디터 내 첨부파일 업로드 완벽 정상화 및 툴바 첨부 버튼 연동 (`EditorAttachmentController.java`, `default.conf`, `ShneaConsultationEditor.tsx`, `ActiveWorkspace.tsx`)**:
-  - **Nginx 413 Request Entity Too Large 해결**: `infra/nginx/default.conf`에 `client_max_body_size 100M;`를 설정하여 1MB를 초과하는 고해상도 스크린샷, 대용량 파일도 차단 없이 정상 통과.
-  - **`@shnea/editor` 첨부 어댑터 규격 일치**: 백엔드 `uploadEditorFile`에 `scope` 및 `kind` 파라미터 매핑을 추가하고, 클라이언트가 넘긴 `task.ref.scope`와 `task.ref.kind`를 그대로 응답하도록 보장하여 에디터 내부의 `result.scope !== task.ref.scope || result.kind !== task.ref.kind` 검증 에러를 완벽 해결.
-  - **View Ticket 연동 보강**: `GET /api/editor/files/{fileId}/views`에서 `fileId` 누락을 방지하고 `no-store` 캐시 제어로 즉각 렌더링 지원. 1.63MB 실제 업로드 및 티켓 조회 200 OK 통과.
-  - **직관적인 에디터 툴바 첨부 버튼 탑재**: 에디터 상단 템플릿 버튼 옆에 `[📎 파일 첨부]` 및 `[🖼️ 이미지 첨부]` 버튼을 배치하여 클릭 시 `editorRef.current.pickAttachment('file')`, `editorRef.current.pickAttachment('image')`가 네이티브로 실행되도록 연결. 드래그 앤 드롭 및 `/` 슬래시 메뉴 파일 첨부도 완벽 연동.
+  - **에디터 내부 `.se-body` flex-1 100% 확장**: `@shnea/editor` 내부의 `.se-body` 컨테이너에 `flex: 1 1 0%; height: 100%;`를 부여하고 `.tiptap`의 min-height를 해제하여 부모 높이를 100% 꽉 채우도록 수정.
+- **최대 업로드 데이터 1GB(1024MB) 설정 및 첨부 어댑터 정상화 (`default.conf`, `application.yml`, `EditorAttachmentController.java`)**:
+  - **1GB(1024MB) 대용량 지원**: `infra/nginx/default.conf`의 `client_max_body_size 1024M;`, `application.yml`의 `spring.servlet.multipart.max-file-size: 1024MB`, `server.tomcat.max-swallow-size: 1024MB`로 설정하여 대용량 파일도 차단 없이 안전하게 전송.
+  - **외부 첨부 버튼/뱃지 완전 제거**: 에디터 상단에 별도로 두었던 첨부 버튼을 완전히 삭제하고, 에디터 자체 내부 기능(드래그 앤 드롭, `/` 슬래시 명령어의 `파일 업로드`, `이미지 업로드`)으로 깔끔하게 일원화.
+  - **`@shnea/editor` 첨부 어댑터 규격 일치**: 백엔드 `uploadEditorFile`에 `scope` 및 `kind` 파라미터 매핑을 추가하고 클라이언트가 넘긴 `task.ref.scope`, `task.ref.kind`를 그대로 돌려주어 어댑터 검증 오류를 완벽 해결.
+- **자주 쓰는 템플릿 문구 복원 및 템플릿 추가 시 독립 블록 개행(`\n\n`) 분리 (`ActiveWorkspace.tsx`)**:
+  - 툴바 템플릿 앞의 레이블을 원래대로 **`자주 쓰는 템플릿:`**으로 복원하고 버튼명을 `⚠️ 컴플레인 접수`, `+ 견적 협의`, `+ 기술 장애`, `+ 부재 콜백`으로 유지.
+  - `insertTemplate` 함수에서 이전 텍스트가 있을 때 확실하게 `\n\n`을 두어, 여러 템플릿을 연속 추가하더라도 이전 템플릿과 한 블록으로 합쳐지지 않고 별도의 독립된 마크다운 단락(블록)으로 깔끔하게 삽입되도록 개선.
 
 ## 검증 및 Git 상태
 

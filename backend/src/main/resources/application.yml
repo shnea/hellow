@@ -1,5 +1,7 @@
 server:
   port: 8080
+  tomcat:
+    max-swallow-size: 1024MB
 
 spring:
   application:
@@ -20,8 +22,8 @@ spring:
     open-in-view: false
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: 1024MB
+      max-request-size: 1024MB
 
 platform:
   api-url: ${PLATFORM_API_URL:https://platform.shnea.kr}

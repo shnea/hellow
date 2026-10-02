@@ -29,8 +29,6 @@ import {
   ChevronUp,
   User,
   ShieldAlert,
-  Paperclip,
-  Image as ImageIcon,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
@@ -162,15 +160,18 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   const insertTemplate = (templateName: string) => {
     let tpl = '';
     if (templateName === '컴플레인') {
-      tpl = '\n[⚠️ 컴플레인 및 민원 접수]\n- 민원 유형: 환불 지연 / 서비스 오류 / 상담 불만\n- 고객 요구사항: 결제 즉시 취소 및 사과 안내 요청\n- 약속 기한: 당일 이내 회신\n- 상담사 조치: 상급자 보고 및 긴급 승인 요청';
+      tpl = '[⚠️ 컴플레인 및 민원 접수]\n- 민원 유형: 환불 지연 / 서비스 오류 / 상담 불만\n- 고객 요구사항: 결제 즉시 취소 및 사과 안내 요청\n- 약속 기한: 당일 이내 회신\n- 상담사 조치: 상급자 보고 및 긴급 승인 요청';
     } else if (templateName === '견적') {
-      tpl = '\n[도입 견적 협의 내용]\n- 도입 규모: 50계정\n- 결제 주기: 연간 일괄/분기 분납\n- 특별 할인율 요청: 15% 검토\n- 전달 마감일: 이번 주 금요일까지';
+      tpl = '[도입 견적 협의 내용]\n- 도입 규모: 50계정\n- 결제 주기: 연간 일괄/분기 분납\n- 특별 할인율 요청: 15% 검토\n- 전달 마감일: 이번 주 금요일까지';
     } else if (templateName === '기술') {
-      tpl = '\n[기술 지원 및 장애 분석]\n- 발생 환경: 내부망 Linux 환경\n- 증상: 웹소켓 세션 10분 후 간헐적 타임아웃\n- 조치 계획: 패킷 덤프 수집 후 엔지니어 파견 분석';
+      tpl = '[기술 지원 및 장애 분석]\n- 발생 환경: 내부망 Linux 환경\n- 증상: 웹소켓 세션 10분 후 간헐적 타임아웃\n- 조치 계획: 패킷 덤프 수집 후 엔지니어 파견 분석';
     } else if (templateName === '콜백') {
-      tpl = '\n[부재중 콜백 약속]\n- 고객 부재로 통화 미연결\n- 재통화 희망 일시: 당일 17:00 이후\n- 주요 문의: 정기 점검 일정 확인';
+      tpl = '[부재중 콜백 약속]\n- 고객 부재로 통화 미연결\n- 재통화 희망 일시: 당일 17:00 이후\n- 주요 문의: 정기 점검 일정 확인';
     }
-    setMemoText((prev) => prev + tpl);
+    setMemoText((prev) => {
+      const trimmed = prev ? prev.trim() : '';
+      return trimmed ? `${trimmed}\n\n${tpl}\n` : `${tpl}\n`;
+    });
   };
 
   const handleSave = (isComplete: boolean) => {
@@ -922,71 +923,37 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Quick Template Inserts */}
-            <div className="flex items-center space-x-1">
-              <span className="text-[11px] text-slate-400 mr-0.5">템플릿:</span>
-              <button
-                type="button"
-                onClick={() => insertTemplate('컴플레인')}
-                className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded text-[11px] font-semibold transition-colors"
-              >
-                ⚠️ 컴플레인
-              </button>
-              <button
-                type="button"
-                onClick={() => insertTemplate('견적')}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-              >
-                + 견적
-              </button>
-              <button
-                type="button"
-                onClick={() => insertTemplate('기술')}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-              >
-                + 기술
-              </button>
-              <button
-                type="button"
-                onClick={() => insertTemplate('콜백')}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-              >
-                + 콜백
-              </button>
-            </div>
-
-            <div className="h-4 w-px bg-slate-700" />
-
-            {/* 에디터 내 첨부파일 액션 버튼 */}
-            <div className="flex items-center space-x-1">
-              <button
-                type="button"
-                onClick={() => {
-                  if (editorRef.current?.pickAttachment) {
-                    editorRef.current.pickAttachment('file');
-                  }
-                }}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] flex items-center gap-1 transition-colors border border-slate-600"
-                title="에디터 본문에 문서/일반 파일 첨부"
-              >
-                <Paperclip className="w-3 h-3 text-indigo-400" />
-                <span>파일 첨부</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (editorRef.current?.pickAttachment) {
-                    editorRef.current.pickAttachment('image');
-                  }
-                }}
-                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] flex items-center gap-1 transition-colors border border-slate-600"
-                title="에디터 본문에 이미지/사진 첨부"
-              >
-                <ImageIcon className="w-3 h-3 text-emerald-400" />
-                <span>이미지 첨부</span>
-              </button>
-            </div>
+          {/* Quick Template Inserts */}
+          <div className="flex items-center space-x-1.5">
+            <span className="text-[11px] text-slate-400">자주 쓰는 템플릿:</span>
+            <button
+              type="button"
+              onClick={() => insertTemplate('컴플레인')}
+              className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded text-[11px] font-semibold transition-colors"
+            >
+              ⚠️ 컴플레인 접수
+            </button>
+            <button
+              type="button"
+              onClick={() => insertTemplate('견적')}
+              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
+            >
+              + 견적 협의
+            </button>
+            <button
+              type="button"
+              onClick={() => insertTemplate('기술')}
+              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
+            >
+              + 기술 장애
+            </button>
+            <button
+              type="button"
+              onClick={() => insertTemplate('콜백')}
+              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
+            >
+              + 부재 콜백
+            </button>
           </div>
         </div>
 

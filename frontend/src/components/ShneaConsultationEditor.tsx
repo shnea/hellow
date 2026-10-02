@@ -157,7 +157,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
 
   if (!mounted) {
     return (
-      <div className="flex-1 min-h-[480px] rounded-b-xl border border-t-0 border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-500 flex items-center justify-center">
+      <div className="flex-1 h-full min-h-0 rounded-b-xl border border-t-0 border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-500 flex items-center justify-center">
         SHNEA 공식 에디터를 불러오는 중...
       </div>
     );
@@ -205,10 +205,18 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
           color: #f8fafc !important;
           overflow: hidden;
         }
+        .shnea-consultation-editor .shnea-editor .se-body {
+          flex: 1 1 0%;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          overflow: hidden;
+        }
         .shnea-consultation-editor .shnea-editor .tiptap {
           flex: 1 1 0%;
-          min-height: 480px;
           height: 100%;
+          min-height: 0;
           outline: none;
           color: #f8fafc !important;
           background: transparent !important;
