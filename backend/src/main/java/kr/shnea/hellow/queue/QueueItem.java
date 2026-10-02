@@ -51,12 +51,21 @@ public class QueueItem {
 
     private LocalDateTime createdAt;
 
+    @Column(length = 100)
+    private String assignedAgent;
+
+    @Column(length = 100)
+    private String inquiryType;
+
+    @Column(length = 100)
+    private String sessionId;
+
     public enum ItemType {
         CALL, CALLBACK, TICKET
     }
 
     public enum QueueStatus {
-        WAITING, PROCESSING, COMPLETED
+        WAITING, PROCESSING, COMPLETED, CANCELLED
     }
 
     protected QueueItem() {}
@@ -79,6 +88,24 @@ public class QueueItem {
         this.complainant = complainant;
         this.status = QueueStatus.WAITING;
         this.createdAt = LocalDateTime.now();
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public void setInquiryType(String inquiryType) {
+        this.inquiryType = inquiryType;
+    }
+
+    public void accept(String agentName) {
+        this.status = QueueStatus.PROCESSING;
+        this.assignedAgent = agentName;
+        this.unread = false;
+    }
+
+    public void cancel() {
+        this.status = QueueStatus.CANCELLED;
     }
 
     public void complete() {
@@ -109,4 +136,7 @@ public class QueueItem {
     public boolean isComplainant() { return complainant; }
     public QueueStatus getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public String getAssignedAgent() { return assignedAgent; }
+    public String getInquiryType() { return inquiryType; }
+    public String getSessionId() { return sessionId; }
 }

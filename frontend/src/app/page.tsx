@@ -45,33 +45,79 @@ export default function ConsultationWorkspacePage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Initial Load from Backend API
+  // Initial Load & Real-time Queue Polling
   useEffect(() => {
-    // 1. Fetch Queue from DB
-    fetch('/api/queue')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data) && data.length > 0) {
-          const mappedQueue: QueueItem[] = data.map((item: any) => ({
-            id: item.code,
-            type: item.type.toLowerCase(),
-            customerType: item.customerType ? item.customerType.toLowerCase() : 'corporate',
-            customerName: item.customerName,
-            companyName: item.companyName,
-            phoneNumber: item.phoneNumber,
-            waitTimeOrSchedule: item.waitTimeOrSchedule,
-            priority: item.priority.toLowerCase(),
-            summary: item.summary,
-            unread: item.unread,
-            isRegistered: item.registered,
-            isComplainant: item.complainant,
-          }));
-          setQueueItems(mappedQueue);
-        }
-      })
-      .catch(() => {});
+    // Helper to fetch queue
+    const fetchQueue = () => {
+      fetch('/api/queue')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data)) {
+            const mappedQueue: QueueItem[] = data.map((item: any) => ({
+              id: item.code,
+              type: item.type.toLowerCase(),
+              customerType: item.customerType ? (item.customerType.toLowerCase() === 'corporate' ? 'corporate' : 'individual') : 'individual',
+              customerName: item.customerName,
+              companyName: item.companyName,
+              phoneNumber: item.phoneNumber,
+              waitTimeOrSchedule: item.waitTimeOrSchedule,
+              priority: item.priority ? item.priority.toLowerCase() : 'normal',
+              summary: item.summary,
+              unread: item.unread,
+              isRegistered: item.registered,
+              isComplainant: item.complainant,
+            }));
 
-    // 2. Fetch Customers from DB
+            setQueueItems((prevQueue) => {
+              // 신규 인입 항목 감지 및 토스트 알림
+              const prevIds = new Set(prevQueue.map((q) => q.id));
+              const newItems = mappedQueue.filter((q) => !prevIds.has(q.id));
+              if (newItems.length > 0 && prevQueue.length > 0) {
+                const newest = newItems[0];
+                addToast(
+                  'info',
+                  '🔔 신규 고객 상담 인입',
+                  `${newest.customerName} 고객님의 ${newest.type === 'call' ? '실시간 통화' : '문의'} 요청이 접수되었습니다.`
+                );
+              }
+              return mappedQueue;
+            });
+
+            // 큐에 있는 고객 정보를 기본 프로필로 채워넣기 (미등록/웹인입 고객 대응)
+            setCustomers((prevCusts) => {
+              const updated = { ...prevCusts };
+              mappedQueue.forEach((item) => {
+                if (!updated[item.id]) {
+                  updated[item.id] = {
+                    id: item.id,
+                    isRegistered: item.isRegistered ?? false,
+                    customerType: (item.customerType as CustomerType) || 'individual',
+                    name: item.customerName,
+                    company: item.companyName || (item.customerType === 'corporate' ? '소속 미지정' : '일반 개인'),
+                    department: '고객지원 요청',
+                    title: '웹 인입 고객',
+                    tier: item.isComplainant ? 'Standard' : 'Standard',
+                    phoneNumber: item.phoneNumber,
+                    email: '',
+                    lastContactDate: '오늘 인입',
+                    totalCalls: 1,
+                    managerName: '배정 중',
+                    customerNotes: item.summary || '웹 진입점에서 실시간 상담 신청 건',
+                    isComplainant: item.isComplainant,
+                  };
+                }
+              });
+              return updated;
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    // 1. 초기 로드
+    fetchQueue();
+
+    // 2. 고객 목록 로드
     fetch('/api/customers')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -81,7 +127,7 @@ export default function ConsultationWorkspacePage() {
             custMap[c.code] = {
               id: c.code,
               isRegistered: c.registered,
-              customerType: c.customerType ? c.customerType.toLowerCase() : 'corporate',
+              customerType: c.customerType ? (c.customerType.toLowerCase() === 'corporate' ? 'corporate' : 'individual') : 'corporate',
               name: c.name,
               title: c.title,
               company: c.company,
@@ -100,6 +146,10 @@ export default function ConsultationWorkspacePage() {
         }
       })
       .catch(() => {});
+
+    // 3. 3초 주기 자동 대기열 동기화
+    const queueInterval = setInterval(fetchQueue, 3000);
+    return () => clearInterval(queueInterval);
   }, []);
 
   // Fetch Timeline when selected customer changes
@@ -172,6 +222,23 @@ export default function ConsultationWorkspacePage() {
         setAgentStatus('online');
       }
     }
+  };
+
+  // 상담사 수락 핸들러 (수신 버튼 클릭 시 백엔드 accept 호출 및 통화 활성화)
+  const handleAcceptCall = (item: QueueItem) => {
+    setSelectedQueueId(item.id);
+    setIsCallActive(true);
+    setCallDuration(0);
+    setAgentStatus('busy');
+
+    // 백엔드에 상담사 수락 전송
+    fetch(`/api/queue/${item.id}/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentName: '이소연 선임 (상담1팀)' }),
+    }).catch(() => {});
+
+    addToast('success', '상담 수락 및 연결', `${item.customerName} 고객과의 통화가 시작되었습니다.`);
   };
 
   const handleEndCall = () => {
@@ -450,6 +517,7 @@ export default function ConsultationWorkspacePage() {
         queueItems={queueItems}
         selectedQueueId={selectedQueueId}
         onSelectQueueItem={handleSelectQueueItem}
+        onAcceptCall={handleAcceptCall}
       />
 
       {/* 3. 중앙 활성 상담 워크스페이스 (유연 확장, ~48%) */}

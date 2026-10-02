@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PhoneCall, Users, Ticket, BarChart3, Settings, ShieldCheck, ChevronUp } from 'lucide-react';
+import { PhoneCall, Users, Ticket, BarChart3, Settings, ShieldCheck, ChevronUp, ExternalLink } from 'lucide-react';
 import { AgentStatus } from '../types';
 
 interface SidebarGNBProps {
@@ -73,6 +73,22 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
           );
         })}
       </nav>
+
+      {/* Customer Web Support Link */}
+      <div className="mb-3 px-2 w-full">
+        <a
+          href="/support"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative group w-full h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all"
+          title="고객용 웹 상담창 열기 (새 탭)"
+        >
+          <ExternalLink className="w-4 h-4" />
+          <span className="absolute left-16 ml-2 px-2.5 py-1 bg-slate-900 text-indigo-300 text-xs rounded-md shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity whitespace-nowrap z-50 border border-indigo-900/50">
+            고객용 웹 상담창 열기 ↗
+          </span>
+        </a>
+      </div>
 
       {/* Security Badge */}
       <div className="mb-4 text-slate-600 hover:text-slate-400 cursor-pointer" title="SHNEA OIDC 테넌트 보호 모드">

@@ -48,26 +48,44 @@
 - **Docker Compose + Nginx (포트 `30160`) 전체 스택 연동 환경 구성 및 기동 완료**:
   - `compose.yaml`: `db` (PostgreSQL 17, 외부 포트 `30161`), `api` (Spring Boot), `web` (Next.js), `nginx` (호스트 포트 `30160`).
   - `infra/nginx/default.conf`: 외부 인입 호스트 포트 `30160` -> Nginx `8080` -> `/api/`는 `api:8080`, `/`는 `web:3000`으로 리버스 프록시 연동.
+- **고객용 외부 웹 상담 진입 화면 구축 (`frontend/src/app/support/page.tsx`, MVP-04)**:
+  - 모바일·PC 반응형 웹 상담 접수 폼: 고객 구분(개인 B2C vs 기업 B2B), 5가지 문의 분류(제품 문의, 장애 지원, 계약/정산, 환불/컴플레인, 기타), 성함, 회사명, 연락처, 문의 요약, 연결 방식(실시간 음성 vs 온라인 티켓).
+  - 실시간 대기 인터페이스: 펄스 애니메이션, 실시간 대기 순번 및 예상 대기 시간, 백엔드 세션 상태 2초 주기 폴링, 대기 취소 버튼.
+  - 상담 연결 인터페이스: 담당 상담사명 안내, 실시간 통화 경과 시간 타이머, 마이크 음소거 토글, 문의 요약 카드, 통화 종료 버튼.
+  - 상담 종료 피드백 화면: 서비스 만족도 5단계 별점 평가 및 신규 상담 재접수 지원.
+- **백엔드 고객 상담 세션 수명 주기 및 대기열 연동 API 구현 (`SupportController.java`, `QueueController.java`, `QueueItem.java`)**:
+  - `POST /api/support/request`: 외부 고객 상담 접수 -> 전화번호 기반 기존 고객 매핑, 컴플레인 키워드 자동 감지(긴급 우선순위 지정), 미등록 고객 판정, 고유 대기열 코드(`queue-web-XXXX`) 및 세션 ID 발급.
+  - `GET /api/support/session/{sessionId}`: 고객 화면 세션 상태 실시간 조회 (`WAITING` -> `PROCESSING` -> `COMPLETED` / `CANCELLED`).
+  - `POST /api/support/session/{sessionId}/cancel`: 고객의 대기 중 취소 처리.
+  - `POST /api/queue/{code}/accept`: 상담사의 대기열 아이템 수락 및 상담사 배정(`PROCESSING`).
+  - `POST /api/queue/{code}/complete`: 상담사의 상담 완료 처리(`COMPLETED`).
+- **상담사 CRM 화면 실시간 연동 강화 (`frontend/src/app/page.tsx`, `SidebarGNB.tsx`)**:
+  - 3초 주기 자동 대기열 폴링 및 신규 인입 발생 시 즉각 토스트 알림(`🔔 신규 고객 상담 인입`).
+  - 대기열 카드 [수신] 클릭 시 백엔드 `accept` 호출 및 통화 워크스페이스 활성화.
+  - 좌측 GNB에 "고객용 웹 상담창 열기 (`/support`)" 새 탭 링크 버튼 배치로 빠른 교차 테스트 환경 제공.
 
 ## 검증 및 Git 상태
 
-- `frontend`: `npm run build` 성공 (Turbopack 빌드, TypeScript 5 컴파일 오류 0건, 정적 라우트 생성 완료).
-- `docker compose up -d --build` 전체 4개 컨테이너 기동 및 헬스체크 통과:
+- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 2종(`○ /`, `○ /support`) 생성 완료.
+- `backend`: Gradle 8.12 / Java 21 컴파일 및 bootJar 빌드 성공 (`hellow-dev-api`).
+- Docker Compose 4개 컨테이너 정상 가동 및 헬스체크 통과:
   - `hellow-dev-db-1` (Up, healthy, `0.0.0.0:30161->5432/tcp`)
   - `hellow-dev-api-1` (Up, healthy, `8080/tcp`)
   - `hellow-dev-web-1` (Up, healthy, `3000/tcp`)
   - `hellow-dev-nginx-1` (Up, `0.0.0.0:30160->8080/tcp`)
-- API 동작 검증:
-  - `curl -s http://localhost:30160/api/customers` -> PostgreSQL DB 초기 고객 4건 정상 응답 확인.
-  - `curl -s http://localhost:30160/api/queue` -> 대기열 4건 정상 응답 확인.
-  - `curl -s http://localhost:30160/api/timeline/queue-1` -> 타임라인 2건 정상 응답 확인.
-  - `curl -I http://localhost:30160` -> `HTTP/1.1 200 OK` 확인.
+- E2E 연동 검증:
+  - `curl.exe -s -I http://localhost:30160/support` -> `HTTP/1.1 200 OK` 확인.
+  - `curl.exe -s -X POST http://localhost:30160/api/support/request` -> 신규 세션 발급 및 `queue-web-b07a5d31` 생성 확인.
+  - `curl.exe -s http://localhost:30160/api/queue` -> 신규 인입 건 대기열 1위 등록, 컴플레인 플래그 자동 지정 확인.
+  - `curl.exe -s -X POST http://localhost:30160/api/queue/{code}/accept` -> 상태 `PROCESSING` 및 상담사 배정 완료 확인.
+  - `curl.exe -s http://localhost:30160/api/support/session/{sessionId}` -> 고객 세션 `PROCESSING` 상태 변경 확인.
+  - `curl.exe -s -X POST http://localhost:30160/api/queue/{code}/complete` -> 상태 `COMPLETED` 및 대기열 목록 자동 제외 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
-- 이번 커밋 대상: `backend/` 전체, `compose.yaml`, `Dockerfile`, `infra/nginx/default.conf`, `frontend/src/app/page.tsx`, `docs/handoff.md`.
 
 ## 남은 일과 다음 시작점
 
-- 도커 컨테이너가 포트 `30160`으로 정상 구동 중이므로 `http://localhost:30160`에서 실제 DB 영속화가 동작하는 상담사 워크스페이스를 확인한다.
+- 도커 호스트 포트 `30160`에서 두 개의 브라우저 창(`http://localhost:30160/support`와 `http://localhost:30160`)을 띄워 고객 인입과 상담사 수신/완료 E2E 흐름을 실시간으로 확인한다.
 - SHNEA 공식 `SERVICE_INTEGRATION.md` 지침에 따라 OIDC 직원 인증(Keycloak discovery, client app, PKCE) 및 플랫폼 파일/Job 연동 계약을 구체화한다.
 - LiveKit 실시간 음성 통신 연동, SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
 - 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
+
