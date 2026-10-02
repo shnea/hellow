@@ -154,7 +154,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
                       const config = configRes.ok ? await configRes.json() : null;
                       const issuer = config?.issuer || 'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
                       const clientId = config?.clientId || 'app';
-                      const postLogoutRedirectUri = `${window.location.origin}/login`;
+                      const postLogoutRedirectUri = config?.postLogoutRedirectUri || `${window.location.origin}/`;
 
                       const logoutUrl = buildLogoutUrl(issuer, clientId, postLogoutRedirectUri, idToken);
                       window.location.href = logoutUrl;
