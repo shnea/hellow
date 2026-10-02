@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PhoneCall, Users, Ticket, BarChart3, Settings, ShieldCheck, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
+import { PhoneCall, Users, Ticket, BarChart3, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
 import { AgentStatus } from '../types';
 
 interface SidebarGNBProps {
@@ -9,7 +9,6 @@ interface SidebarGNBProps {
   onTabChange: (tab: string) => void;
   agentStatus: AgentStatus;
   onAgentStatusChange: (status: AgentStatus) => void;
-  onOpenPlatformModal?: () => void;
 }
 
 export const SidebarGNB: React.FC<SidebarGNBProps> = ({
@@ -17,7 +16,6 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   onTabChange,
   agentStatus,
   onAgentStatusChange,
-  onOpenPlatformModal,
 }) => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
@@ -91,16 +89,6 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
           </span>
         </a>
       </div>
-
-      {/* Security Badge & Platform Integration Modal Trigger */}
-      <button
-        type="button"
-        onClick={onOpenPlatformModal}
-        className="mb-4 text-slate-500 hover:text-indigo-400 p-1.5 rounded-lg hover:bg-slate-900 transition-colors"
-        title="SHNEA 플랫폼 연동 관리"
-      >
-        <ShieldCheck className="w-5 h-5 text-indigo-400/80" />
-      </button>
 
       {/* Agent Profile & Status */}
       <div className="relative w-full px-2">
