@@ -19,6 +19,7 @@ services:
       retries: 10
 
   api:
+    image: hellow-dev-api:${HELLOW_DEV_IMAGE_TAG:-latest}
     build:
       context: .
       target: api
@@ -42,6 +43,7 @@ services:
       start_period: 25s
 
   web:
+    image: hellow-dev-web:${HELLOW_DEV_IMAGE_TAG:-latest}
     build:
       context: .
       target: web

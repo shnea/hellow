@@ -1,5 +1,13 @@
 # 작업 인계 기록
 
+## 2026-10-03 개발 새 버전 전환·기존 기록 이관
+
+- 사용자 요청으로 개발 웹/API를 `6194275` 이미지로 함께 전환했다. `.env.dev`의 `HELLOW_DEV_IMAGE_TAG`를 Compose 이미지 선택에 사용하며 실행 명령은 `docker compose --env-file .env.dev up -d --no-deps --no-build api web`이다. 플랫폼 설정은 변경하지 않았다.
+- 구 API의 쓰기를 중지한 뒤 `output/backups/hellow-cutover-20261003_083325.dump`에 백업했다 (SHA-256 `2866f305086fc7565cd494dd9d2091be0c65990143ccbdf711535e831c793f48`). 조직 ID와 레코드 수는 Git 제외 `output/dev-release.json`에 남긴다. 복원 DB에서 Flyway 1~3과 새 API health, 첫 조직 이관을 검증한 후 실제 `hellow` DB에 같은 이관 SQL을 적용했다. 고객 5·접수 11·상담 30·타임라인 3건이 모두 보존되고 조직 미지정 행은 없다.
+- 웹/API를 실제로 재생성했으며 모두 healthy다. Nginx 설정 검사와 upstream 주소 reload 후 개발 `/login` HTTP 200, 공개 `/api/support/organization/hellow-dev` HTTP 200을 확인했다. 고객 접수 주소는 `/support?org=hellow-dev`다.
+- 복원 검증 첫 시도는 Docker `run --env-file`이 따옴표를 값으로 읽어 issuer URL 오류로 종료했다. Compose와 동일하게 따옴표를 제거한 검증 전용 환경 파일로 재검증했으며 실제 서비스는 Compose의 환경 파싱을 사용한다. 원본 DB 이관은 두 번째 검증 통과 후에만 수행했다.
+- 실제 계정 로그인과 기존 기록 표시 확인은 사용자에게 요청했으며 아직 결과를 받지 않았다. 화면·파일·저장 검수, 관리자 화면과 조직 설정, 이후 전체 작업의 현황은 [진행표](mvp-progress.md)에 유지한다.
+
 ## 2026-10-03 플랫폼 토큰 계약에 맞춘 Hellow 인증 수정
 
 - 사용자의 지적에 따라 Hellow가 상위 플랫폼의 토큰 발급 설정 변경을 요구하던 방향을 바로잡았다. 실제 로그인 토큰 claim은 `aud=account`, `azp=app`, `typ=Bearer`로 확인했다. Hellow API는 서명·issuer·만료와 이 access token 조합을 검증하고 ID token·다른 client 토큰을 거부한다. `HELLOW_API_AUDIENCE`는 플랫폼이 전용 audience를 발급할 때만 설정하는 선택적 추가 검사다. 플랫폼 설정은 변경하지 않는다. 서버 Docker 빌드와 테스트가 통과했다.
