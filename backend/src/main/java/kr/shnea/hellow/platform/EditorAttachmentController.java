@@ -16,6 +16,8 @@ import java.util.Map;
 @RequestMapping("/api/editor/files")
 public class EditorAttachmentController {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EditorAttachmentController.class);
+
     private final PlatformClient platformClient;
     private final PlatformProperties properties;
 
@@ -31,13 +33,17 @@ public class EditorAttachmentController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<EditorUploadResponse> uploadEditorFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "kind", defaultValue = "attachment") String kind,
+            @RequestParam(value = "scope", required = false) String requestedScope,
+            @RequestParam(value = "kind", defaultValue = "file") String kind,
             @RequestParam(value = "requestId", required = false) String requestId) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
 
         try {
+            log.info("Uploading editor file: name={}, size={}, kind={}, scope={}",
+                    file.getOriginalFilename(), file.getSize(), kind, requestedScope);
+
             PlatformClient.FileUploadResult result = platformClient.uploadFile(
                     file.getOriginalFilename() != null ? file.getOriginalFilename() : "editor-file",
                     file.getBytes(),
@@ -45,8 +51,12 @@ public class EditorAttachmentController {
                     "default"
             );
 
-            String scope = properties.getEnvironmentId() != null ?
-                    "env-" + properties.getEnvironmentId().substring(0, 8) : "hellow-consultation";
+            String scope = (requestedScope != null && !requestedScope.isBlank()) ? requestedScope :
+                    (properties.getEnvironmentId() != null ?
+                            "env-" + properties.getEnvironmentId().substring(0, 8) : "hellow-consultation-dev");
+
+            log.info("Editor file uploaded successfully: fileId={}, scope={}, kind={}",
+                    result.fileId(), scope, kind);
 
             return ResponseEntity.ok(new EditorUploadResponse(
                     result.fileId(),
@@ -55,7 +65,8 @@ public class EditorAttachmentController {
                     result.originalName(),
                     result.size()
             ));
-        } catch (IOException e) {
+        } catch (Exception e) {
+            log.error("Failed to upload editor file", e);
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -66,10 +77,18 @@ public class EditorAttachmentController {
      */
     @GetMapping("/{fileId}/views")
     public ResponseEntity<Map<String, Object>> resolveEditorFile(@PathVariable String fileId) {
-        Map<String, Object> viewTicket = platformClient.getViewTicket(fileId);
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(viewTicket);
+        try {
+            Map<String, Object> viewTicket = platformClient.getViewTicket(fileId);
+            Map<String, Object> responseBody = (viewTicket != null) ? new java.util.HashMap<>(viewTicket) : new java.util.HashMap<>();
+            responseBody.putIfAbsent("fileId", fileId);
+
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .body(responseBody);
+        } catch (Exception e) {
+            log.error("Failed to get view ticket for fileId: {}", fileId, e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
     public record EditorUploadResponse(

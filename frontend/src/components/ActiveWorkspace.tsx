@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone,
   PhoneOff,
@@ -29,6 +29,8 @@ import {
   ChevronUp,
   User,
   ShieldAlert,
+  Paperclip,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
@@ -84,7 +86,8 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
   // Customer Info Card Editing/Registration state
   const [isEditingInfo, setIsEditingInfo] = useState(false);
-  const [isInfoExpanded, setIsInfoExpanded] = useState(true);
+  const [isInfoExpanded, setIsInfoExpanded] = useState(false);
+  const editorRef = useRef<any>(null);
 
   // Form states for Customer Info
   const [formType, setFormType] = useState<CustomerType>(customer.customerType || 'corporate');
@@ -811,18 +814,20 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       </div>
 
       {/* 3. 확장형 실시간 상담 메모 작성기 (핵심 워크스페이스) */}
-      <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
-        {/* Category & Status Selectors */}
-        <div className="grid grid-cols-3 gap-3 mb-2.5">
-          {/* 대분류 */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-              상담 대분류 <span className="text-rose-400">*</span>
-            </label>
+      <div className="flex-1 flex flex-col p-3 overflow-hidden min-h-0">
+        {/* Compact Integrated Category, Tags & Status Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 p-1.5 px-3 bg-slate-950/70 border border-slate-800 rounded-xl shrink-0">
+          {/* 좌측: 대분류 > 중분류 */}
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="font-semibold text-slate-400 text-[11px] shrink-0">상담 분류:</span>
             <select
               value={mainCategory}
-              onChange={(e) => setMainCategory(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              onChange={(e) => {
+                setMainCategory(e.target.value);
+                const subOptions = consultationCategories.find((c) => c.main === e.target.value)?.subs || [];
+                if (subOptions.length > 0) setSubCategory(subOptions[0]);
+              }}
+              className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               {consultationCategories.map((c) => (
                 <option key={c.main} value={c.main}>
@@ -830,17 +835,11 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* 중분류 */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-              상담 중분류 <span className="text-rose-400">*</span>
-            </label>
+            <span className="text-slate-500 font-semibold">&gt;</span>
             <select
               value={subCategory}
               onChange={(e) => setSubCategory(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               {consultationCategories
                 .find((c) => c.main === mainCategory)
@@ -852,78 +851,70 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </select>
           </div>
 
-          {/* 처리 상태 */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-              처리 상태 <span className="text-rose-400">*</span>
-            </label>
-            <div className="flex items-center space-x-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700">
-              <button
-                type="button"
-                onClick={() => setStatus('in_progress')}
-                className={`flex-1 py-1 rounded text-xs font-medium transition-all ${
-                  status === 'in_progress'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                진행 중
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus('completed')}
-                className={`flex-1 py-1 rounded text-xs font-medium transition-all ${
-                  status === 'completed'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                상담 완료
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus('escalated')}
-                className={`flex-1 py-1 rounded text-xs font-medium transition-all ${
-                  status === 'escalated'
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                이관/에스컬
-              </button>
-            </div>
+          {/* 중앙: 빠른 태그 칩 */}
+          <div className="flex items-center space-x-1 overflow-x-auto text-xs py-0.5">
+            <Tag className="w-3 h-3 text-slate-400 shrink-0 mr-0.5" />
+            {quickTags.map((tag) => {
+              const isSelected = selectedTags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  className={`px-2 py-0.5 rounded-full text-[11px] transition-all shrink-0 ${
+                    isSelected
+                      ? tag.includes('컴플레인') || tag.includes('주의고객')
+                        ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 font-bold'
+                        : 'bg-indigo-500/25 text-indigo-300 border border-indigo-500/50 font-medium'
+                      : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-slate-200'
+                  }`}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 우측: 처리 상태 세그먼트 */}
+          <div className="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 shrink-0">
+            <button
+              type="button"
+              onClick={() => setStatus('in_progress')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                status === 'in_progress'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              진행 중
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('completed')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                status === 'completed'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              상담 완료
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('escalated')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                status === 'escalated'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              이관/에스컬
+            </button>
           </div>
         </div>
 
-        {/* Quick Tag Chips */}
-        <div className="mb-2 flex items-center space-x-1.5 overflow-x-auto pb-0.5 text-xs">
-          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 flex-shrink-0 mr-1">
-            <Tag className="w-3 h-3 text-slate-400" />
-            빠른 태그:
-          </span>
-          {quickTags.map((tag) => {
-            const isSelected = selectedTags.includes(tag);
-            return (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => toggleTag(tag)}
-                className={`px-2 py-0.5 rounded-full text-xs transition-all flex-shrink-0 ${
-                  isSelected
-                    ? tag.includes('컴플레인') || tag.includes('주의고객')
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50 font-bold'
-                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 font-medium'
-                    : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:border-slate-600'
-                }`}
-              >
-                {tag}
-              </button>
-            );
-          })}
-        </div>
-
         {/* Rich Editor Toolbar */}
-        <div className="flex items-center justify-between bg-slate-800/90 border border-slate-700 rounded-t-xl px-3 py-1.5 text-xs text-slate-300">
+        <div className="flex items-center justify-between bg-slate-800/95 border border-slate-700 rounded-t-xl px-3 py-1.5 text-xs text-slate-300 shrink-0">
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
               <FileText className="w-3.5 h-3.5 text-indigo-400" />
@@ -931,46 +922,83 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </span>
           </div>
 
-          {/* Quick Template Inserts */}
-          <div className="flex items-center space-x-1.5">
-            <span className="text-[11px] text-slate-400">자주 쓰는 템플릿:</span>
-            <button
-              type="button"
-              onClick={() => insertTemplate('컴플레인')}
-              className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded text-[11px] font-semibold transition-colors"
-            >
-              ⚠️ 컴플레인 접수
-            </button>
-            <button
-              type="button"
-              onClick={() => insertTemplate('견적')}
-              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-            >
-              + 견적 협의
-            </button>
-            <button
-              type="button"
-              onClick={() => insertTemplate('기술')}
-              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-            >
-              + 기술 장애
-            </button>
-            <button
-              type="button"
-              onClick={() => insertTemplate('콜백')}
-              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-            >
-              + 부재 콜백
-            </button>
+          <div className="flex items-center space-x-2">
+            {/* Quick Template Inserts */}
+            <div className="flex items-center space-x-1">
+              <span className="text-[11px] text-slate-400 mr-0.5">템플릿:</span>
+              <button
+                type="button"
+                onClick={() => insertTemplate('컴플레인')}
+                className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded text-[11px] font-semibold transition-colors"
+              >
+                ⚠️ 컴플레인
+              </button>
+              <button
+                type="button"
+                onClick={() => insertTemplate('견적')}
+                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
+              >
+                + 견적
+              </button>
+              <button
+                type="button"
+                onClick={() => insertTemplate('기술')}
+                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
+              >
+                + 기술
+              </button>
+              <button
+                type="button"
+                onClick={() => insertTemplate('콜백')}
+                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
+              >
+                + 콜백
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-slate-700" />
+
+            {/* 에디터 내 첨부파일 액션 버튼 */}
+            <div className="flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (editorRef.current?.pickAttachment) {
+                    editorRef.current.pickAttachment('file');
+                  }
+                }}
+                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] flex items-center gap-1 transition-colors border border-slate-600"
+                title="에디터 본문에 문서/일반 파일 첨부"
+              >
+                <Paperclip className="w-3 h-3 text-indigo-400" />
+                <span>파일 첨부</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (editorRef.current?.pickAttachment) {
+                    editorRef.current.pickAttachment('image');
+                  }
+                }}
+                className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] flex items-center gap-1 transition-colors border border-slate-600"
+                title="에디터 본문에 이미지/사진 첨부"
+              >
+                <ImageIcon className="w-3 h-3 text-emerald-400" />
+                <span>이미지 첨부</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
           <ShneaConsultationEditor
             documentKey={customer.id || 'consultation-doc'}
             initialText={memoText}
             onChangeText={(txt) => setMemoText(txt)}
+            onReady={(editor) => {
+              editorRef.current = editor;
+            }}
           />
         </div>
       </div>

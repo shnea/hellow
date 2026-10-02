@@ -16,6 +16,7 @@ interface ShneaConsultationEditorProps {
   documentKey: string;
   initialText?: string;
   onChangeText?: (text: string) => void;
+  onReady?: (editor: any) => void;
   readOnly?: boolean;
 }
 
@@ -81,11 +82,13 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
   documentKey,
   initialText = '',
   onChangeText,
+  onReady,
   readOnly = false,
 }) => {
   const [mounted, setMounted] = useState(false);
   const [editorValue, setEditorValue] = useState<EditorDocument>(() => textToDocument(initialText));
   const [editorError, setEditorError] = useState<string | null>(null);
+  const editorRef = useRef<any>(null);
 
   // 내부 에코 방지용 Ref (자신이 보낸 텍스트로 인한 불필요한 재렌더링 방지)
   const lastEmittedTextRef = useRef<string>(initialText);
@@ -115,7 +118,10 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
     async upload(file: File, context: any) {
       const body = new FormData();
       body.set('file', file);
-      body.set('kind', context.kind || 'attachment');
+      const kind = context.kind || (file.type.startsWith('image/') ? 'image' : 'file');
+      const scope = context.scope || 'hellow-consultation-dev';
+      body.set('kind', kind);
+      body.set('scope', scope);
       if (context.requestId) body.set('requestId', context.requestId);
 
       const response = await fetch('/api/editor/files', {
@@ -124,9 +130,17 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
       });
 
       if (!response.ok) {
-        throw new Error('SHNEA 플랫폼에 파일을 업로드하지 못했습니다.');
+        const errorText = await response.text().catch(() => '');
+        throw new Error(errorText || 'SHNEA 플랫폼에 파일을 업로드하지 못했습니다.');
       }
-      return response.json(); // { fileId, scope, kind, name, size }
+      const resData = await response.json();
+      return {
+        fileId: resData.fileId,
+        scope: scope,
+        kind: kind,
+        name: resData.name || file.name,
+        size: Number.isSafeInteger(resData.size) ? resData.size : file.size,
+      };
     },
     async resolve(file: any, signal?: AbortSignal) {
       const response = await fetch(`/api/editor/files/${encodeURIComponent(file.fileId)}/views`, {
@@ -135,20 +149,22 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
       if (!response.ok) {
         throw new Error('파일 보기 정보를 불러오지 못했습니다.');
       }
-      return response.json(); // view-ticket 원문
+      const data = await response.json();
+      if (!data.fileId) data.fileId = file.fileId;
+      return data;
     },
   }), []);
 
   if (!mounted) {
     return (
-      <div className="flex-1 min-h-[380px] rounded-b-xl border border-t-0 border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-500 flex items-center justify-center">
+      <div className="flex-1 min-h-[480px] rounded-b-xl border border-t-0 border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-500 flex items-center justify-center">
         SHNEA 공식 에디터를 불러오는 중...
       </div>
     );
   }
 
   return (
-    <div className="shnea-consultation-editor flex-1 h-full min-h-[380px] flex flex-col relative select-text">
+    <div className="shnea-consultation-editor flex-1 h-full min-h-0 flex flex-col relative select-text">
       {/* SHNEA 에디터 다크 테마 및 높이 전역 스타일 */}
       <style jsx global>{`
         .shnea-consultation-editor {
@@ -169,29 +185,50 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
           --se-line-height: 1.65;
           --se-content-padding: 16px 20px;
           --se-paragraph-spacing: 0.6em;
-        }
-        .shnea-consultation-editor .shnea-editor {
-          flex: 1 1 auto;
+          flex: 1 1 0%;
           display: flex;
           flex-direction: column;
           height: 100%;
-          min-height: 380px;
+          min-height: 0;
+          min-width: 0;
+        }
+        .shnea-consultation-editor .shnea-editor {
+          flex: 1 1 0%;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
           border-radius: 0 0 12px 12px;
           border: 1px solid #334155;
           border-top: none;
           background-color: #0b1120 !important;
           color: #f8fafc !important;
+          overflow: hidden;
         }
         .shnea-consultation-editor .shnea-editor .tiptap {
-          flex: 1 1 auto;
-          min-height: 340px;
+          flex: 1 1 0%;
+          min-height: 480px;
           height: 100%;
           outline: none;
           color: #f8fafc !important;
           background: transparent !important;
           font-family: inherit;
+          overflow-y: auto;
         }
-        .shnea-consultation-editor .shnea-editor .tiptap p {
+        .shnea-consultation-editor .shnea-editor .tiptap p,
+        .shnea-consultation-editor .shnea-editor .tiptap h1,
+        .shnea-consultation-editor .shnea-editor .tiptap h2,
+        .shnea-consultation-editor .shnea-editor .tiptap h3,
+        .shnea-consultation-editor .shnea-editor .tiptap h4,
+        .shnea-consultation-editor .shnea-editor .tiptap h5,
+        .shnea-consultation-editor .shnea-editor .tiptap h6,
+        .shnea-consultation-editor .shnea-editor .tiptap blockquote,
+        .shnea-consultation-editor .shnea-editor .tiptap pre,
+        .shnea-consultation-editor .shnea-editor .tiptap ul,
+        .shnea-consultation-editor .shnea-editor .tiptap ol,
+        .shnea-consultation-editor .shnea-editor .tiptap div,
+        .shnea-consultation-editor .shnea-editor .tiptap section {
+          max-width: 100% !important;
           color: #f1f5f9;
         }
         .shnea-consultation-editor .shnea-editor button {
@@ -241,7 +278,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
         </div>
       )}
 
-      <div className="flex-1 flex flex-col h-full min-h-[380px] overflow-hidden">
+      <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
         <ShneaEditor
           value={editorValue}
           documentKey={documentKey}
@@ -250,6 +287,10 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
           appearance={{
             fontSize: 13.5,
             lineHeight: 1.65,
+          }}
+          onReady={(editor) => {
+            editorRef.current = editor;
+            if (onReady) onReady(editor);
           }}
           onChange={({ document }) => {
             setEditorValue(document);

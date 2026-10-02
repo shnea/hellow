@@ -115,6 +115,19 @@
   - Keycloak 리다이렉트 URI 검증 규칙(`auth.md`: "로그아웃 복귀는 등록 콜백 또는 그 origin의 홈(`/`)을 사용한다")에 맞추어 `post_logout_redirect_uri`를 `${window.location.origin}/`로 설정. Keycloak이 허용된 홈(`/`)으로 정상 복귀시킨 후, 애플리케이션 미들웨어가 `/login`으로 깨끗하게 자동 리다이렉트 처리.
   - 일반 실무 사용자 및 상담사에게 노출될 필요가 없는 내부 개발용 **[SHNEA 플랫폼 연동 관리]** 방패 아이콘 및 팝업 모달(`PlatformIntegrationModal.tsx`)을 완전히 삭제하여 실무 중심의 깔끔한 워크스페이스 확보.
 
+- **에디터 가로 너비(Width) 75ch 제한 해제 및 100% 꽉 채움 적용 (`ShneaConsultationEditor.tsx`)**:
+  - `@shnea/editor` 기본 스타일에 내장된 `:is(.shnea-editor .tiptap) p { max-width: 75ch; }` 때문에 긴 텍스트 입력 시 에디터 너비의 절반 지점에서 아래 줄로 뚝 떨어지던 현상을 완벽히 해결.
+  - `.shnea-editor .tiptap`의 `p`, `h1`~`h6`, `blockquote`, `pre`, `ul`, `ol`, `div`, `section` 전역에 `max-width: 100% !important;`를 부여하여 화면 가로 너비 끝까지 시원하게 채워지도록 확장.
+- **에디터 수직 높이(Height) 극대화 및 상단 영역 슬림화 (`ActiveWorkspace.tsx`, `ShneaConsultationEditor.tsx`)**:
+  - **고객 정보 카드 기본 접힘(`isInfoExpanded: false`)**: 상단 헤더 바(36px)에 고객명, 등급, 전화번호, 기업/개인 배지가 이미 모두 노출되므로 평소에는 닫아두어 약 200px 이상의 수직 공간을 즉시 확보.
+  - **상담 분류·태그·상태 1행 통합 바**: 기존에 세로 110px 이상을 차지하던 3열 그리드와 태그 칩 영역을 단일 슬림 행(36px)으로 통합 재설계하여 추가 70px 이상 확보.
+  - **에디터 뷰포트 점유율 75% 이상 확장**: 화면 대부분을 에디터 본문이 차지하며, 넘칠 경우 에디터 내부에서 매끄럽게 스크롤되도록 `flex: 1 1 0%; min-height: 480px; overflow-y: auto;` 적용.
+- **에디터 내 첨부파일 업로드 완벽 정상화 및 툴바 첨부 버튼 연동 (`EditorAttachmentController.java`, `default.conf`, `ShneaConsultationEditor.tsx`, `ActiveWorkspace.tsx`)**:
+  - **Nginx 413 Request Entity Too Large 해결**: `infra/nginx/default.conf`에 `client_max_body_size 100M;`를 설정하여 1MB를 초과하는 고해상도 스크린샷, 대용량 파일도 차단 없이 정상 통과.
+  - **`@shnea/editor` 첨부 어댑터 규격 일치**: 백엔드 `uploadEditorFile`에 `scope` 및 `kind` 파라미터 매핑을 추가하고, 클라이언트가 넘긴 `task.ref.scope`와 `task.ref.kind`를 그대로 응답하도록 보장하여 에디터 내부의 `result.scope !== task.ref.scope || result.kind !== task.ref.kind` 검증 에러를 완벽 해결.
+  - **View Ticket 연동 보강**: `GET /api/editor/files/{fileId}/views`에서 `fileId` 누락을 방지하고 `no-store` 캐시 제어로 즉각 렌더링 지원. 1.63MB 실제 업로드 및 티켓 조회 200 OK 통과.
+  - **직관적인 에디터 툴바 첨부 버튼 탑재**: 에디터 상단 템플릿 버튼 옆에 `[📎 파일 첨부]` 및 `[🖼️ 이미지 첨부]` 버튼을 배치하여 클릭 시 `editorRef.current.pickAttachment('file')`, `editorRef.current.pickAttachment('image')`가 네이티브로 실행되도록 연결. 드래그 앤 드롭 및 `/` 슬래시 메뉴 파일 첨부도 완벽 연동.
+
 ## 검증 및 Git 상태
 
 - `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 5종(`○ /`, `○ /_not-found`, `○ /auth/callback`, `○ /login`, `○ /support`) 및 `Proxy (Middleware)` 생성 완료.
@@ -129,6 +142,7 @@
   - 인증 쿠키 첨부 `curl.exe -s -i -H "Cookie: hellow_logged_in=true" http://localhost:30160/` -> `HTTP/1.1 200 OK` 정상 렌더링 확인.
   - 외부 고객용 화면 `curl.exe -s -i http://localhost:30160/support` -> `HTTP/1.1 200 OK` 비로그인 정상 접근 확인.
   - 로그인 화면 `http://localhost:30160/login` -> "로그인" 단일 액션 정돈, Keycloak 리다이렉트 박스 완전 제거, 개발 환경 조건부 버튼 확인.
+  - 첨부파일 업로드: 1.63MB 실데이터 파일 Nginx 프록시 통과 및 플랫폼 업로드, View Ticket 조회 200 OK 통과 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
 
 ## 남은 일과 다음 시작점
