@@ -6,6 +6,7 @@
 - 요구사항 원문: [요구사항정의서](../../../요구사항정의서.md). 본문 1~85장의 원칙·필수 범위와 예시·후속 후보를 구분한다.
 - 현재 상태: 초기 구현의 인증·조직 격리·상담 저장·파일·폴링 문제를 수정했다. [리뷰 수정 결과](../../../docs/review-repair.md)가 상세 근거이며 MVP 전체 완료 또는 운영 배포 완료는 아니다.
 - 제품 첫 구현 범위: 원문 60장 MVP와 28장 최소 웹 상담 진입점. [단계별 범위](domains/02-scope.md)를 따른다.
+- 추가 확정 기준: 최고관리자·조직관리자 화면, 공통 기본값과 조직 오버라이드, 최대 3단계 상담 분류, 조직/개인 템플릿, 상담 상태 모니터링을 단계적으로 구현한다. 상세와 구현 순서는 [범위](domains/02-scope.md), 상속·기록 보존은 [데이터](domains/06-data.md), 접근 경계는 [보안](domains/07-security.md)을 따른다. 지식관리·AI·조직 내부 채팅은 후반 작업이다.
 - 기본 구성: workflow는 작업 절차, golden-path는 프로젝트 기준 관리. Impeccable은 [등록된 적용 조건](skills.md)에 맞는 UI 작업에 사용한다.
 - 핵심 경계: Organization 격리 + Permission + Data Scope를 서버에서 검증한다. 직원 OIDC Identity, Membership, 고객 상담 세션을 구분한다. [보안](domains/07-security.md).
 - 아키텍처: CRM Core / Contact Center / Async Worker / External Integration의 책임을 나누되 Entity별 MSA를 만들지 않는다. 실시간 업무 상태와 Media도 분리한다. [구조](domains/05-structure.md).
