@@ -106,7 +106,10 @@
   - 기존의 [빠른 메모] 탭, 모드 선택 토글 버튼, 우측 별도 첨부파일 버튼 및 textarea를 완전히 제거하고 **SHNEA 공식 에디터를 단독이자 기본 에디터로 상시 적용**.
   - **다크 테마 일체화**: `@shnea/editor`의 CSS 변수(`--se-bg: #0b1120`, `--se-text: #f8fafc`, `--se-line: #334155`, `--se-raised: #1e293b` 등) 및 툴바·팝오버 스타일을 CRM 다크 슬레이트 톤과 100% 일치시켜 라이트 테마 부조화 완전 해결.
   - **높이 최적화**: 기존 제한 높이를 해제하고 부모 flex 컨테이너에 맞춘 `flex-1 h-full min-h-[380px]`를 적용하여 하단 액션 바까지 시원하게 꽉 채우도록 개선.
-  - **템플릿 연동**: `@shnea/editor`의 `fromMarkdown`을 활용하여 '자주 쓰는 템플릿' 클릭 시 에디터에 마크다운 서식이 즉시 동기화되도록 연동.
+  - **에디터 JSON 문자열 노출 및 줄바꿈 불가 무한루프 버그 완전 해결 (`ShneaConsultationEditor.tsx`)**:
+    - `onChange`에서 `JSON.stringify(document)`를 문자열로 올려보내고, `initialText` 변경 감지로 다시 `fromMarkdown`에 들어가는 역방향 무한 루프 때문에 에디터 본문에 `{"format":"shnea-editor",...}` JSON 원문이 찍히고 줄바꿈이 먹통이 되던 문제를 근본적으로 해결.
+    - `extractPlainText`를 구현하여 실제 사용자가 작성한 문장과 줄바꿈만 추출해 상위 상태와 동기화하고, `lastEmittedTextRef`를 이용해 타이핑 시 발생하는 에코 재렌더링을 완벽 차단함.
+    - 이제 사용자가 자유롭게 줄바꿈, 띄어쓰기, 한글 입력을 자연스럽게 진행할 수 있으며 템플릿 클릭 시에만 정상적으로 문서가 갱신됨.
 - **슬림 GNB 실제 Keycloak OIDC 로그아웃(RP-Initiated Logout) 연동 및 불필요한 플랫폼 연동 모달 완전 제거 (`SidebarGNB.tsx`, `pkce.ts`, `auth/callback/page.tsx`)**:
   - GNB [로그아웃] 클릭 시 Keycloak OIDC 로그아웃 엔드포인트(`.../protocol/openid-connect/logout`, `id_token_hint`)를 호출하여 플랫폼 인증 서버의 세션 쿠키까지 완전히 파기.
   - Keycloak 리다이렉트 URI 검증 규칙(`auth.md`: "로그아웃 복귀는 등록 콜백 또는 그 origin의 홈(`/`)을 사용한다")에 맞추어 `post_logout_redirect_uri`를 `${window.location.origin}/`로 설정. Keycloak이 허용된 홈(`/`)으로 정상 복귀시킨 후, 애플리케이션 미들웨어가 `/login`으로 깨끗하게 자동 리다이렉트 처리.

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { emptyDocument, fromMarkdown, type EditorDocument } from '@shnea/editor';
+import { emptyDocument, fromMarkdown, parseDocument, type EditorDocument } from '@shnea/editor';
 import '@shnea/editor/style.css';
 import { AlertCircle } from 'lucide-react';
 
@@ -19,40 +19,94 @@ interface ShneaConsultationEditorProps {
   readOnly?: boolean;
 }
 
+// EditorDocument에서 사람이 읽을 수 있는 일반 텍스트 추출
+function extractPlainText(doc: EditorDocument): string {
+  if (!doc || !doc.content) return '';
+  const lines: string[] = [];
+
+  const visit = (node: any): string => {
+    if (!node) return '';
+    if (node.type === 'text') {
+      return node.text || '';
+    }
+    if (node.type === 'hardBreak') {
+      return '\n';
+    }
+    if (node.content && Array.isArray(node.content)) {
+      const textParts = node.content.map(visit).join('');
+      if (node.type === 'paragraph' || node.type === 'heading') {
+        lines.push(textParts);
+      } else if (node.type === 'listItem' || node.type === 'taskItem') {
+        lines.push((node.attrs?.checked ? '[x] ' : '• ') + textParts);
+      } else if (node.type === 'codeBlock') {
+        lines.push(textParts);
+      } else {
+        return textParts;
+      }
+    }
+    return '';
+  };
+
+  if (Array.isArray(doc.content.content)) {
+    doc.content.content.forEach(visit);
+    return lines.join('\n').trim();
+  }
+  return '';
+}
+
+// 문자열을 EditorDocument로 안전하게 변환
+function textToDocument(text: string): EditorDocument {
+  if (!text || !text.trim()) return emptyDocument();
+  const trimmed = text.trim();
+
+  // 만약 JSON 포맷으로 저장된 문서라면 parseDocument 파싱
+  if (trimmed.startsWith('{"format":"shnea-editor"')) {
+    try {
+      return parseDocument(JSON.parse(trimmed));
+    } catch {
+      // 파싱 실패 시 fallback
+    }
+  }
+
+  // 일반 마크다운 / 텍스트 문자열 파싱
+  try {
+    return fromMarkdown(trimmed);
+  } catch (e) {
+    console.error('Failed to parse from markdown:', e);
+    return emptyDocument();
+  }
+}
+
 export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = ({
   documentKey,
-  initialText,
+  initialText = '',
   onChangeText,
   readOnly = false,
 }) => {
   const [mounted, setMounted] = useState(false);
-  const [editorValue, setEditorValue] = useState<EditorDocument>(() => {
-    if (initialText && initialText.trim().length > 0) {
-      try {
-        return fromMarkdown(initialText);
-      } catch {
-        return emptyDocument();
-      }
-    }
-    return emptyDocument();
-  });
+  const [editorValue, setEditorValue] = useState<EditorDocument>(() => textToDocument(initialText));
   const [editorError, setEditorError] = useState<string | null>(null);
+
+  // 내부 에코 방지용 Ref (자신이 보낸 텍스트로 인한 불필요한 재렌더링 방지)
+  const lastEmittedTextRef = useRef<string>(initialText);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // 외부 initialText 변경 시 동기화 (템플릿 삽입, 인용 등)
+  // 외부 initialText 변경 시 동기화 (템플릿 삽입, 인용, 고객 변경 등)
   useEffect(() => {
-    if (mounted && initialText !== undefined) {
-      try {
-        const newDoc = initialText.trim().length > 0 ? fromMarkdown(initialText) : emptyDocument();
-        setEditorValue(newDoc);
-      } catch (e) {
-        console.error('Failed to parse document from text:', e);
-      }
+    if (!mounted) return;
+
+    // 만약 에디터 내부에서 방금 타이핑하여 emit된 값과 같다면 무시 (무한 루프 방지)
+    if (initialText === lastEmittedTextRef.current) {
+      return;
     }
-  }, [initialText, mounted]);
+
+    const newDoc = textToDocument(initialText);
+    setEditorValue(newDoc);
+    lastEmittedTextRef.current = initialText;
+  }, [initialText, mounted, documentKey]);
 
   // SHNEA 공식 에디터 첨부파일 어댑터 (editor.md 표준 규격 준수)
   const attachments = useMemo(() => ({
@@ -95,7 +149,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
 
   return (
     <div className="shnea-consultation-editor flex-1 h-full min-h-[380px] flex flex-col relative select-text">
-      {/* SHNEA 에디터 다크 테마 및 높이 전역 스타일 오버라이드 */}
+      {/* SHNEA 에디터 다크 테마 및 높이 전역 스타일 */}
       <style jsx global>{`
         .shnea-consultation-editor {
           --surface: #0b1120;
@@ -200,12 +254,9 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
           onChange={({ document }) => {
             setEditorValue(document);
             if (onChangeText) {
-              try {
-                const docJson = JSON.stringify(document);
-                onChangeText(docJson);
-              } catch (e) {
-                console.error(e);
-              }
+              const plain = extractPlainText(document);
+              lastEmittedTextRef.current = plain;
+              onChangeText(plain);
             }
           }}
           onError={(err) => {
