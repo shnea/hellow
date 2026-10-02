@@ -63,20 +63,39 @@ function LoginContent() {
 
   // OIDC 로그인 시작
   const handleLogin = async () => {
-    if (!oidcConfig?.issuer) {
-      setError('인증 설정이 확인되지 않았습니다. 관리자에게 문의해 주세요.');
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
+      let activeConfig = oidcConfig;
+
+      // 1. 만약 마운트 시점 fetch가 아직 끝나지 않았거나 실패했을 경우 즉시 재조회
+      if (!activeConfig?.issuer) {
+        try {
+          const res = await fetch('/api/platform/oidc-config');
+          if (res.ok) {
+            activeConfig = await res.json();
+            setOidcConfig(activeConfig);
+          }
+        } catch {
+          // 네트워크 일시 오류 시 fallback 진행
+        }
+      }
+
+      // 2. 플랫폼 환경 기본 Issuer Fallback 적용
+      const issuer =
+        activeConfig?.issuer ||
+        'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
+      const clientId = activeConfig?.clientId || 'app';
+      const redirectUri = typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/callback`
+        : 'https://dev-hellow.shnea.kr/auth/callback';
+
       const config: OidcAuthConfig = {
-        issuer: oidcConfig.issuer,
-        clientId: oidcConfig.clientId || 'app',
-        redirectUri: callbackUrl,
-        scopes: 'openid profile email',
+        issuer,
+        clientId,
+        redirectUri,
+        scopes: activeConfig?.scopes || 'openid profile email',
       };
 
       const { url } = await buildAuthorizationUrl(config);

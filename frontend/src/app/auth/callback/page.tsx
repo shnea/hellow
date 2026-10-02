@@ -47,17 +47,27 @@ function AuthCallbackContent() {
       }
 
       try {
-        // OIDC 설정 로드
-        const configRes = await fetch('/api/platform/oidc-config');
-        if (!configRes.ok) throw new Error('OIDC 설정을 불러올 수 없습니다.');
-        const config = await configRes.json();
+        // OIDC 설정 로드 (실패 시 기본 설정 fallback)
+        let issuer = 'https://platform.shnea.kr/auth/realms/p-06c8d669f15648298cefcb904742d306';
+        let clientId = 'app';
+
+        try {
+          const configRes = await fetch('/api/platform/oidc-config');
+          if (configRes.ok) {
+            const config = await configRes.json();
+            if (config.issuer) issuer = config.issuer;
+            if (config.clientId) clientId = config.clientId;
+          }
+        } catch {
+          // fallback 유지
+        }
 
         const redirectUri = `${window.location.origin}/auth/callback`;
 
         // 토큰 교환
         const tokenData = await exchangeCodeForToken(
-          config.issuer,
-          config.clientId || 'app',
+          issuer,
+          clientId,
           code,
           redirectUri,
           storedVerifier
