@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone,
   PhoneOff,
@@ -31,6 +31,7 @@ import {
   ChevronUp,
   User,
   ShieldAlert,
+  Paperclip,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
@@ -125,6 +126,34 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       : '• 고객 요청사항: 엔터프라이즈 라이선스 갱신 시 분기 납부 조건 및 추가 50계정 할인율 문의\n• WebRTC 환경: 사내 방화벽 30160 포트 예외 처리 완료 여부 재검토 요청함\n• 차주 월요일 오후 엔지니어 방문 기술 미팅 희망'
   );
   const [lastSavedTime, setLastSavedTime] = useState<string>('방금 전');
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingFile(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('visibility', 'PUBLIC');
+
+    try {
+      const res = await fetch('/api/platform/files/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('파일 업로드에 실패했습니다.');
+      const data = await res.json();
+      const snippet = `\n[📎 플랫폼 첨부: ${data.originalName} (${(data.size / 1024).toFixed(1)} KB)] - ${data.viewUrl}\n`;
+      setMemoText((prev) => prev + snippet);
+    } catch (err) {
+      console.error('File upload error:', err);
+    } finally {
+      setIsUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Sync subcategories when main category changes
   useEffect(() => {
@@ -947,6 +976,23 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             >
               <Bold className="w-3.5 h-3.5" />
             </button>
+            <div className="h-4 w-px bg-slate-700" />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingFile}
+              className="px-2 py-0.5 hover:bg-slate-700 rounded text-indigo-300 hover:text-indigo-200 flex items-center gap-1 text-[11px] font-medium transition"
+              title="SHNEA 플랫폼 파일 첨부"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              <span>{isUploadingFile ? '플랫폼 업로드 중...' : '첨부파일'}</span>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
           </div>
 
           {/* Quick Template Inserts */}

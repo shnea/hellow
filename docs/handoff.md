@@ -62,30 +62,42 @@
 - **상담사 CRM 화면 실시간 연동 강화 (`frontend/src/app/page.tsx`, `SidebarGNB.tsx`)**:
   - 3초 주기 자동 대기열 폴링 및 신규 인입 발생 시 즉각 토스트 알림(`🔔 신규 고객 상담 인입`).
   - 대기열 카드 [수신] 클릭 시 백엔드 `accept` 호출 및 통화 워크스페이스 활성화.
-  - 좌측 GNB에 "고객용 웹 상담창 열기 (`/support`)" 새 탭 링크 버튼 배치로 빠른 교차 테스트 환경 제공.
+- **SHNEA 플랫폼(Platform) 핵심 연동 모듈 및 파일/인증 계약 구현 (`PlatformClient`, `PlatformController`, MVP-01)**:
+  - `PlatformProperties` & `compose.yaml`: `.env.dev` 환경 변수(`PLATFORM_API_KEY`, `PLATFORM_PROJECT_ID`, `PLATFORM_ENVIRONMENT_ID`, `PLATFORM_OIDC_ISSUER`)를 컨테이너 내부로 주입 및 자동 매핑.
+  - **환경 컨텍스트 검증 (`PlatformClient.fetchContext`)**:
+    - `GET /api/v1/integration/context` (헤더: `X-Platform-Key`) 호출로 프로젝트 UUID(`14dd20e4...`) 및 환경 UUID(`06c8d669...`) 대조 검증 수행 (`verified: true`).
+    - 10개 활성 스코프(`integration:read`, `files:*`, `jobs:*`, `logs:*`) 정상 확인.
+  - **플랫폼 파일 API (`X-Platform-Key`) 업로드 프로토콜 구현 (`PlatformClient.uploadFile`)**:
+    - 1단계: 업로드 세션 생성 (`POST /api/v1/files/uploads`, SHA-256 계산)
+    - 2단계: 8MB 청크 분할 전송 (`PATCH /api/v1/files/uploads/{id}`, `Upload-Offset`, `X-Chunk-SHA256`)
+    - 3단계: 업로드 완료 확정 (`POST /api/v1/files/uploads/{id}/complete`)
+    - 4단계: 영구 File ID 및 뷰어 URL(`.../content/original`) 획득 및 클라이언트에 안전하게 전달.
+  - **OIDC 규격 제공 (`GET /api/platform/oidc-config`)**: Keycloak Realm Issuer 및 Public Client `app` (Code + PKCE S256) 메타데이터 연동 정보 제공.
+  - **프론트엔드 플랫폼 연동 UI/UX 구현**:
+    - `PlatformIntegrationModal.tsx`: 좌측 슬림 GNB 하단의 방패(`ShieldCheck`) 아이콘 클릭 시 열리는 플랫폼 연동 관리 팝업 (실시간 연결 상태, 프로젝트/환경 UUID, 발급된 API 권한 배지, Keycloak 메타데이터 링크, 파일 직접 테스트 업로드).
+    - `ActiveWorkspace.tsx`: 실시간 상담 기록 에디터 툴바에 `[📎 첨부파일]` 버튼 탑재. 파일 선택 즉시 플랫폼 File API로 업로드되어 `[📎 플랫폼 첨부: 파일명.ext (xx KB)]`가 메모에 자동 삽입.
 
 ## 검증 및 Git 상태
 
-- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 2종(`○ /`, `○ /support`) 생성 완료.
+- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건.
 - `backend`: Gradle 8.12 / Java 21 컴파일 및 bootJar 빌드 성공 (`hellow-dev-api`).
 - Docker Compose 4개 컨테이너 정상 가동 및 헬스체크 통과:
   - `hellow-dev-db-1` (Up, healthy, `0.0.0.0:30161->5432/tcp`)
   - `hellow-dev-api-1` (Up, healthy, `8080/tcp`)
   - `hellow-dev-web-1` (Up, healthy, `3000/tcp`)
   - `hellow-dev-nginx-1` (Up, `0.0.0.0:30160->8080/tcp`)
-- E2E 연동 검증:
+- 플랫폼 실제 연동 검증 (E2E 통과):
+  - `curl.exe -s http://localhost:30160/api/platform/context` -> `verified: true`, `kind: "DEV"`, 10개 권한 스코프 정상 응답 확인.
+  - `curl.exe -s http://localhost:30160/api/platform/oidc-config` -> Keycloak Issuer(`https://platform.shnea.kr/auth/realms/p-...`), Client `app` 정상 확인.
+  - `curl.exe -s -X POST http://localhost:30160/api/platform/files/upload` -> 실제 파일 전송 시 플랫폼 세션 생성/청크/완료 성공 및 File UUID(`b664649a-54ab-43bd-a9c2-0150d93df7dd`) 및 원문 뷰 URL 발급 확인.
   - `curl.exe -s -I http://localhost:30160/support` -> `HTTP/1.1 200 OK` 확인.
-  - `curl.exe -s -X POST http://localhost:30160/api/support/request` -> 신규 세션 발급 및 `queue-web-b07a5d31` 생성 확인.
-  - `curl.exe -s http://localhost:30160/api/queue` -> 신규 인입 건 대기열 1위 등록, 컴플레인 플래그 자동 지정 확인.
-  - `curl.exe -s -X POST http://localhost:30160/api/queue/{code}/accept` -> 상태 `PROCESSING` 및 상담사 배정 완료 확인.
-  - `curl.exe -s http://localhost:30160/api/support/session/{sessionId}` -> 고객 세션 `PROCESSING` 상태 변경 확인.
-  - `curl.exe -s -X POST http://localhost:30160/api/queue/{code}/complete` -> 상태 `COMPLETED` 및 대기열 목록 자동 제외 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
 
 ## 남은 일과 다음 시작점
 
-- 도커 호스트 포트 `30160`에서 두 개의 브라우저 창(`http://localhost:30160/support`와 `http://localhost:30160`)을 띄워 고객 인입과 상담사 수신/완료 E2E 흐름을 실시간으로 확인한다.
-- SHNEA 공식 `SERVICE_INTEGRATION.md` 지침에 따라 OIDC 직원 인증(Keycloak discovery, client app, PKCE) 및 플랫폼 파일/Job 연동 계약을 구체화한다.
+- 상담사 화면(`http://localhost:30160`)의 좌측 GNB 하단 방패 아이콘을 클릭하여 플랫폼 연동 상태 팝업을 확인하고, 상담 에디터의 [첨부파일] 버튼을 통해 파일 업로드를 직접 테스트한다.
+- Keycloak OIDC 실제 브라우저 로그인 플로우(Code + PKCE S256) 및 세션 쿠키 연동을 테스트한다.
 - LiveKit 실시간 음성 통신 연동, SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
 - 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
+
 

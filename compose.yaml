@@ -22,6 +22,8 @@ services:
     build:
       context: .
       target: api
+    env_file:
+      - .env.dev
     environment:
       TZ: Asia/Seoul
       DB_HOST: db
@@ -43,6 +45,8 @@ services:
     build:
       context: .
       target: web
+    env_file:
+      - .env.dev
     environment:
       TZ: Asia/Seoul
       NODE_ENV: production

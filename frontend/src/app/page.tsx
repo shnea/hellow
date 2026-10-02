@@ -6,6 +6,7 @@ import { QueuePanel } from '@/components/QueuePanel';
 import { ActiveWorkspace } from '@/components/ActiveWorkspace';
 import { ContextActionPanel } from '@/components/ContextActionPanel';
 import { ToastContainer, ToastMessage } from '@/components/Toast';
+import { PlatformIntegrationModal } from '@/components/PlatformIntegrationModal';
 import {
   mockQueueItems,
   mockCustomers,
@@ -17,6 +18,7 @@ export default function ConsultationWorkspacePage() {
   // Global GNB state
   const [currentTab, setCurrentTab] = useState<string>('workspace');
   const [agentStatus, setAgentStatus] = useState<AgentStatus>('busy');
+  const [isPlatformModalOpen, setIsPlatformModalOpen] = useState<boolean>(false);
 
   // Queue and Customer state
   const [queueItems, setQueueItems] = useState<QueueItem[]>(mockQueueItems);
@@ -510,6 +512,7 @@ export default function ConsultationWorkspacePage() {
         onTabChange={setCurrentTab}
         agentStatus={agentStatus}
         onAgentStatusChange={setAgentStatus}
+        onOpenPlatformModal={() => setIsPlatformModalOpen(true)}
       />
 
       {/* 2. 대기열 패널 (Queue, 320px) */}
@@ -547,6 +550,13 @@ export default function ConsultationWorkspacePage() {
 
       {/* 전역 피드백 토스트 컨테이너 (최대 5개 깔끔하게 표시) */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+      {/* SHNEA 플랫폼 연동 관리 모달 */}
+      <PlatformIntegrationModal
+        isOpen={isPlatformModalOpen}
+        onClose={() => setIsPlatformModalOpen(false)}
+        onFileUploadedToMemo={(snippet) => setQuotedText((prev) => prev + snippet)}
+      />
     </div>
   );
 }

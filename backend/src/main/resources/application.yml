@@ -18,6 +18,20 @@ spring:
         jdbc:
           time_zone: Asia/Seoul
     open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+platform:
+  api-url: ${PLATFORM_API_URL:https://platform.shnea.kr}
+  api-key: ${PLATFORM_API_KEY:}
+  project-id: ${PLATFORM_PROJECT_ID:}
+  environment-id: ${PLATFORM_ENVIRONMENT_ID:}
+  oidc-issuer: ${PLATFORM_OIDC_ISSUER:}
+  oidc-client-id: ${PLATFORM_OIDC_CLIENT_ID:app}
+  oidc-redirect-uri: ${PLATFORM_OIDC_REDIRECT_URI:https://dev-hellow.shnea.kr/auth/callback}
+  post-logout-redirect-uri: ${OIDC_POST_LOGOUT_REDIRECT_URI:https://dev-hellow.shnea.kr/}
 
 management:
   endpoints:
