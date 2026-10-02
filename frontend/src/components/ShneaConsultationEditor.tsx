@@ -259,6 +259,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
 
       <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
         <ShneaEditor
+          className="flex flex-1 min-h-0 flex-col"
           value={editorValue}
           documentKey={documentKey}
           attachments={attachments}

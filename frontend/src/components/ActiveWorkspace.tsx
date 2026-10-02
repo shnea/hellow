@@ -1022,7 +1022,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
         </div>
 
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}
-        <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <ShneaConsultationEditor
             documentKey={queueCode}
             initialText={memoText}

@@ -254,10 +254,10 @@ export default function CustomerSupportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+    <div className="h-dvh overflow-y-auto overscroll-y-contain bg-slate-900 text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
       {errorMessage && <p role="alert" className="p-3 bg-amber-950 text-amber-200">{errorMessage}</p>}
       {/* 헤더 */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-30 px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-30 px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <Headphones className="w-5 h-5 text-white" />
@@ -277,7 +277,7 @@ export default function CustomerSupportPage() {
       </header>
 
       {/* 메인 컨테이너 */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8">
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 shrink-0">
         <div className="w-full max-w-xl">
           {/* STEP 1: 접수 폼 */}
           {step === 'FORM' && (
@@ -442,23 +442,25 @@ export default function CustomerSupportPage() {
                 </div>
 
                 {/* 제출 버튼 */}
-                <button
-                  type="submit"
-                  disabled={submitting || !organizationName}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      상담사 연결 준비 중...
-                    </>
-                  ) : (
-                    <>
-                      상담 연결 요청하기
-                      <ChevronRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
+                <div className="sticky bottom-0 z-20 -mx-6 bg-slate-950/95 px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:static sm:mx-0 sm:bg-transparent sm:p-0">
+                  <button
+                    type="submit"
+                    disabled={submitting || !organizationName}
+                    className="w-full min-h-12 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        상담사 연결 준비 중...
+                      </>
+                    ) : (
+                      <>
+                        상담 연결 요청하기
+                        <ChevronRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
               </form>
             </div>
           )}
@@ -657,7 +659,7 @@ export default function CustomerSupportPage() {
       </main>
 
       {/* 푸터 */}
-      <footer className="border-t border-slate-800/80 bg-slate-950/50 py-4 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="border-t border-slate-800/80 bg-slate-950/50 py-4 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-slate-400" />
           <span>안전한 종단간 암호화(WebRTC) 실시간 음성 통신 지원</span>
