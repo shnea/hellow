@@ -35,6 +35,11 @@ platform:
   oidc-redirect-uri: ${PLATFORM_OIDC_REDIRECT_URI:https://dev-hellow.shnea.kr/auth/callback}
   post-logout-redirect-uri: ${OIDC_POST_LOGOUT_REDIRECT_URI:https://dev-hellow.shnea.kr/}
 
+livekit:
+  api-key: ${LIVEKIT_API_KEY:devkey}
+  api-secret: ${LIVEKIT_API_SECRET:secret}
+  url: ${LIVEKIT_URL:ws://localhost:30162}
+
 management:
   endpoints:
     web:

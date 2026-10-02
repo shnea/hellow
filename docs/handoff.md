@@ -134,28 +134,47 @@
   - **더블클릭 상세 보기 모달 (`selectedDetailItem`)**: 타임라인 카드를 더블클릭(`onDoubleClick`)하면 전체 전문을 확인할 수 있는 다크 테마 모달 다이얼로그 오픈.
   - **상세 모달 편의 기능**: 채널 아이콘 배지, 상담사, 작성 일시, 고객 이력, 제목, 녹취 오디오 재생 시간, 태그 목록 및 전체 상담 기록 전문(`whitespace-pre-wrap`, 스크롤 지원) 표시. 하단에 [메모장에 인용 후 닫기] 및 [닫기] 액션 버튼 탑재.
   - **접근성 및 인터랙션 방어**: 모달 오픈 시 `Esc` 키 또는 배경 오버레이 클릭 시 닫히도록 키보드 접근성 지원, 타임라인 카드 내 [인용] 버튼 클릭 시 `e.stopPropagation()`을 적용하여 모달이 불필요하게 함께 열리지 않도록 분리.
+- **LiveKit 기반 WebRTC 1:1 실시간 양방향 음성 통화 연동 완료 (`MVP-03`, 요구사항 28장·29장 준수)**:
+  - **미디어 인프라 구성 (`compose.yaml`, `infra/nginx/default.conf`)**:
+    - 검증된 SFU 미디어 서버인 `livekit/livekit-server:latest` 컨테이너 추가 (`hellow-dev-livekit-1`).
+    - 네트워크 포트 배정: WebRTC 시그널링/HTTP 직접 포트 `30162:7880`, WebRTC 미디어 `7881:7881/tcp`, `7882:7882/udp` 매핑.
+    - Nginx 리버스 프록시 연동: `infra/nginx/default.conf`에 `/livekit/` WebSocket 프록시 라우팅을 추가하여 단일 `30160` 포트로도 클라이언트 시그널링 통신 가능하도록 지원.
+  - **백엔드 LiveKit 토큰 발급 체계 (`LiveKitService.java`, `SupportController.java`, `QueueController.java`)**:
+    - `com.auth0:java-jwt` 라이브러리를 적용하여 LiveKit 공식 사양의 Room Access JWT 토큰 발급 메서드 구현 (`video` grant: `roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`, 상담사용 `roomAdmin`).
+    - 고객용 엔드포인트: `POST /api/support/session/{sessionId}/token`
+    - 상담사용 엔드포인트: `POST /api/queue/{code}/token`
+  - **고객 웹 상담 화면 연동 (`frontend/src/app/support/page.tsx`, `lib/livekit.ts`)**:
+    - 상담사 수락 후 `IN_CALL` 진입 시 LiveKit 방에 자동 입장하여 고객 마이크 오디오를 실시간 송출.
+    - 상담사 음성 수신 오디오 엘리먼트 자동 연결 및 재생, 마이크 음소거(Mute) 토글, 통화 종료 시 자동 룸 퇴장 및 오디오 세션 정리.
+    - 화면 상단에 실시간 음성 연결 상태 인디케이터(`LiveKit WebRTC 연결됨` / `마이크 및 음성 서버 연결 중...` / `음성 연결 확인 필요`) 배지 표시.
+  - **상담사 워크스페이스 연동 (`frontend/src/components/ActiveWorkspace.tsx`)**:
+    - 대기열 카드 [수신] 클릭 시 해당 룸으로 자동 입장하여 고객 음성 청취 및 상담사 마이크 오디오 송출.
+    - 마이크 음소거(Mute) 및 통화 보류(Hold) 시 실시간 오디오 트랙 제어 연동.
+    - 상단 통화 컨트롤 바에 `LiveKit 음성 연결됨` 실시간 인디케이터 배지 표시.
 
 ## 검증 및 Git 상태
 
-- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, 라우트 5종(`○ /`, `○ /_not-found`, `○ /auth/callback`, `○ /login`, `○ /support`) 및 `Proxy (Middleware)` 생성 완료.
+- `frontend`: Turbopack 빌드 성공, TypeScript 5 컴파일 오류 0건, `livekit-client` 의존성 패키징 완료.
 - `backend`: Gradle 8.12 / Java 21 컴파일 및 bootJar 빌드 성공 (`hellow-dev-api`).
-- Docker Compose 4개 컨테이너 정상 가동 및 헬스체크 통과:
+- Docker Compose 5개 컨테이너 정상 가동 및 헬스체크 통과:
   - `hellow-dev-db-1` (Up, healthy, `0.0.0.0:30161->5432/tcp`)
   - `hellow-dev-api-1` (Up, healthy, `8080/tcp`)
   - `hellow-dev-web-1` (Up, healthy, `3000/tcp`)
+  - `hellow-dev-livekit-1` (Up, `0.0.0.0:30162->7880/tcp`, `7881/tcp`, `7882/udp`)
   - `hellow-dev-nginx-1` (Up, `0.0.0.0:30160->8080/tcp`)
-- 인증 가드 및 화면 라이브 검증:
-  - 비로그인 `curl.exe -s -i http://localhost:30160/` -> `HTTP/1.1 307 Temporary Redirect` (Location: `/login`) 즉시 리다이렉트 확인.
-  - 인증 쿠키 첨부 `curl.exe -s -i -H "Cookie: hellow_logged_in=true" http://localhost:30160/` -> `HTTP/1.1 200 OK` 정상 렌더링 확인.
-  - 외부 고객용 화면 `curl.exe -s -i http://localhost:30160/support` -> `HTTP/1.1 200 OK` 비로그인 정상 접근 확인.
-  - 로그인 화면 `http://localhost:30160/login` -> "로그인" 단일 액션 정돈, Keycloak 리다이렉트 박스 완전 제거, 개발 환경 조건부 버튼 확인.
-  - 첨부파일 업로드: 1.63MB 실데이터 파일 Nginx 프록시 통과 및 플랫폼 업로드, View Ticket 조회 200 OK 통과 확인.
+- LiveKit 및 WebRTC 라이브 통신 검증:
+  - LiveKit 직접 포트 `curl.exe -s -i http://localhost:30162/` -> `HTTP/1.1 200 OK` ("OK") 확인.
+  - Nginx 프록시 `curl.exe -s -i http://localhost:30160/livekit/` -> `HTTP/1.1 200 OK` ("OK") 확인.
+  - 백엔드 고객 세션 생성 및 고객 토큰 발급 (`POST /api/support/request` -> `POST /api/support/session/{id}/token`) -> `HTTP 200 OK`, JWT 발급 완료 확인.
+  - 백엔드 대기열 상담사 토큰 발급 (`POST /api/queue/{code}/token`) -> `HTTP 200 OK`, JWT 발급 완료 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
 
 ## 남은 일과 다음 시작점
 
 - 플랫폼 관리자 화면에 등록된 Keycloak OIDC 실제 브라우저 로그인 및 세션 워크스페이스 진입 테스트.
-- LiveKit 실시간 음성 통신 연동 (`MVP-03`), SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
+- 콜백 예약 / 방문 예약 / 호전환 실무 흐름 연계 (`MVP-05`).
+- 멀티테넌트 조직(Organization) 및 팀/권한 격리 (`MVP-01`).
+- 실시간 상담 현황 대시보드 및 관측성 (`MVP-06`).
 - 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
 
 

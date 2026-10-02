@@ -60,6 +60,18 @@ services:
       timeout: 5s
       retries: 12
 
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    environment:
+      TZ: Asia/Seoul
+      LIVEKIT_KEYS: "devkey: secret"
+    ports:
+      - "30162:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.28-alpine
     environment:

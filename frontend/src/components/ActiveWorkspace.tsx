@@ -29,10 +29,13 @@ import {
   ChevronUp,
   User,
   ShieldAlert,
+  Radio,
+  Volume2,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
 import { ShneaConsultationEditor } from './ShneaConsultationEditor';
+import { LiveKitCallSession } from '../lib/livekit';
 
 interface ActiveWorkspaceProps {
   customer: CustomerProfile;
@@ -81,6 +84,87 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   // Call controls state
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
+
+  // LiveKit WebRTC 실시간 음성 통화 상태
+  const [mediaStatus, setMediaStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const livekitRef = useRef<LiveKitCallSession | null>(null);
+
+  // 실시간 음성 통화 (LiveKit) 자동 입장 및 양방향 오디오 연결
+  useEffect(() => {
+    if (!isCallActive || !customer?.id) {
+      if (livekitRef.current) {
+        livekitRef.current.disconnect();
+        livekitRef.current = null;
+        setMediaStatus('idle');
+      }
+      return;
+    }
+
+    let isSubscribed = true;
+    const sessionManager = new LiveKitCallSession({
+      onConnected: () => {
+        if (isSubscribed) setMediaStatus('connected');
+      },
+      onDisconnected: () => {
+        if (isSubscribed) setMediaStatus('idle');
+      },
+      onError: (err) => {
+        console.warn('Agent LiveKit connection warning:', err);
+        if (isSubscribed) setMediaStatus('error');
+      },
+    });
+    livekitRef.current = sessionManager;
+    setMediaStatus('connecting');
+
+    // 상담사용 토큰 발급 (대기열/큐 ID 기준)
+    fetch(`/api/queue/${customer.id}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentName: customer.managerName || '이소연 선임 (상담1팀)' }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('LiveKit 토큰 발급 응답 오류');
+        return res.json();
+      })
+      .then((data) => {
+        if (!isSubscribed) return;
+        return sessionManager.connect(data.url, data.token);
+      })
+      .catch((err) => {
+        console.warn('Agent LiveKit connection skipped or failed:', err);
+        if (isSubscribed) setMediaStatus('error');
+      });
+
+    return () => {
+      isSubscribed = false;
+      sessionManager.disconnect();
+      livekitRef.current = null;
+    };
+  }, [isCallActive, customer?.id]);
+
+  const handleToggleMute = async () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (livekitRef.current) {
+      await livekitRef.current.setMuted(nextMuted || isOnHold);
+    }
+  };
+
+  const handleToggleHold = async () => {
+    const nextHold = !isOnHold;
+    setIsOnHold(nextHold);
+    if (livekitRef.current) {
+      await livekitRef.current.setMuted(nextHold || isMuted);
+    }
+  };
+
+  const handleEndCallAction = () => {
+    if (livekitRef.current) {
+      livekitRef.current.disconnect();
+      livekitRef.current = null;
+    }
+    onEndCall();
+  };
 
   // Customer Info Card Editing/Registration state
   const [isEditingInfo, setIsEditingInfo] = useState(false);
@@ -290,6 +374,27 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             )}
           </div>
 
+          {/* WebRTC LiveKit 음성 연결 상태 인디케이터 */}
+          {isCallActive && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-all">
+              {mediaStatus === 'connected' ? (
+                <span className="flex items-center gap-1 text-emerald-400">
+                  <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+                  LiveKit 음성 연결됨
+                </span>
+              ) : mediaStatus === 'connecting' ? (
+                <span className="flex items-center gap-1 text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                  음성 채널 연결 중...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-slate-400">
+                  음성 대기
+                </span>
+              )}
+            </div>
+          )}
+
           {isOnHold && (
             <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-semibold animate-pulse">
               통화 보류 중 (대기음 송출)
@@ -308,7 +413,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             <>
               {/* Mute Button */}
               <button
-                onClick={() => setIsMuted(!isMuted)}
+                onClick={handleToggleMute}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   isMuted
                     ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-400'
@@ -321,7 +426,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* Hold Button */}
               <button
-                onClick={() => setIsOnHold(!isOnHold)}
+                onClick={handleToggleHold}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   isOnHold
                     ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-400'
@@ -343,7 +448,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* End Call Button */}
               <button
-                onClick={onEndCall}
+                onClick={handleEndCallAction}
                 className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-rose-950 transition-all"
               >
                 <PhoneOff className="w-4 h-4" />

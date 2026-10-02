@@ -1,5 +1,6 @@
 package kr.shnea.hellow.queue;
 
+import kr.shnea.hellow.livekit.LiveKitService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -9,9 +10,11 @@ import java.util.List;
 public class QueueController {
 
     private final QueueItemRepository queueItemRepository;
+    private final LiveKitService liveKitService;
 
-    public QueueController(QueueItemRepository queueItemRepository) {
+    public QueueController(QueueItemRepository queueItemRepository, LiveKitService liveKitService) {
         this.queueItemRepository = queueItemRepository;
+        this.liveKitService = liveKitService;
     }
 
     @GetMapping
@@ -34,6 +37,22 @@ public class QueueController {
                     item.accept(agent);
                     QueueItem saved = queueItemRepository.save(item);
                     return ResponseEntity.ok(saved);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{code}/token")
+    public ResponseEntity<LiveKitService.LiveKitTokenResponse> getQueueToken(
+            @PathVariable String code,
+            @RequestBody(required = false) TokenRequest request) {
+        return queueItemRepository.findByCode(code)
+                .map(item -> {
+                    String roomName = item.getCode();
+                    String agentName = (request != null && request.agentName() != null && !request.agentName().isBlank())
+                            ? request.agentName()
+                            : (item.getAssignedAgent() != null ? item.getAssignedAgent() : "상담사");
+                    String identity = "agent-" + agentName.replaceAll("[^a-zA-Z0-9가-힣]", "_");
+                    return ResponseEntity.ok(liveKitService.createToken(roomName, identity, agentName, true));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -61,4 +80,5 @@ public class QueueController {
     }
 
     public record AcceptRequest(String agentName) {}
+    public record TokenRequest(String agentName) {}
 }

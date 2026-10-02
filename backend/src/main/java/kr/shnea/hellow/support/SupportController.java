@@ -10,16 +10,22 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Optional;
 import java.util.UUID;
 
+import kr.shnea.hellow.livekit.LiveKitService;
+
 @RestController
 @RequestMapping("/api/support")
 public class SupportController {
 
     private final QueueItemRepository queueItemRepository;
     private final CustomerRepository customerRepository;
+    private final LiveKitService liveKitService;
 
-    public SupportController(QueueItemRepository queueItemRepository, CustomerRepository customerRepository) {
+    public SupportController(QueueItemRepository queueItemRepository,
+                             CustomerRepository customerRepository,
+                             LiveKitService liveKitService) {
         this.queueItemRepository = queueItemRepository;
         this.customerRepository = customerRepository;
+        this.liveKitService = liveKitService;
     }
 
     @PostMapping("/request")
@@ -114,6 +120,19 @@ public class SupportController {
                     item.cancel();
                     queueItemRepository.save(item);
                     return ResponseEntity.ok().<Void>build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/session/{sessionId}/token")
+    public ResponseEntity<LiveKitService.LiveKitTokenResponse> getSessionToken(@PathVariable String sessionId) {
+        return queueItemRepository.findBySessionId(sessionId)
+                .map(item -> {
+                    String roomName = item.getCode();
+                    String identity = "customer-" + sessionId.substring(Math.max(0, sessionId.length() - 8));
+                    String name = (item.getCustomerName() != null && !item.getCustomerName().isBlank())
+                            ? item.getCustomerName() : "고객";
+                    return ResponseEntity.ok(liveKitService.createToken(roomName, identity, name, false));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }

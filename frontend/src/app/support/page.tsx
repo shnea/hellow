@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Headphones, 
   PhoneCall, 
@@ -14,11 +14,14 @@ import {
   User, 
   MessageSquare, 
   ChevronRight, 
-  Sparkles,
-  ShieldCheck,
-  Star,
-  RefreshCw
+  Sparkles, 
+  ShieldCheck, 
+  Star, 
+  RefreshCw,
+  Radio,
+  Volume2
 } from 'lucide-react';
+import { LiveKitCallSession } from '../../lib/livekit';
 
 interface SessionData {
   sessionId: string;
@@ -48,9 +51,12 @@ export default function CustomerSupportPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 통화 중 상태
+  // 실시간 음성 통화 (LiveKit WebRTC) 상태
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [mediaStatus, setMediaStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const livekitRef = useRef<LiveKitCallSession | null>(null);
+
   const [rating, setRating] = useState<number>(5);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
@@ -158,8 +164,62 @@ export default function CustomerSupportPage() {
     return `${m}:${s}`;
   };
 
+  // 4. LiveKit WebRTC 실시간 음성 통화 연결 (IN_CALL 진입 시 자동 연결)
+  useEffect(() => {
+    if (step !== 'IN_CALL' || !session?.sessionId) return;
+
+    let isSubscribed = true;
+    const sessionManager = new LiveKitCallSession({
+      onConnected: () => {
+        if (isSubscribed) setMediaStatus('connected');
+      },
+      onDisconnected: () => {
+        if (isSubscribed) setMediaStatus('idle');
+      },
+      onError: (err) => {
+        console.error('Customer LiveKit connection error:', err);
+        if (isSubscribed) setMediaStatus('error');
+      },
+    });
+    livekitRef.current = sessionManager;
+    setMediaStatus('connecting');
+
+    // 백엔드에서 LiveKit 룸 접속 토큰 발급
+    fetch(`/api/support/session/${session.sessionId}/token`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('음성 통화 접속 토큰 발급 실패');
+        return res.json();
+      })
+      .then((data) => {
+        if (!isSubscribed) return;
+        return sessionManager.connect(data.url, data.token);
+      })
+      .catch((err) => {
+        console.error('Failed to establish LiveKit audio session:', err);
+        if (isSubscribed) setMediaStatus('error');
+      });
+
+    return () => {
+      isSubscribed = false;
+      sessionManager.disconnect();
+      livekitRef.current = null;
+    };
+  }, [step, session?.sessionId]);
+
+  // 마이크 음소거 토글
+  const handleToggleMute = async () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (livekitRef.current) {
+      await livekitRef.current.setMuted(nextMuted);
+    }
+  };
+
   // 상담 취소
   const handleCancel = async () => {
+    if (livekitRef.current) {
+      livekitRef.current.disconnect();
+    }
     if (!session?.sessionId) return;
     try {
       await fetch(`/api/support/session/${session.sessionId}/cancel`, { method: 'POST' });
@@ -171,6 +231,9 @@ export default function CustomerSupportPage() {
 
   // 통화 종료
   const handleEndCall = async () => {
+    if (livekitRef.current) {
+      livekitRef.current.disconnect();
+    }
     if (!session?.queueCode) return;
     try {
       await fetch(`/api/queue/${session.queueCode}/complete`, { method: 'POST' });
@@ -440,15 +503,35 @@ export default function CustomerSupportPage() {
                 <PhoneCall className="w-9 h-9 text-emerald-400" />
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold mb-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                실시간 상담 연결 중
+              {/* 실시간 음성 연결 상태 인디케이터 */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold mb-3 border transition-all">
+                {mediaStatus === 'connected' ? (
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                    실시간 음성 연결됨 (LiveKit WebRTC)
+                  </span>
+                ) : mediaStatus === 'connecting' ? (
+                  <span className="flex items-center gap-1.5 text-amber-400">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    마이크 및 음성 서버 연결 중...
+                  </span>
+                ) : mediaStatus === 'error' ? (
+                  <span className="flex items-center gap-1.5 text-rose-400">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                    음성 연결 확인 필요
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    통화 준비 중
+                  </span>
+                )}
               </div>
 
               <h2 className="text-2xl font-bold text-white mb-1">
                 {session?.assignedAgent || '홍상담 매니저 (상담1팀)'}
               </h2>
-              <p className="text-xs text-slate-400 mb-6">전문 상담사와 정상적으로 통화가 연결되었습니다.</p>
+              <p className="text-xs text-slate-400 mb-6">전문 상담사와 실시간 양방향 음성 통화가 진행 중입니다.</p>
 
               {/* 통화 시간 */}
               <div className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-3xl font-mono font-bold text-white mb-8 tracking-wider">
@@ -460,7 +543,7 @@ export default function CustomerSupportPage() {
               <div className="flex items-center justify-center gap-4 max-w-xs mx-auto mb-6">
                 <button
                   type="button"
-                  onClick={() => setIsMuted(!isMuted)}
+                  onClick={handleToggleMute}
                   className={`flex-1 py-3 px-4 rounded-xl border text-sm font-medium transition flex items-center justify-center gap-2 ${
                     isMuted
                       ? 'bg-amber-500/20 border-amber-500 text-amber-300'
