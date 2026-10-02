@@ -4,6 +4,7 @@ export const mockQueueItems: QueueItem[] = [
   {
     id: 'queue-1',
     type: 'call',
+    customerType: 'corporate',
     customerName: '김지우',
     companyName: '주식회사 테크솔루션',
     phoneNumber: '010-8842-1205',
@@ -14,20 +15,36 @@ export const mockQueueItems: QueueItem[] = [
     isRegistered: true,
   },
   {
+    id: 'queue-complainant',
+    type: 'call',
+    customerType: 'individual',
+    customerName: '최영수',
+    companyName: '개인 고객',
+    phoneNumber: '010-3341-8912',
+    waitTimeOrSchedule: '대기 02:15',
+    priority: 'urgent',
+    summary: '[긴급 컴플레인] 자동 결제 환불 5일 지연 강력 항의 및 즉시 승인 취소 요구',
+    unread: true,
+    isRegistered: true,
+    isComplainant: true,
+  },
+  {
     id: 'queue-unregistered',
     type: 'call',
+    customerType: 'individual',
     customerName: '미등록 고객',
     companyName: '신규 번호 인입',
     phoneNumber: '010-7761-9923',
     waitTimeOrSchedule: '대기 00:45',
     priority: 'urgent',
-    summary: '신규 서비스 도입 상담 희망 (고객 DB에 등록되지 않은 번호입니다)',
+    summary: '서비스 이용 불만 상담 희망 (개인/일반 미등록 발신 번호)',
     unread: true,
     isRegistered: false,
   },
   {
     id: 'queue-2',
     type: 'callback',
+    customerType: 'corporate',
     customerName: '박민호',
     companyName: '스마트물류시스템',
     phoneNumber: '010-2391-7741',
@@ -39,6 +56,7 @@ export const mockQueueItems: QueueItem[] = [
   {
     id: 'queue-3',
     type: 'ticket',
+    customerType: 'corporate',
     customerName: '이수연',
     companyName: '글로벌리테일',
     phoneNumber: '010-5512-9903',
@@ -50,6 +68,7 @@ export const mockQueueItems: QueueItem[] = [
   {
     id: 'queue-4',
     type: 'callback',
+    customerType: 'corporate',
     customerName: '정성훈',
     companyName: '네오바이오텍',
     phoneNumber: '010-9182-3320',
@@ -64,6 +83,7 @@ export const mockCustomers: Record<string, CustomerProfile> = {
   'queue-1': {
     id: 'cust-1',
     isRegistered: true,
+    customerType: 'corporate',
     name: '김지우',
     title: '대표이사',
     company: '주식회사 테크솔루션',
@@ -76,9 +96,27 @@ export const mockCustomers: Record<string, CustomerProfile> = {
     managerName: '이소연 선임 (본인)',
     customerNotes: '엔터프라이즈 v2.5 도입 협의 중, 기술 보안 질문서 검토 민감 고객',
   },
+  'queue-complainant': {
+    id: 'cust-complainant',
+    isRegistered: true,
+    customerType: 'individual',
+    name: '최영수',
+    title: '일반 이용자',
+    company: '개인 고객',
+    department: '',
+    tier: 'Standard',
+    phoneNumber: '010-3341-8912',
+    email: 'ys.choi.personal@naver.com',
+    lastContactDate: '2026-04-02 (어제)',
+    totalCalls: 4,
+    managerName: '이소연 선임 (본인)',
+    isComplainant: true,
+    customerNotes: '결제 취소 지연 건으로 감정이 매우 격앙되어 있음. 정중하고 명확한 환불 일정 안내 필요 (주의 고객)',
+  },
   'queue-unregistered': {
     id: 'cust-unregistered',
     isRegistered: false,
+    customerType: 'individual',
     name: '',
     title: '',
     company: '',
@@ -94,6 +132,7 @@ export const mockCustomers: Record<string, CustomerProfile> = {
   'queue-2': {
     id: 'cust-2',
     isRegistered: true,
+    customerType: 'corporate',
     name: '박민호',
     title: '기술이사',
     company: '스마트물류시스템',
@@ -109,6 +148,7 @@ export const mockCustomers: Record<string, CustomerProfile> = {
   'queue-3': {
     id: 'cust-3',
     isRegistered: true,
+    customerType: 'corporate',
     name: '이수연',
     title: '개발팀장',
     company: '글로벌리테일',
@@ -124,6 +164,7 @@ export const mockCustomers: Record<string, CustomerProfile> = {
   'queue-4': {
     id: 'cust-4',
     isRegistered: true,
+    customerType: 'corporate',
     name: '정성훈',
     title: '경영지원 실장',
     company: '네오바이오텍',
@@ -172,14 +213,28 @@ export const mockTimelines: Record<string, TimelineItem[]> = {
         '문의 내역: 사내 방화벽에서 Nginx 호스트 포트 30160 접근 시 방화벽 예외 처리 가이드 요청. 기술 문서 링크 안내 후 세션 종료.',
       tags: ['방화벽', '포트안내'],
     },
+  ],
+  'queue-complainant': [
     {
-      id: 'time-4',
-      date: '2026.02.10 11:00',
+      id: 'time-comp-1',
+      date: '2026.04.02 11:30',
+      channel: 'call',
+      agentName: '김상담 대리',
+      title: '[컴플레인] 자동 결제 취소 요청 재접수',
+      content:
+        '고객이 3월 28일 정기 결제 해지 요청했으나 3월 31일 자동 청구됨. 5일째 환불 입금 확인 안 되어 심하게 불만 제기. 금일 중 회계팀 승인 약속함.',
+      hasAudio: true,
+      audioDuration: '08:14',
+      tags: ['컴플레인', '환불지연', '주의고객'],
+    },
+    {
+      id: 'time-comp-2',
+      date: '2026.03.28 17:00',
       channel: 'ticket',
-      agentName: '시스템 자동',
-      title: '엔터프라이즈 신규 도입 계약 최초 승인',
-      content: '신규 고객사 온보딩 완료. 조직 ID: org_techsolution_01. 기본 테넌트 환경 프로비저닝 완료.',
-      tags: ['온보딩', '신규계약'],
+      agentName: '최영수 고객 (웹 접수)',
+      title: '구독 플랜 해지 신청',
+      content: '개인 사정으로 서비스 이용 중단 희망. 즉시 해지 및 다음 달 결제 중단 요청.',
+      tags: ['해지신청'],
     },
   ],
   'queue-unregistered': [
@@ -230,6 +285,10 @@ export const mockTimelines: Record<string, TimelineItem[]> = {
 
 export const consultationCategories: ConsultationCategory[] = [
   {
+    main: '불만 및 컴플레인 민원',
+    subs: ['환불 및 결제 취소 지연', '서비스 장애/이용 불가 보상', '상담 태도 및 늑장 대응 항의', '계약 해지 및 위약금 불만'],
+  },
+  {
     main: '제품 및 솔루션 문의',
     subs: ['엔터프라이즈 도입 견적', '라이선스 갱신/추가', '신규 기능(WebRTC) 상담', '도입 제안서 요청'],
   },
@@ -241,26 +300,22 @@ export const consultationCategories: ConsultationCategory[] = [
     main: '기술 지원 및 API 연동',
     subs: ['API 인증 및 Webhook 장애', '실시간 음성 연결 불안정', '사내 방화벽 및 포트 예외', '데이터 마이그레이션'],
   },
-  {
-    main: '불만 및 서비스 개선',
-    subs: ['상담 지연 불만', '시스템 장애 보상 요구', '사용자 UX 개선 건의'],
-  },
 ];
 
 export const quickTags = [
+  '#컴플레인',
+  '#환불요청',
+  '#주의고객',
+  '#불만해소',
   '#견적_재검토',
   '#방문요청',
-  '#가격협상',
-  '#보안검토',
   '#API연동',
   '#장애대응',
-  '#VIP케어',
-  '#호전환필요',
 ];
 
 export const transferAgents = [
   { id: 'ag-1', name: '박성현 수석', department: '인프라/기술팀', status: 'available', ext: '1042' },
   { id: 'ag-2', name: '최수진 대리', department: '계약/정산팀', status: 'busy', ext: '1088' },
   { id: 'ag-3', name: '한도윤 매니저', department: '영업/CRM팀', status: 'available', ext: '1021' },
-  { id: 'ag-4', name: '김보람 팀장', department: '고객성공(CS)팀', status: 'away', ext: '1005' },
+  { id: 'ag-4', name: '김보람 팀장', department: '고객성공(CS)팀 (민원총괄)', status: 'available', ext: '1005' },
 ];

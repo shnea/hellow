@@ -11,7 +11,7 @@ import {
   mockCustomers,
   mockTimelines,
 } from '@/data/mockData';
-import { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
+import { AgentStatus, CustomerProfile, CustomerType, QueueItem, TimelineItem } from '@/types';
 
 export default function ConsultationWorkspacePage() {
   // Global GNB state
@@ -112,6 +112,7 @@ export default function ConsultationWorkspacePage() {
 
   // 신규 고객 등록 처리 핸들러
   const handleRegisterCustomer = (data: {
+    customerType: CustomerType;
     name: string;
     company: string;
     title: string;
@@ -119,10 +120,12 @@ export default function ConsultationWorkspacePage() {
     email: string;
     tier: 'VIP' | 'Gold' | 'Standard';
     customerNotes: string;
+    isComplainant: boolean;
   }) => {
     const updatedCustomer: CustomerProfile = {
       ...currentCustomer,
       isRegistered: true,
+      customerType: data.customerType,
       name: data.name,
       company: data.company,
       title: data.title,
@@ -130,6 +133,7 @@ export default function ConsultationWorkspacePage() {
       email: data.email,
       tier: data.tier,
       customerNotes: data.customerNotes,
+      isComplainant: data.isComplainant,
       lastContactDate: '오늘 등록됨',
     };
 
@@ -145,9 +149,11 @@ export default function ConsultationWorkspacePage() {
         item.id === selectedQueueId
           ? {
               ...item,
+              customerType: data.customerType,
               customerName: data.name,
               companyName: data.company,
               isRegistered: true,
+              isComplainant: data.isComplainant,
             }
           : item
       )
@@ -159,9 +165,9 @@ export default function ConsultationWorkspacePage() {
       date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
       channel: 'ticket',
       agentName: '이소연 선임 (본인)',
-      title: '신규 고객 정보 등록 완료',
-      content: `고객명: ${data.name} / 소속: ${data.company} (${data.department} ${data.title}) / 등급: ${data.tier} / 이메일: ${data.email || '미입력'}`,
-      tags: ['신규고객', '등록완료'],
+      title: `신규 고객 등록 완료 (${data.customerType === 'corporate' ? '기업 B2B' : '개인 일반'}${data.isComplainant ? ' / 컴플레인' : ''})`,
+      content: `고객명: ${data.name} / 구분: ${data.customerType === 'corporate' ? '기업' : '개인'} / 소속: ${data.company} / 등급: ${data.tier} / 이메일: ${data.email || '미입력'}${data.isComplainant ? ' [주의/컴플레인]' : ''}`,
+      tags: ['신규고객', data.customerType, ...(data.isComplainant ? ['컴플레인'] : [])],
     };
 
     setTimelines((prev) => ({
@@ -184,15 +190,17 @@ export default function ConsultationWorkspacePage() {
       [selectedQueueId]: updatedCustomer,
     }));
 
-    // Update queue item if name or company changed
-    if (data.name || data.company) {
+    // Update queue item if name, company, type or complainant status changed
+    if (data.name || data.company || data.customerType !== undefined || data.isComplainant !== undefined) {
       setQueueItems((prev) =>
         prev.map((item) =>
           item.id === selectedQueueId
             ? {
                 ...item,
+                customerType: data.customerType !== undefined ? data.customerType : item.customerType,
                 customerName: data.name || item.customerName,
                 companyName: data.company || item.companyName,
+                isComplainant: data.isComplainant !== undefined ? data.isComplainant : item.isComplainant,
               }
             : item
         )

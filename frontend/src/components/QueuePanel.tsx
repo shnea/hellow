@@ -137,6 +137,18 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                     </span>
                   )}
 
+                  {item.isComplainant && (
+                    <span className="text-[10px] bg-rose-950/70 text-rose-300 px-1.5 py-0.5 rounded font-bold border border-rose-700/60 animate-pulse">
+                      컴플레인
+                    </span>
+                  )}
+
+                  {item.customerType === 'individual' && (
+                    <span className="text-[10px] bg-cyan-950/50 text-cyan-300 px-1.5 py-0.5 rounded font-medium border border-cyan-800/40">
+                      개인
+                    </span>
+                  )}
+
                   {item.isRegistered === false && (
                     <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-semibold border border-amber-500/40">
                       미등록
