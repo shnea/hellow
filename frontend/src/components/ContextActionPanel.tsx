@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   History,
   Phone,
@@ -17,6 +17,8 @@ import {
   Clock,
   ArrowRight,
   CheckCircle,
+  X,
+  Maximize2,
 } from 'lucide-react';
 import { TimelineItem, TimelineChannel } from '../types';
 import { transferAgents } from '../data/mockData';
@@ -40,6 +42,24 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
 }) => {
   // Timeline channel filter
   const [channelFilter, setChannelFilter] = useState<TimelineChannel>('all');
+
+  // Timeline item detail modal state
+  const [selectedDetailItem, setSelectedDetailItem] = useState<TimelineItem | null>(null);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedDetailItem(null);
+      }
+    };
+    if (selectedDetailItem) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedDetailItem]);
 
   // Follow-up sub-tabs
   const [subTab, setSubTab] = useState<'visit' | 'callback' | 'transfer' | 'notification'>(
@@ -158,7 +178,9 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
           filteredTimeline.map((item) => (
             <div
               key={item.id}
-              className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl relative group hover:border-slate-700 transition-colors"
+              onDoubleClick={() => setSelectedDetailItem(item)}
+              className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl relative group hover:border-slate-700 transition-colors cursor-pointer select-none"
+              title="더블클릭하여 상세 내용을 확인합니다"
             >
               {/* Card Top */}
               <div className="flex items-center justify-between text-xs mb-1.5">
@@ -174,10 +196,20 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                 {item.title}
               </h4>
 
-              {/* Content */}
-              <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/50 p-2 rounded-lg border border-slate-800/60 mb-2">
-                {item.content}
-              </p>
+              {/* Content with Max Height & Double Click Preview */}
+              <div className="relative bg-slate-900/60 p-2 rounded-lg border border-slate-800/70 mb-2 overflow-hidden group/content">
+                <p className="text-xs text-slate-300 leading-relaxed max-h-20 overflow-hidden line-clamp-3 break-words whitespace-pre-wrap">
+                  {item.content}
+                </p>
+                {item.content.length > 70 && (
+                  <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent flex items-end justify-center pb-0.5 pointer-events-none">
+                    <span className="text-[10px] text-indigo-400 font-medium tracking-tight flex items-center gap-0.5">
+                      <Maximize2 className="w-2.5 h-2.5" />
+                      더블클릭 상세
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Tags & Action */}
               <div className="flex items-center justify-between text-[11px]">
@@ -197,7 +229,10 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
 
                 {/* Quote button */}
                 <button
-                  onClick={() => onQuoteTimeline(item.content)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onQuoteTimeline(item.content);
+                  }}
                   className="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 hover:bg-indigo-900 text-[11px] font-medium flex items-center gap-1 transition-all"
                   title="중앙 상담 메모장에 인용문으로 추가"
                 >
@@ -460,6 +495,119 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
           </div>
         )}
       </div>
+
+      {/* 3. 타임라인 상세 보기 모달 */}
+      {selectedDetailItem && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setSelectedDetailItem(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="timeline-detail-title"
+        >
+          <div
+            className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center space-x-2">
+                <span className="p-1.5 rounded-lg bg-slate-800 text-indigo-400">
+                  {getChannelIcon(selectedDetailItem.channel)}
+                </span>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-semibold text-slate-200">
+                      {selectedDetailItem.agentName}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      {selectedDetailItem.date}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    {customerName} 님의 {selectedDetailItem.channel.toUpperCase()} 상담 이력
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDetailItem(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                title="닫기 (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-3">
+              <div>
+                <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider block mb-1">
+                  상담 제목
+                </span>
+                <h3
+                  id="timeline-detail-title"
+                  className="text-base font-bold text-slate-100 leading-snug"
+                >
+                  {selectedDetailItem.title}
+                </h3>
+              </div>
+
+              {/* Tags & Audio info if any */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {selectedDetailItem.hasAudio && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-rose-500/10 text-rose-400 rounded-md border border-rose-500/20 font-mono text-xs">
+                    <Play className="w-3 h-3" />
+                    녹취 파일 ({selectedDetailItem.audioDuration})
+                  </span>
+                )}
+                {selectedDetailItem.tags?.map((tg) => (
+                  <span
+                    key={tg}
+                    className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded-md text-xs border border-slate-700/60"
+                  >
+                    #{tg}
+                  </span>
+                ))}
+              </div>
+
+              {/* Full Content */}
+              <div className="pt-2">
+                <span className="text-[11px] font-semibold text-slate-400 block mb-1">
+                  상담 기록 전체 전문
+                </span>
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words max-h-[45vh] overflow-y-auto font-sans select-text">
+                  {selectedDetailItem.content}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                Esc 키 또는 배경 클릭 시 닫힙니다.
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    onQuoteTimeline(selectedDetailItem.content);
+                    setSelectedDetailItem(null);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm shadow-indigo-950 transition-all"
+                >
+                  <Quote className="w-3.5 h-3.5" />
+                  <span>메모장에 인용 후 닫기</span>
+                </button>
+                <button
+                  onClick={() => setSelectedDetailItem(null)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-all"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };
