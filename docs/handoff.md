@@ -28,16 +28,24 @@
     - 후속 조치 접수 시 타임라인 실시간 추가 반영.
   - **전역 피드백 시스템 (`Toast.tsx`)**: 임시저장, 상담 완료, 예약 접수, 호전환 등 모든 사용자 액션에 대한 시각적 피드백 제공.
   - **한국어 실무 목업 데이터 세트 (`mockData.ts`)**: 실제 B2B CRM 업무 시나리오를 반영한 고밀도 가상 데이터 내장.
+- **Docker Compose + Nginx (포트 `30160`) 개발 테스트 환경 구성 및 기동 완료**:
+  - 프로젝트 환경 기준([환경 기준](infrastructure.md))에 따라 `compose.yaml`, `Dockerfile` (멀티스테이지 Node 24 빌드), `infra/nginx/default.conf` 구성.
+  - 외부 인입 호스트 포트 `30160` -> Nginx `8080` -> `web:3000` 리버스 프록시 및 WebSocket/Upgrade 헤더 설정.
+  - 루트 `package.json` 및 `.dockerignore` 추가.
 
 ## 검증 및 Git 상태
 
 - `frontend`: `npm run build` 성공 (Turbopack 빌드, TypeScript 5 컴파일 오류 0건, 정적 라우트 생성 완료).
+- `docker compose up -d --build` 성공:
+  - `hellow-dev-web-1` (Up, healthy)
+  - `hellow-dev-nginx-1` (Up, 0.0.0.0:30160->8080/tcp)
+  - `curl -I http://localhost:30160` -> `HTTP/1.1 200 OK` (Server: nginx, X-Powered-By: Next.js) 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
-- `.gitignore`: `**/node_modules/`, `**/.next/` 등 프론트엔드 빌드 산출물 제외 패턴 반영 완료.
-- 이번 커밋 대상: `frontend/` 소스 코드 전체, `.gitignore`, `docs/handoff.md`.
+- 이번 커밋 대상: `compose.yaml`, `Dockerfile`, `infra/nginx/default.conf`, `.dockerignore`, `package.json`, `docs/handoff.md`.
 
 ## 남은 일과 다음 시작점
 
-- 다음 작업은 구현된 프로토타입을 바탕으로 실제 브라우저 구동 및 인터랙션을 확인하고, SHNEA 공식 `SERVICE_INTEGRATION.md`와 필요한 하위 명세를 확인해 OIDC·File·Editor·Job 계약을 설계하는 것이다.
-- 제품 백엔드(Java/Spring Boot) 구현, Compose·Nginx 설정, 이미지 빌드, 환경 암호화와 배포 자동화는 아직 수행하지 않았다.
-- LiveKit 연동, SOPS + age 키 관리, 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
+- 도커 컨테이너가 포트 `30160`으로 정상 구동 중이므로 `http://localhost:30160` 또는 `http://dev-hellow.shnea.kr:30160`에서 화면 인터랙션 및 레이아웃을 확인한다.
+- SHNEA 공식 `SERVICE_INTEGRATION.md`와 필요한 하위 명세를 확인해 OIDC·File·Editor·Job 계약을 설계한다.
+- 제품 백엔드(Java/Spring Boot) 구현, DB 연동, Compose 서비스 확장(DB/API), SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
+- LiveKit 연동, 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.

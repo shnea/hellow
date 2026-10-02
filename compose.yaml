@@ -1,0 +1,26 @@
+name: hellow-dev
+services:
+  web:
+    build:
+      context: .
+      target: web
+    environment:
+      TZ: Asia/Seoul
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      TZ: Asia/Seoul
+    ports:
+      - "30160:8080"
+    volumes:
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
