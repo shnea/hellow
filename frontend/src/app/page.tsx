@@ -165,10 +165,10 @@ export default function ConsultationWorkspacePage() {
       })
       .catch(() => {});
 
-    // 3. 3초 주기 자동 대기열 동기화
-    const queueInterval = setInterval(fetchQueue, 3000);
+    // 3. 2.5초 주기 자동 대기열 동기화
+    const queueInterval = setInterval(fetchQueue, 2500);
     return () => clearInterval(queueInterval);
-  }, []);
+  }, [isAuthenticated]);
 
   // Fetch Timeline when selected customer changes
   useEffect(() => {
