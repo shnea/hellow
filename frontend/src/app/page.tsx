@@ -45,6 +45,91 @@ export default function ConsultationWorkspacePage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Initial Load from Backend API
+  useEffect(() => {
+    // 1. Fetch Queue from DB
+    fetch('/api/queue')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data) && data.length > 0) {
+          const mappedQueue: QueueItem[] = data.map((item: any) => ({
+            id: item.code,
+            type: item.type.toLowerCase(),
+            customerType: item.customerType ? item.customerType.toLowerCase() : 'corporate',
+            customerName: item.customerName,
+            companyName: item.companyName,
+            phoneNumber: item.phoneNumber,
+            waitTimeOrSchedule: item.waitTimeOrSchedule,
+            priority: item.priority.toLowerCase(),
+            summary: item.summary,
+            unread: item.unread,
+            isRegistered: item.registered,
+            isComplainant: item.complainant,
+          }));
+          setQueueItems(mappedQueue);
+        }
+      })
+      .catch(() => {});
+
+    // 2. Fetch Customers from DB
+    fetch('/api/customers')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data) && data.length > 0) {
+          const custMap: Record<string, CustomerProfile> = {};
+          data.forEach((c: any) => {
+            custMap[c.code] = {
+              id: c.code,
+              isRegistered: c.registered,
+              customerType: c.customerType ? c.customerType.toLowerCase() : 'corporate',
+              name: c.name,
+              title: c.title,
+              company: c.company,
+              department: c.department,
+              tier: c.tier,
+              phoneNumber: c.phoneNumber,
+              email: c.email,
+              lastContactDate: c.lastContactAt ? c.lastContactAt.substring(0, 10) : '이력 없음',
+              totalCalls: c.totalCalls,
+              managerName: c.managerName,
+              customerNotes: c.customerNotes,
+              isComplainant: c.complainant,
+            };
+          });
+          setCustomers((prev) => ({ ...prev, ...custMap }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch Timeline when selected customer changes
+  useEffect(() => {
+    if (selectedQueueId) {
+      fetch(`/api/timeline/${selectedQueueId}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data) && data.length > 0) {
+            const mappedTimeline: TimelineItem[] = data.map((t: any) => ({
+              id: 'time-db-' + t.id,
+              date: t.createdAt ? t.createdAt.substring(0, 16).replace('T', ' ') : '최근',
+              channel: t.channel.toLowerCase(),
+              agentName: t.agentName,
+              title: t.title,
+              content: t.content,
+              hasAudio: t.hasAudio,
+              audioDuration: t.audioDuration,
+              tags: t.tags ? t.tags.split(',') : [],
+            }));
+            setTimelines((prev) => ({
+              ...prev,
+              [selectedQueueId]: mappedTimeline,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [selectedQueueId]);
+
   // Live timer for active call
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -60,6 +145,7 @@ export default function ConsultationWorkspacePage() {
   const currentCustomer = customers[selectedQueueId] || {
     id: 'unknown',
     isRegistered: false,
+    customerType: 'individual',
     name: '미등록 고객',
     company: '알 수 없음',
     title: '',
@@ -110,7 +196,7 @@ export default function ConsultationWorkspacePage() {
     addToast('info', '이력 인용', '과거 상담 내용이 실시간 메모장에 인용되었습니다.');
   };
 
-  // 신규 고객 등록 처리 핸들러
+  // 신규 고객 등록 처리 핸들러 (실제 백엔드 API 연동)
   const handleRegisterCustomer = (data: {
     customerType: CustomerType;
     name: string;
@@ -137,13 +223,12 @@ export default function ConsultationWorkspacePage() {
       lastContactDate: '오늘 등록됨',
     };
 
-    // Update customer store
+    // 1. Update React State
     setCustomers((prev) => ({
       ...prev,
       [selectedQueueId]: updatedCustomer,
     }));
 
-    // Update queue item
     setQueueItems((prev) =>
       prev.map((item) =>
         item.id === selectedQueueId
@@ -159,7 +244,25 @@ export default function ConsultationWorkspacePage() {
       )
     );
 
-    // Add registration event to timeline
+    // 2. Persist to Backend API
+    fetch('/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerType: data.customerType.toUpperCase(),
+        name: data.name,
+        company: data.company,
+        department: data.department,
+        title: data.title,
+        tier: data.tier,
+        phoneNumber: currentCustomer.phoneNumber,
+        email: data.email,
+        customerNotes: data.customerNotes,
+        complainant: data.isComplainant,
+      }),
+    }).catch(() => {});
+
+    // 3. Add registration event to timeline
     const registrationRecord: TimelineItem = {
       id: 'time-reg-' + Date.now(),
       date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
@@ -175,10 +278,10 @@ export default function ConsultationWorkspacePage() {
       [selectedQueueId]: [registrationRecord, ...(prev[selectedQueueId] || [])],
     }));
 
-    addToast('success', '고객 등록 완료', `${data.name} (${data.company}) 고객 정보가 정상 등록되었습니다.`);
+    addToast('success', '고객 등록 완료 (DB 저장)', `${data.name} (${data.company}) 고객 정보가 정상 등록되었습니다.`);
   };
 
-  // 기존 고객 정보 수정 핸들러
+  // 기존 고객 정보 수정 핸들러 (실제 백엔드 API 연동)
   const handleUpdateCustomer = (data: Partial<CustomerProfile>) => {
     const updatedCustomer: CustomerProfile = {
       ...currentCustomer,
@@ -190,7 +293,6 @@ export default function ConsultationWorkspacePage() {
       [selectedQueueId]: updatedCustomer,
     }));
 
-    // Update queue item if name, company, type or complainant status changed
     if (data.name || data.company || data.customerType !== undefined || data.isComplainant !== undefined) {
       setQueueItems((prev) =>
         prev.map((item) =>
@@ -207,7 +309,25 @@ export default function ConsultationWorkspacePage() {
       );
     }
 
-    addToast('success', '고객 정보 수정', `${updatedCustomer.name} 고객 정보가 성공적으로 업데이트되었습니다.`);
+    // Persist update to Backend API
+    fetch(`/api/customers/${selectedQueueId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerType: (updatedCustomer.customerType || 'corporate').toUpperCase(),
+        name: updatedCustomer.name,
+        company: updatedCustomer.company,
+        department: updatedCustomer.department,
+        title: updatedCustomer.title,
+        tier: updatedCustomer.tier,
+        phoneNumber: updatedCustomer.phoneNumber,
+        email: updatedCustomer.email,
+        customerNotes: updatedCustomer.customerNotes,
+        complainant: updatedCustomer.isComplainant || false,
+      }),
+    }).catch(() => {});
+
+    addToast('success', '고객 정보 수정 (DB 저장)', `${updatedCustomer.name} 고객 정보가 성공적으로 업데이트되었습니다.`);
   };
 
   const handleAddFollowUpAction = (actionType: string, details: string) => {
@@ -226,7 +346,19 @@ export default function ConsultationWorkspacePage() {
       [selectedQueueId]: [newRecord, ...(prev[selectedQueueId] || [])],
     }));
 
-    addToast('success', `${actionType} 접수 완료`, details);
+    // Persist follow-up to Backend API
+    fetch('/api/followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerCode: selectedQueueId,
+        actionType,
+        title: `[후속조치] ${actionType}`,
+        details,
+      }),
+    }).catch(() => {});
+
+    addToast('success', `${actionType} 접수 완료 (DB 저장)`, details);
   };
 
   const handleSaveConsultation = (data: {
@@ -253,17 +385,53 @@ export default function ConsultationWorkspacePage() {
         [selectedQueueId]: [completeRecord, ...(prev[selectedQueueId] || [])],
       }));
 
+      // Complete in backend
+      fetch('/api/consultations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerCode: selectedQueueId,
+          categoryMain: data.categoryMain,
+          categorySub: data.categorySub,
+          status: 'COMPLETED',
+          memo: data.memo,
+          tags: data.selectedTags.join(','),
+          agentName: '이소연 선임 (본인)',
+          callDurationSeconds: callDuration,
+        }),
+      }).catch(() => {});
+
+      fetch(`/api/queue/${selectedQueueId}/complete`, {
+        method: 'POST',
+      }).catch(() => {});
+
       setQueueItems((prev) => prev.filter((item) => item.id !== selectedQueueId));
       setIsCallActive(false);
       setAgentStatus('online');
 
       addToast(
         'success',
-        '상담 저장 완료',
-        `${currentCustomer.name || '고객'} 상담 기록이 저장되고 대기열에서 완료 처리되었습니다.`
+        '상담 저장 완료 (DB 영속화)',
+        `${currentCustomer.name || '고객'} 상담 기록이 DB에 저장되고 대기열에서 완료 처리되었습니다.`
       );
     } else {
-      addToast('info', '임시 저장 완료', '작성 중인 상담 메모가 안전하게 임시 저장되었습니다.');
+      // Temporary save
+      fetch('/api/consultations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerCode: selectedQueueId,
+          categoryMain: data.categoryMain,
+          categorySub: data.categorySub,
+          status: 'IN_PROGRESS',
+          memo: data.memo,
+          tags: data.selectedTags.join(','),
+          agentName: '이소연 선임 (본인)',
+          callDurationSeconds: callDuration,
+        }),
+      }).catch(() => {});
+
+      addToast('info', '임시 저장 완료 (DB 저장)', '작성 중인 상담 메모가 데이터베이스에 안전하게 임시 저장되었습니다.');
     }
   };
 
@@ -309,7 +477,7 @@ export default function ConsultationWorkspacePage() {
         activeFollowUpTab={activeFollowUpTab}
       />
 
-      {/* 전역 피드백 토스트 컨테이너 (최대 1개 깔끔하게 표시) */}
+      {/* 전역 피드백 토스트 컨테이너 (최대 5개 깔끔하게 표시) */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );

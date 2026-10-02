@@ -16,3 +16,11 @@ keys.txt
 **/.next/
 **/out/
 **/build/
+
+# Backend Gradle and JVM build artifacts
+**/.gradle/
+**/bin/
+*.class
+*.jar
+*.war
+

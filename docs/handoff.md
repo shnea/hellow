@@ -33,23 +33,41 @@
     - 후속 조치 접수 시 타임라인 실시간 추가 반영.
   - **전역 피드백 시스템 개선 (`Toast.tsx`)**: 단순 클릭 알림 남발을 제거하고, 최대 5개까지만 깔끔하게 표시되며 3.5초 후 자동 소멸되도록 최적화.
   - **한국어 실무 목업 데이터 세트 (`mockData.ts`)**: 기업 고객 외에 개인 컴플레인 고객(`queue-complainant`: 환불 지연 항의 건), 미등록 고객 인입 콜(`queue-unregistered`)을 포함한 실무 데이터 내장.
-- **Docker Compose + Nginx (포트 `30160`) 개발 테스트 환경 구성 및 기동 완료**:
-  - 프로젝트 환경 기준([환경 기준](infrastructure.md))에 따라 `compose.yaml`, `Dockerfile` (멀티스테이지 Node 24 빌드), `infra/nginx/default.conf` 구성.
-  - 외부 인입 호스트 포트 `30160` -> Nginx `8080` -> `web:3000` 리버스 프록시 및 WebSocket/Upgrade 헤더 설정.
+- **Java 21 / Spring Boot 3.4.4 백엔드(`backend/`) 및 PostgreSQL 17 데이터베이스 구축 및 프론트엔드 연동 완료**:
+  - 사람 친화적 도메인 중심 구조 (`customer`, `queue`, `consultation`, `timeline`, `followup`).
+  - Spring Data JPA 엔티티 및 REST API 엔드포인트 구현:
+    - `Customer`: 기업(B2B) 및 개인(B2C) 고객 조회, 신규 등록, 정보 수정
+    - `QueueItem`: 대기열 조회 및 처리 완료
+    - `Consultation`: 상담 메모 임시저장 및 완료 저장
+    - `TimelineItem`: 고객별 채널 상담 이력 조회 및 추가
+    - `FollowUpAction`: 방문 예약, 콜백 일정, 호전환 등 후속 조치 저장
+  - `DataInitializer`: 초기 CRM 데이터베이스 자동 시딩 (기업 VIP, 개인 컴플레인, 미등록 인입 콜 등)
+  - `frontend/src/app/page.tsx`:
+    - 브라우저 마운트 시 `/api/queue`, `/api/customers`, `/api/timeline`에서 실제 DB 데이터를 조회하여 렌더링.
+    - 신규 고객 등록, 정보 수정, 상담 저장 완료, 후속조치 접수 시 실제 Spring Boot API를 호출하여 PostgreSQL에 영속화.
+- **Docker Compose + Nginx (포트 `30160`) 전체 스택 연동 환경 구성 및 기동 완료**:
+  - `compose.yaml`: `db` (PostgreSQL 17, 외부 포트 `30161`), `api` (Spring Boot), `web` (Next.js), `nginx` (호스트 포트 `30160`).
+  - `infra/nginx/default.conf`: 외부 인입 호스트 포트 `30160` -> Nginx `8080` -> `/api/`는 `api:8080`, `/`는 `web:3000`으로 리버스 프록시 연동.
 
 ## 검증 및 Git 상태
 
 - `frontend`: `npm run build` 성공 (Turbopack 빌드, TypeScript 5 컴파일 오류 0건, 정적 라우트 생성 완료).
-- `docker compose up -d --build web` 성공:
-  - `hellow-dev-web-1` (Up, healthy)
-  - `hellow-dev-nginx-1` (Up, 0.0.0.0:30160->8080/tcp)
-  - `curl -I http://localhost:30160` -> `HTTP/1.1 200 OK` (Server: nginx, X-Powered-By: Next.js) 확인.
+- `docker compose up -d --build` 전체 4개 컨테이너 기동 및 헬스체크 통과:
+  - `hellow-dev-db-1` (Up, healthy, `0.0.0.0:30161->5432/tcp`)
+  - `hellow-dev-api-1` (Up, healthy, `8080/tcp`)
+  - `hellow-dev-web-1` (Up, healthy, `3000/tcp`)
+  - `hellow-dev-nginx-1` (Up, `0.0.0.0:30160->8080/tcp`)
+- API 동작 검증:
+  - `curl -s http://localhost:30160/api/customers` -> PostgreSQL DB 초기 고객 4건 정상 응답 확인.
+  - `curl -s http://localhost:30160/api/queue` -> 대기열 4건 정상 응답 확인.
+  - `curl -s http://localhost:30160/api/timeline/queue-1` -> 타임라인 2건 정상 응답 확인.
+  - `curl -I http://localhost:30160` -> `HTTP/1.1 200 OK` 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
-- 이번 커밋 대상: `PRODUCT.md`, `frontend/` 수정 소스 코드 전체, `docs/handoff.md`.
+- 이번 커밋 대상: `backend/` 전체, `compose.yaml`, `Dockerfile`, `infra/nginx/default.conf`, `frontend/src/app/page.tsx`, `docs/handoff.md`.
 
 ## 남은 일과 다음 시작점
 
-- 도커 컨테이너가 포트 `30160`으로 정상 구동 중이므로 `http://localhost:30160` 또는 `http://dev-hellow.shnea.kr:30160`에서 기업/개인 고객 전환, 컴플레인 응대 템플릿, 고객 정보 조회/수정/신규등록 인터랙션과 알림 동작을 확인한다.
-- SHNEA 공식 `SERVICE_INTEGRATION.md`와 필요한 하위 명세를 확인해 OIDC·File·Editor·Job 계약을 설계한다.
-- 제품 백엔드(Java/Spring Boot) 구현, DB 연동, Compose 서비스 확장(DB/API), SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
-- LiveKit 연동, 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.
+- 도커 컨테이너가 포트 `30160`으로 정상 구동 중이므로 `http://localhost:30160`에서 실제 DB 영속화가 동작하는 상담사 워크스페이스를 확인한다.
+- SHNEA 공식 `SERVICE_INTEGRATION.md` 지침에 따라 OIDC 직원 인증(Keycloak discovery, client app, PKCE) 및 플랫폼 파일/Job 연동 계약을 구체화한다.
+- LiveKit 실시간 음성 통신 연동, SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
+- 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.

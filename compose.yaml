@@ -1,5 +1,44 @@
 name: hellow-dev
+
 services:
+  db:
+    image: postgres:17.11-alpine
+    environment:
+      TZ: Asia/Seoul
+      POSTGRES_DB: hellow
+      POSTGRES_USER: hellow
+      POSTGRES_PASSWORD: hellow_dev_password
+    ports:
+      - "30161:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      TZ: Asia/Seoul
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: hellow
+      DB_USER: hellow
+      DB_PASSWORD: hellow_dev_password
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 25s
+
   web:
     build:
       context: .
@@ -8,11 +47,15 @@ services:
       TZ: Asia/Seoul
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
+
   nginx:
     image: nginx:1.28-alpine
     environment:
@@ -24,3 +67,8 @@ services:
     depends_on:
       web:
         condition: service_healthy
+      api:
+        condition: service_healthy
+
+volumes:
+  db-data:
