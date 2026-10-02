@@ -2,9 +2,9 @@
 
 ## 2026-10-03 인증·파일 설정과 배포 경계
 
-[리뷰 수정 결과](review-repair.md)를 현재 부분 구현의 정본으로 읽는다. `PLATFORM_OIDC_ISSUER`, API access token 전용 `HELLOW_API_AUDIENCE`, 첫 조직 생성용 `ADMIN_OIDC_ISSUER`/`ADMIN_OIDC_SUB`, 승인된 `HELLOW_ATTACHMENT_RETENTION_CODE`를 운영 계약에 맞춰 지정한다. 값이 없으면 인증/파일 업로드를 거부한다. ID token이나 공용 웹 client audience를 API audience로 대체하지 않는다.
+[리뷰 수정 결과](review-repair.md)를 현재 부분 구현의 정본으로 읽는다. `PLATFORM_OIDC_ISSUER`와 `PLATFORM_OIDC_CLIENT_ID`, 첫 조직 생성용 `ADMIN_OIDC_ISSUER`/`ADMIN_OIDC_SUB`, 승인된 `HELLOW_ATTACHMENT_RETENTION_CODE`를 운영 계약에 맞춰 지정한다. 현재 플랫폼의 프로젝트 realm은 `app` access token에 `aud=account`, `azp=app`, `typ=Bearer`를 발급한다. Hellow는 서명·issuer·만료와 이 세 claim, 활성 조직 Membership을 검증한다. 플랫폼이 API 전용 audience를 발급하는 환경에서만 `HELLOW_API_AUDIENCE`를 설정해 더 엄격한 검사를 적용한다. ID token은 받지 않는다.
 
-Compose의 `.env.dev` 주입을 이용하되 실제 비밀값은 커밋하지 않는다. 이전 조직 미지정 데이터는 격리되며 데모 시딩은 기본 비활성화다. V2 migration과 개발 Hibernate update를 운영 이관 검증으로 간주하지 않는다. 원래 개발 DB 및 NAS에는 이번 수정본을 배포하지 않았으며 백업/복구·이전 PUBLIC 파일 정리·실제 연동 수락 후 적용해야 한다.
+Compose의 `.env.dev` 주입을 이용하되 실제 비밀값은 커밋하지 않는다. 이전 조직 미지정 데이터는 격리되며 데모 시딩은 기본 비활성화다. V2/V3 migration과 개발 Hibernate update를 운영 이관 검증으로 간주하지 않는다. 개발 DB 전환은 별도 백업·복원 검증과 첫 조직 이관 후 수행하며 운영 NAS 적용은 이전 PUBLIC 파일 정리·실제 연동 수락을 거쳐야 한다.
 
 사용자가 지정한 hellow 프로젝트의 환경·배포 기준이다. 실제 서비스와 배포 파일을 구현할 때 이 문서를 따른다.
 
@@ -85,4 +85,4 @@ DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다
 
 ## 현재 상태
 
-개발 Compose·Nginx와 개발 도메인은 실행 중이다. 현재 실행 중인 웹/API는 서로 호환되는 이전 버전이며, main 웹/API의 개발 환경 동시 전환은 API 전용 OIDC audience 발급과 첫 조직 이관 검증 후 진행한다. 2026-10-03 백업·복원 및 이관 연습 결과와 실제 실행 버전은 [작업 인계 기록](handoff.md)에 둔다. 암호화된 환경 파일과 배포 자동화, 운영 NAS 배포는 아직 검증하지 않았다.
+개발 Compose·Nginx와 개발 도메인은 실행 중이다. 현재 실행 중인 웹/API는 서로 호환되는 이전 버전이며, main 웹/API의 개발 환경 동시 전환은 플랫폼 토큰 검증·첫 조직 이관 검증 후 진행한다. 2026-10-03 백업·복원 및 이관 연습 결과와 실제 실행 버전은 [작업 인계 기록](handoff.md)에 둔다. 암호화된 환경 파일과 배포 자동화, 운영 NAS 배포는 아직 검증하지 않았다.

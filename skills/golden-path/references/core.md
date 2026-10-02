@@ -15,4 +15,4 @@
 - 협업: 사람 친화적 소스 구조. 큰 작업 단위 완료·검증 통과 후 인계 갱신, 커밋·push. [개발 원칙](../../../docs/development.md).
 - 실행·검증 명령: [검증 영역](domains/11-validation.md#실제-실행-명령). 설치 확인을 UI·제품·운영 검증 완료로 취급하지 않는다.
 - 다음 시작점·남은 일: [작업 인계](../../../docs/handoff.md).
-- 남은 수락 조건: 실제 OIDC API audience, 첫 조직 Membership, 파일 보존 정책, 기존 PUBLIC 파일 정리, 운영 DB 이관·복구, HTTPS/2인 통화와 NAS 배포 검증. [범위](domains/02-scope.md)와 [검증](domains/11-validation.md)에 구현 상태와 미실행 항목을 나눈다. NFR 수치·요금 등 미정 사항은 근거를 확인해 정한다.
+- 남은 수락 조건: 실제 플랫폼 OIDC access token으로 로그인, 첫 조직 Membership과 기존 기록 이관, 파일 업로드, 기존 PUBLIC 파일 정리, 운영 DB 이관·복구, HTTPS/2인 통화와 NAS 배포 검증. [범위](domains/02-scope.md)와 [검증](domains/11-validation.md)에 구현 상태와 미실행 항목을 나눈다. NFR 수치·요금 등 미정 사항은 근거를 확인해 정한다.

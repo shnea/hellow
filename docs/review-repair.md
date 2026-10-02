@@ -6,7 +6,7 @@
 
 | 항목 | 변경과 검증 |
 | --- | --- |
-| F01 인증·LiveKit | Spring Security Bearer JWT 서명·issuer·만료·명시적 API audience 검증. boolean 쿠키·개발 로그인 우회 제거. 담당 상담만 방 토큰 발급, 마이크만 publish, roomAdmin 미부여. 2분 토큰과 영속 종료 상태 기반 참가자 제거 재시도. 서명·issuer·audience·만료·익명 요청 거부 테스트. |
+| F01 인증·LiveKit | Spring Security Bearer JWT 서명·issuer·만료와 플랫폼 access token의 `aud`·`azp`·`typ` 검증. boolean 쿠키·개발 로그인 우회 제거. 담당 상담만 방 토큰 발급, 마이크만 publish, roomAdmin 미부여. 2분 토큰과 영속 종료 상태 기반 참가자 제거 재시도. 잘못된 서명·issuer·client·token type·만료·익명 요청 거부 테스트. |
 | F02 조직 격리 | Organization, `(issuer, sub)` Membership, Permission, ORG Data Scope 서버 검증. 고객·Queue·상담·이력·후속 조치·파일을 조직별 조회. 타 조직 403/404·권한 회수·권한 부족 테스트. TEAM/SELF는 허용하지 않으며 향후 구현 대상. |
 | F03 파일 | PRIVATE 업로드, 서버의 조직·상담 소유 관계 저장, URL 발급 전 권한 확인. 보존 정책은 운영자가 설정해야 하며 누락 시 503. 다른 상담 파일을 문서에 참조하면 거부. 이전 PUBLIC 파일은 별도 정리 대상. |
 | F04 초기 조회 | 서버 `/api/me` 확인 후 조회. 오류를 화면에 표시하며 목업으로 대체하지 않음. 조회 실패·권한 부족 때 쓰기 차단. |
@@ -34,10 +34,10 @@
 
 ## 설정 및 남은 수락 조건
 
-1. `PLATFORM_OIDC_ISSUER`와 **API access token용** `HELLOW_API_AUDIENCE`를 운영자와 확정해야 한다. 공용 웹 client `app`의 ID token은 API 토큰으로 받지 않는다. 누락은 거부로 처리한다. API audience 발급 계약 없이 로그인 성공을 보장하지 않는다.
+1. `PLATFORM_OIDC_ISSUER`와 `PLATFORM_OIDC_CLIENT_ID`를 설정한다. 플랫폼의 실제 프로젝트 realm access token은 `aud=account`, `azp=app`, `typ=Bearer`이며, Hellow가 서명·issuer·만료와 이 조합을 확인한다. `app`의 ID token 및 다른 client 토큰은 거부한다. API 전용 audience가 별도로 발급되는 환경에만 `HELLOW_API_AUDIENCE`를 지정해 추가 검사를 적용한다. 실제 직원 로그인은 개발 배포 후 확인해야 한다.
 2. `ADMIN_OIDC_ISSUER`, `ADMIN_OIDC_SUB`는 첫 조직 생성 관리자에만 적용한다. `/api/admin/organizations`에서 조직과 초기 관리자 Membership을 지정하고 `/api/admin/memberships`에서 조직 관리자가 직원을 등록한다. 플랫폼 관리자에게 고객 조회 권한을 자동 부여하지 않는다. 관리자 UI·마지막 관리자 이관·TEAM/SELF·ACD 가용 상담사 상태는 후속 작업이다.
 3. `HELLOW_ATTACHMENT_RETENTION_CODE`에 플랫폼의 승인된 보존 정책을 지정한다. 기존 PUBLIC 파일을 자동으로 안전해졌다고 보지 않는다. 기존 소유 관계·공개 URL·보존 상태를 별도 조사·이관한다.
-4. 기존 조직 미지정 행은 그대로 격리하며 임의 조직 배정·삭제·데모 재시딩을 하지 않는다. 개발의 Hibernate update와 V2 nullable migration은 운영 스키마 이관 완료가 아니다. 운영 적용 전 백업/복구·마이그레이션·구신 앱 호환 검증이 필요하다.
+4. 기존 조직 미지정 행은 그대로 격리하며 임의 조직 배정·삭제·데모 재시딩을 하지 않는다. 개발의 Hibernate update와 V2 nullable/V3 상태 backfill migration은 운영 스키마 이관 완료가 아니다. 사용자가 개발 DB의 기존 행을 첫 개발 조직으로 이관하도록 지정했으며, 운영 적용 전에는 별도 백업/복구·마이그레이션·구신 앱 호환 검증이 필요하다.
 5. 미등록 상태에 쌓인 후속 이력은 Queue 맥락에 보존된다. 고객 등록 전에 생성된 이력의 고객 맥락 소급 연결은 후속 보완 대상이다. 상담별 초안과 완료 기록은 고객 연결 이후 실제 ID를 저장한다.
 6. 실제 OIDC·파일 정책·NAS 배포·HTTPS 마이크·2인 WebRTC·LiveKit 제거 실패/재시작·권한 회수 후 실제 연결 종료는 통합 수락 전이다. PSTN·전환·메시징·엔지니어 가용 상태는 미연동. 로컬 상담사 상태 선택은 서버의 ACD 가용 상태를 바꾸지 않는다.
 

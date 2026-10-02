@@ -50,7 +50,6 @@ class JwtBoundaryTest {
     issuer = "http://127.0.0.1:" + server.getAddress().getPort();
     var properties = mock(PlatformProperties.class);
     when(properties.getOidcIssuer()).thenReturn(issuer);
-    when(properties.getApiAudience()).thenReturn("hellow-api");
     when(properties.getOidcClientId()).thenReturn("app");
     decoder = new SecurityConfiguration().jwtDecoder(properties);
   }
@@ -62,35 +61,52 @@ class JwtBoundaryTest {
 
   String token(String tokenIssuer, String audience, Instant expiry, RSAKey signingKey)
       throws Exception {
+    return token(tokenIssuer, audience, expiry, signingKey, "app", "Bearer");
+  }
+
+  String token(
+      String tokenIssuer,
+      String audience,
+      Instant expiry,
+      RSAKey signingKey,
+      String authorizedClient,
+      String tokenType)
+      throws Exception {
+    var claims =
+        new JWTClaimsSet.Builder()
+            .subject("alice")
+            .issuer(tokenIssuer)
+            .audience(audience)
+            .issueTime(new Date())
+            .expirationTime(Date.from(expiry));
+    if (authorizedClient != null) claims.claim("azp", authorizedClient);
+    if (tokenType != null) claims.claim("typ", tokenType);
     var signed =
         new SignedJWT(
             new JWSHeader.Builder(JWSAlgorithm.RS256)
                 .keyID("test-key")
                 .type(JOSEObjectType.JWT)
                 .build(),
-            new JWTClaimsSet.Builder()
-                .subject("alice")
-                .issuer(tokenIssuer)
-                .audience(audience)
-                .issueTime(new Date())
-                .expirationTime(Date.from(expiry))
-                .build());
+            claims.build());
     signed.sign(new RSASSASigner(signingKey));
     return signed.serialize();
   }
 
   @Test
-  void verifiesSignatureIssuerExpiryAndApiAudience() throws Exception {
+  void verifiesPlatformAccessTokenAndRejectsOtherTokens() throws Exception {
     assertThat(
             decoder
-                .decode(token(issuer, "hellow-api", Instant.now().plusSeconds(60), key))
+                .decode(token(issuer, "account", Instant.now().plusSeconds(60), key))
                 .getSubject())
         .isEqualTo("alice");
     for (String value :
         List.of(
-            token("https://wrong.example", "hellow-api", Instant.now().plusSeconds(60), key),
+            token("https://wrong.example", "account", Instant.now().plusSeconds(60), key),
             token(issuer, "app", Instant.now().plusSeconds(60), key),
-            token(issuer, "hellow-api", Instant.now().minusSeconds(120), key)))
+            token(issuer, "account", Instant.now().plusSeconds(60), key, "other-app", "Bearer"),
+            token(issuer, "account", Instant.now().plusSeconds(60), key, null, "Bearer"),
+            token(issuer, "account", Instant.now().plusSeconds(60), key, "app", "ID"),
+            token(issuer, "account", Instant.now().minusSeconds(120), key)))
       assertThatThrownBy(() -> decoder.decode(value)).isInstanceOf(JwtException.class);
     var generator = KeyPairGenerator.getInstance("RSA");
     generator.initialize(2048);
@@ -99,15 +115,32 @@ class JwtBoundaryTest {
         new RSAKey.Builder((RSAPublicKey) pair.getPublic())
             .privateKey((RSAPrivateKey) pair.getPrivate())
             .build();
-    String value = token(issuer, "hellow-api", Instant.now().plusSeconds(60), forged);
+    String value = token(issuer, "account", Instant.now().plusSeconds(60), forged);
     assertThatThrownBy(() -> decoder.decode(value)).isInstanceOf(JwtException.class);
   }
 
   @Test
-  void unconfiguredAudienceFailsClosed() {
+  void configuredApiAudienceRemainsStrict() throws Exception {
     var properties = mock(PlatformProperties.class);
     when(properties.getOidcIssuer()).thenReturn(issuer);
-    when(properties.getApiAudience()).thenReturn("");
+    when(properties.getOidcClientId()).thenReturn("app");
+    when(properties.getApiAudience()).thenReturn("hellow-api");
+    var strictDecoder = new SecurityConfiguration().jwtDecoder(properties);
+    assertThatThrownBy(
+            () -> strictDecoder.decode(token(issuer, "account", Instant.now().plusSeconds(60), key)))
+        .isInstanceOf(JwtException.class);
+    assertThat(
+            strictDecoder
+                .decode(token(issuer, "hellow-api", Instant.now().plusSeconds(60), key))
+                .getSubject())
+        .isEqualTo("alice");
+  }
+
+  @Test
+  void unconfiguredClientFailsClosed() {
+    var properties = mock(PlatformProperties.class);
+    when(properties.getOidcIssuer()).thenReturn(issuer);
+    when(properties.getOidcClientId()).thenReturn("");
     assertThatThrownBy(() -> new SecurityConfiguration().jwtDecoder(properties).decode("anything"))
         .isInstanceOf(BadJwtException.class);
   }

@@ -15,6 +15,5 @@ platform:
   oidc-issuer: https://identity.example/realms/test
 hellow:
   media-cleanup-enabled: false
-  api-audience: hellow-api
   attachment-retention-code: test-policy
   seed-demo: false
