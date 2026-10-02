@@ -1,0 +1,7 @@
+{
+  "prompt": "High-fidelity enterprise B2B CRM desktop web UI design for 'hellow' consultation workspace, Option B focusing on Queue & Task flow. Modern Korean interface, edge-to-edge full screen UI without browser frame or device mockup. Top bar: Deep navy #182d4d header with live status badges and agent profile. Left column (22% width): Queue & incoming work items (Incoming calls with blinking badges, waiting callbacks, assigned customer tickets, queue counters). Center column (46% width): Active call customer profile summary card at the top, and below it a large active consultation note input area with rich form fields, categories, and quick tag pills. Right column (32% width): Customer interaction timeline history and post-call transfer/follow-up action panel. Color accents in warm amber #d28b24 and soft blue-gray background #f0f4fa. Korean UI text (처리 대기열, 실시간 인바운드, 고객 요약, 실시간 상담 메모, 과거 이력 타임라인, 후속 업무). Crisp enterprise UI layout.",
+  "direction": "transit",
+  "label": "B · 처리할 일과 상담 흐름 중심",
+  "approved": true,
+  "user_combination": "B안 기반(대기열/작업흐름) + C안의 좌측 글로벌 내비게이션 아이콘 탭 결합"
+}

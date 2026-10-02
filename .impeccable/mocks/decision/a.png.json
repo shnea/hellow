@@ -1,0 +1,5 @@
+{
+  "prompt": "High-fidelity enterprise B2B CRM desktop web UI design for 'hellow' consultation workspace. Modern Korean interface, edge-to-edge full screen UI without browser frame or device mockup. Top bar: sticky call control bar showing ongoing call status (active call timer 04:12, caller phone number and name, call buttons: Mute, Hold, Transfer, End Call) in dark teal #123d3c. Three vertical main panels: Left panel (23% width) displaying detailed customer context profile (Name, Company, Grade VIP, Contact, tags, address, customer notes). Middle panel (32% width) showing consultation timeline history (chronological past calls, tickets, channel icons, past agent notes). Right panel (45% width) showing active consultation workpad with rich-text consultation note editor, category selector dropdowns, disposition tags, callback scheduler, wrap-up save button. Crisp flat cards, soft mint grey background #eef4f2, clean borders, high information density, Korean typography and text labels.",
+  "direction": "assigned",
+  "label": "A · 고객 맥락과 기록을 나란히"
+}
