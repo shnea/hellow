@@ -7,7 +7,7 @@ import type { ConsultationDraft } from '@/lib/workspace-data';
 vi.mock('@/components/SidebarGNB', () => ({ SidebarGNB: () => <nav>Navigation</nav> }));
 vi.mock('@/hooks/use-call', () => ({ useCall: () => ({status:'idle',duration:0,setMuted:vi.fn()}) }));
 vi.mock('@/components/QueuePanel', () => ({ QueuePanel: ({queueItems,onSelectQueueItem,onAcceptCall}: {queueItems:{id:string}[];onSelectQueueItem:(id:string)=>void;onAcceptCall:(q:unknown)=>void}) => <div>{queueItems.map(q=><div key={q.id}><button onClick={()=>onSelectQueueItem(q.id)}>{q.id}</button><button onClick={()=>onAcceptCall?.(q)}>accept-{q.id}</button></div>)}</div> }));
-vi.mock('@/components/ActiveWorkspace', () => ({ ActiveWorkspace: ({customer,initialDraft,onDraftChange,onSaveConsultation}: {customer:{id:string;name:string};initialDraft:ConsultationDraft;onDraftChange:(d:ConsultationDraft)=>void;onSaveConsultation:(d:ConsultationDraft & {isComplete:boolean})=>Promise<void>}) => <section><p>{customer.id}:{customer.name}</p><p>{initialDraft?.memo || 'empty-draft'}</p>
+vi.mock('@/components/ActiveWorkspace', () => ({ ActiveWorkspace: ({customer,initialDraft,onDraftChange,onSaveConsultation,readOnly}: {customer:{id:string;name:string};initialDraft:ConsultationDraft;readOnly:boolean;onDraftChange:(d:ConsultationDraft)=>void;onSaveConsultation:(d:ConsultationDraft & {isComplete:boolean})=>Promise<void>}) => <section><p>{customer.id}:{customer.name}</p><p>{readOnly?'editor-readonly':'editor-editable'}</p><p>{initialDraft?.memo || 'empty-draft'}</p>
   <button onClick={()=>onDraftChange({categoryMain:'Support',categorySub:'Product',status:'in_progress',selectedTags:[],memo:'A unique draft'})}>type-draft</button>
   <button onClick={()=>void onSaveConsultation({...initialDraft,categoryMain:'Support',categorySub:'Product',selectedTags:[],memo:initialDraft?.memo || '',isComplete:true}).catch(()=>{})}>complete</button></section> }));
 vi.mock('@/components/ContextActionPanel', () => ({ ContextActionPanel: () => <aside>History</aside> }));
@@ -33,6 +33,19 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('explains the waiting editor and enables writing from the accepted server response',async()=>{
+    items=[{...queue(),status:'WAITING',assignedSubject:''}];
+    const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
+      if(path==='/api/queue/queue-1/accept'){items=[queue()];return response(items[0]);}
+      return original(path,options);
+    });
+    render(<Workspace/>);await flush();expect(screen.getByText('editor-readonly')).toBeTruthy();
+    expect(screen.getByText('상담 기록 · 읽기 전용')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'상담 수락 후 기록 작성'}));await flush();
+    expect(screen.getByText('editor-editable')).toBeTruthy();
+    expect(screen.queryByText('상담 기록 · 읽기 전용')).toBeNull();
+  });
   it('uses explicit customer ID and latest profile instead of queue-keyed mock data',async()=>{
     render(<Workspace/>);await flush();expect(await screen.findByText('cust-1:Latest server name')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([path])=>path==='/api/timeline/customer/cust-1')).toBe(true);

@@ -139,7 +139,10 @@ export default function ConsultationWorkspacePage() {
     finally { busyRef.current = false; setBusy(false); setRefresh(value => value + 1); }
   };
   const accept = (q: QueueItem) => { void run(async () => {
-    await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`, { method: 'POST' }); setSelected(q.id); setAgentStatus('busy');
+    const accepted = queueItem(await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`, { method: 'POST' }));
+    setQueue(previous => previous.map(item => item.id === accepted.id ? accepted : item));
+    queueRef.current = queueRef.current.map(item => item.id === accepted.id ? accepted : item);
+    setSelected(q.id); setAgentStatus('busy');
     notify('success', '상담 수락', '배정이 확인됐습니다. 음성 연결 상태는 통화 표시에서 확인해 주세요.');
   }).catch(() => {}); };
   const endCall = () => { if (activeCall) void run(async () => {
@@ -187,7 +190,18 @@ export default function ConsultationWorkspacePage() {
             <select aria-label="기존 고객 연결" value="" disabled={busy || Boolean(queueError)} onChange={event=>linkCustomer(event.target.value)} className="ml-2 bg-slate-800 p-1 rounded">
               <option value="">고객 선택</option>{Object.values(customers).filter(c=>c.isRegistered).map(c=><option key={c.id} value={c.id}>{c.name} · {c.phoneNumber}</option>)}
             </select></label>}
-          {!writable && <p className="px-4 py-2 text-sm bg-slate-800">참고 조회 · {item.assignedAgent ? `${item.assignedAgent} 담당` : '상담을 수락하면 기록을 작성할 수 있습니다.'}</p>}
+          {!writable && <div className="px-4 py-3 text-sm bg-slate-800 flex flex-wrap items-center justify-between gap-3" role="status">
+            <div><p className="font-semibold text-slate-100">상담 기록 · 읽기 전용</p>
+              <p className="text-slate-300">{item.status === 'WAITING'
+                ? '이 상담을 수락하면 에디터 입력·줄바꿈·첨부 기능을 사용할 수 있습니다.'
+                : item.assignedAgent ? `${item.assignedAgent} 담당 상담입니다. 본인이 수락한 상담에서 기록을 작성할 수 있습니다.` : '완료된 상담은 이력에서 확인할 수 있습니다.'}</p></div>
+            {item.status === 'WAITING' && can('queue:accept') && can('consultation:write') && <button type="button"
+              className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50"
+              disabled={busy || Boolean(queueError)} onClick={() => accept(item)}>
+              {busy ? '수락 중…' : item.type === 'call' ? '수신 후 기록 작성' : '상담 수락 후 기록 작성'}
+            </button>}
+          </div>}
+          {writable && !can('consultation:write') && <p role="status" className="px-4 py-3 text-sm bg-slate-800">상담 기록 작성 권한이 없습니다. 조직 관리자에게 권한을 요청해 주세요.</p>}
           {draftError && <p role="alert" className="p-3 text-amber-300">{draftError}<button className="ml-2 underline" onClick={() => {setDraftReady({});setRefresh(v=>v+1);}}>초안 다시 조회</button></p>}
           {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId}
             initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} busy={busy}
