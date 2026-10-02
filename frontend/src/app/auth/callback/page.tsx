@@ -73,12 +73,20 @@ function AuthCallbackContent() {
           storedVerifier
         );
 
-        // ID 토큰 디코딩 (간이 JWT payload 파싱)
+        // ID 토큰 디코딩 (UTF-8 한글 깨짐 방지 TextDecoder 파싱)
         let agentName = '인증 상담사';
         let email = '';
         if (tokenData.id_token) {
           try {
-            const payload = JSON.parse(atob(tokenData.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            const base64Url = tokenData.id_token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            const decodedJson = new TextDecoder('utf-8').decode(bytes);
+            const payload = JSON.parse(decodedJson);
             agentName = payload.given_name || payload.name || payload.preferred_username || '상담사';
             email = payload.email || '';
           } catch (e) {

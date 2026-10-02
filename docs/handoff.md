@@ -101,6 +101,12 @@
   - 하단 Keycloak 리다이렉트/콜백 경로 안내 박스 완전 제거.
   - **[개발자 모드 즉시 접속]**: 프로덕션 환경에서는 숨기고 개발/로컬 환경(`localhost`, `dev-*`, non-production)에서만 조건부 렌더링.
   - **OIDC 로그인 트리거 안정화 및 prompt=login 강제 적용**: 페이지 진입 직후 클릭 시 비동기 설정 미완료로 발생하던 오류를 해결하고 플랫폼 확정 Issuer 자동 fallback을 탑재함. 또한 `prompt: 'login'` 파라미터를 전달하여 Keycloak 세션 잔류로 인한 자동 로그인을 방지하고 항상 Keycloak 로그인 화면이 뜨도록 강제.
+  - **로그인 한글 닉네임 UTF-8 디코딩 복원 (`auth/callback/page.tsx`)**: JWT ID 토큰 디코딩 시 단순 `atob` 사용으로 한글 닉네임 깨짐 현상을 `TextDecoder('utf-8')` 파싱으로 전면 교체하여 한글 닉네임("이소연", "홍길동" 등)이 100% 정상 표시되도록 수정.
+- **상담 메모장 SHNEA 공식 에디터 단독 연동 및 다크 테마·높이 최적화 (`ActiveWorkspace.tsx`, `ShneaConsultationEditor.tsx`)**:
+  - 기존의 [빠른 메모] 탭, 모드 선택 토글 버튼, 우측 별도 첨부파일 버튼 및 textarea를 완전히 제거하고 **SHNEA 공식 에디터를 단독이자 기본 에디터로 상시 적용**.
+  - **다크 테마 일체화**: `@shnea/editor`의 CSS 변수(`--se-bg: #0b1120`, `--se-text: #f8fafc`, `--se-line: #334155`, `--se-raised: #1e293b` 등) 및 툴바·팝오버 스타일을 CRM 다크 슬레이트 톤과 100% 일치시켜 라이트 테마 부조화 완전 해결.
+  - **높이 최적화**: 기존 제한 높이를 해제하고 부모 flex 컨테이너에 맞춘 `flex-1 h-full min-h-[380px]`를 적용하여 하단 액션 바까지 시원하게 꽉 채우도록 개선.
+  - **템플릿 연동**: `@shnea/editor`의 `fromMarkdown`을 활용하여 '자주 쓰는 템플릿' 클릭 시 에디터에 마크다운 서식이 즉시 동기화되도록 연동.
 - **슬림 GNB 실제 Keycloak OIDC 로그아웃(RP-Initiated Logout) 연동 및 불필요한 플랫폼 연동 모달 완전 제거 (`SidebarGNB.tsx`, `pkce.ts`, `auth/callback/page.tsx`)**:
   - GNB [로그아웃] 클릭 시 Keycloak OIDC 로그아웃 엔드포인트(`.../protocol/openid-connect/logout`, `id_token_hint`)를 호출하여 플랫폼 인증 서버의 세션 쿠키까지 완전히 파기.
   - Keycloak 리다이렉트 URI 검증 규칙(`auth.md`: "로그아웃 복귀는 등록 콜백 또는 그 origin의 홈(`/`)을 사용한다")에 맞추어 `post_logout_redirect_uri`를 `${window.location.origin}/`로 설정. Keycloak이 허용된 홈(`/`)으로 정상 복귀시킨 후, 애플리케이션 미들웨어가 `/login`으로 깨끗하게 자동 리다이렉트 처리.

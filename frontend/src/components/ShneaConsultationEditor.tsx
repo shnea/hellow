@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { emptyDocument, type EditorDocument } from '@shnea/editor';
+import { emptyDocument, fromMarkdown, type EditorDocument } from '@shnea/editor';
 import '@shnea/editor/style.css';
 import { AlertCircle } from 'lucide-react';
 
@@ -26,12 +26,33 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
   readOnly = false,
 }) => {
   const [mounted, setMounted] = useState(false);
-  const [editorValue, setEditorValue] = useState<EditorDocument>(emptyDocument());
+  const [editorValue, setEditorValue] = useState<EditorDocument>(() => {
+    if (initialText && initialText.trim().length > 0) {
+      try {
+        return fromMarkdown(initialText);
+      } catch {
+        return emptyDocument();
+      }
+    }
+    return emptyDocument();
+  });
   const [editorError, setEditorError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // 외부 initialText 변경 시 동기화 (템플릿 삽입, 인용 등)
+  useEffect(() => {
+    if (mounted && initialText !== undefined) {
+      try {
+        const newDoc = initialText.trim().length > 0 ? fromMarkdown(initialText) : emptyDocument();
+        setEditorValue(newDoc);
+      } catch (e) {
+        console.error('Failed to parse document from text:', e);
+      }
+    }
+  }, [initialText, mounted]);
 
   // SHNEA 공식 에디터 첨부파일 어댑터 (editor.md 표준 규격 준수)
   const attachments = useMemo(() => ({
@@ -66,35 +87,119 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
 
   if (!mounted) {
     return (
-      <div className="h-64 rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-500 flex items-center justify-center">
-        SHNEA 에디터를 불러오는 중...
+      <div className="flex-1 min-h-[380px] rounded-b-xl border border-t-0 border-slate-700 bg-slate-900/60 p-4 text-xs text-slate-500 flex items-center justify-center">
+        SHNEA 공식 에디터를 불러오는 중...
       </div>
     );
   }
 
   return (
-    <div className="shnea-editor-wrapper bg-slate-900/90 rounded-b-xl border border-t-0 border-slate-700 overflow-hidden text-slate-100 flex flex-col">
+    <div className="shnea-consultation-editor flex-1 h-full min-h-[380px] flex flex-col relative select-text">
+      {/* SHNEA 에디터 다크 테마 및 높이 전역 스타일 오버라이드 */}
+      <style jsx global>{`
+        .shnea-consultation-editor {
+          --surface: #0b1120;
+          --text: #f8fafc;
+          --muted: #94a3b8;
+          --line: #334155;
+          --accent: #6366f1;
+          --raised: #1e293b;
+          --se-bg: #0b1120;
+          --se-text: #f8fafc;
+          --se-muted: #94a3b8;
+          --se-line: #334155;
+          --se-accent: #6366f1;
+          --se-raised: #1e293b;
+          --se-radius: 0px 0px 12px 12px;
+          --se-font-size: 13.5px;
+          --se-line-height: 1.65;
+          --se-content-padding: 16px 20px;
+          --se-paragraph-spacing: 0.6em;
+        }
+        .shnea-consultation-editor .shnea-editor {
+          flex: 1 1 auto;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 380px;
+          border-radius: 0 0 12px 12px;
+          border: 1px solid #334155;
+          border-top: none;
+          background-color: #0b1120 !important;
+          color: #f8fafc !important;
+        }
+        .shnea-consultation-editor .shnea-editor .tiptap {
+          flex: 1 1 auto;
+          min-height: 340px;
+          height: 100%;
+          outline: none;
+          color: #f8fafc !important;
+          background: transparent !important;
+          font-family: inherit;
+        }
+        .shnea-consultation-editor .shnea-editor .tiptap p {
+          color: #f1f5f9;
+        }
+        .shnea-consultation-editor .shnea-editor button {
+          background-color: #1e293b !important;
+          color: #f1f5f9 !important;
+          border-color: #334155 !important;
+        }
+        .shnea-consultation-editor .shnea-editor button:hover:not(:disabled) {
+          background-color: #334155 !important;
+        }
+        .shnea-consultation-editor .shnea-editor button[aria-pressed=true] {
+          background-color: #312e81 !important;
+          border-color: #6366f1 !important;
+          color: #c7d2fe !important;
+        }
+        .shnea-consultation-editor .shnea-editor input,
+        .shnea-consultation-editor .shnea-editor select {
+          background-color: #0f172a !important;
+          color: #f8fafc !important;
+          border-color: #334155 !important;
+        }
+        .shnea-consultation-editor .shnea-editor .se-insert-menu {
+          background-color: #0f172a !important;
+          border-color: #475569 !important;
+          color: #f8fafc !important;
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6) !important;
+        }
+        .shnea-consultation-editor .shnea-editor .se-command-list button {
+          background-color: #1e293b !important;
+          color: #f8fafc !important;
+        }
+        .shnea-consultation-editor .shnea-editor .se-command-list button:hover:not(:disabled) {
+          background-color: #334155 !important;
+        }
+        .shnea-consultation-editor .shnea-editor .se-hint,
+        .shnea-consultation-editor .shnea-editor .se-message {
+          border-color: #1e293b !important;
+          color: #64748b !important;
+          background-color: #0b1120 !important;
+        }
+      `}</style>
+
       {editorError && (
-        <div className="p-2.5 bg-rose-950/60 border-b border-rose-800 text-rose-300 text-xs flex items-center gap-1.5">
+        <div className="p-2.5 bg-rose-950/60 border-b border-rose-800 text-rose-300 text-xs flex items-center gap-1.5 shrink-0">
           <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
           <span>{editorError}</span>
         </div>
       )}
 
-      <div className="p-3 min-h-[220px] max-h-[360px] overflow-y-auto font-sans text-sm focus:outline-none">
+      <div className="flex-1 flex flex-col h-full min-h-[380px] overflow-hidden">
         <ShneaEditor
           value={editorValue}
           documentKey={documentKey}
           attachments={attachments}
           editable={!readOnly}
           appearance={{
-            fontSize: 14,
-            lineHeight: 1.6,
+            fontSize: 13.5,
+            lineHeight: 1.65,
           }}
           onChange={({ document }) => {
             setEditorValue(document);
             if (onChangeText) {
-              // 텍스트 블록들을 줄바꿈으로 추출하여 상위 상담 메모와 동기화
               try {
                 const docJson = JSON.stringify(document);
                 onChangeText(docJson);
