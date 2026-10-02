@@ -6,12 +6,12 @@ import json
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-REF = ROOT / '.agents/skills/golden-path/references'
-IMPECCABLE = ROOT / '.agents/skills/impeccable'
+REF = ROOT / 'skills/golden-path/references'
+IMPECCABLE = ROOT / 'skills/impeccable'
 errors = []
 files = [ROOT / 'AGENTS.md', ROOT / '요구사항정의서.md']
 files += sorted((ROOT / 'docs').rglob('*.md'))
-files += sorted((ROOT / '.agents/skills').rglob('*.md'))
+files += sorted((ROOT / 'skills').rglob('*.md'))
 links = 0
 for path in files:
     content = path.read_text(encoding='utf-8-sig')
@@ -40,14 +40,21 @@ for row in re.findall(r'^\| \[\d{2}-[^\n]+', index, re.M):
 if chapters != coverage or chapters != set(range(1, 86)):
     errors.append(f'Requirement mapping mismatch: missing={chapters - coverage}, extra={coverage - chapters}')
 for name in ('workflow', 'golden-path', 'impeccable'):
-    text = (ROOT / '.agents/skills' / name / 'SKILL.md').read_text(encoding='utf-8-sig')
+    text = (ROOT / 'skills' / name / 'SKILL.md').read_text(encoding='utf-8-sig')
     if not text.startswith(f'---\nname: {name}\ndescription: '):
         errors.append(f'{name}: missing skill metadata')
 manifest = json.loads((IMPECCABLE / 'SHA256SUMS.json').read_text(encoding='utf-8'))
+upstream_manifest = json.loads((IMPECCABLE / 'UPSTREAM-SHA256SUMS.json').read_text(encoding='utf-8'))
+if manifest.keys() != upstream_manifest.keys():
+    errors.append('Impeccable local/upstream manifest file lists differ')
 for relative, expected in manifest.items():
     path = IMPECCABLE / relative
     if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
         errors.append(f'Impeccable content hash mismatch: {relative}')
+    elif relative in upstream_manifest:
+        upstream_content = path.read_bytes().replace(b'skills/impeccable', b'.agents/skills/impeccable')
+        if hashlib.sha256(upstream_content).hexdigest() != upstream_manifest[relative]:
+            errors.append(f'Impeccable upstream provenance mismatch: {relative}')
 for name in ('core.md', 'skills.md', 'decisions.md', 'transfer.md', 'skill-management.md'):
     if not (REF / name).is_file():
         errors.append(f'Missing reference: {name}')

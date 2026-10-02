@@ -1,5 +1,11 @@
 # 작업 인계 기록
 
+## 2026-10-03 Bonfire 갱신·골든패스 이전
+
+- [bonfire_skill 최신 커밋](https://github.com/shnea/bonfire_skill/commit/a7c841015353025d8e4aef73b9ac24a46960e621)을 내려받아 전역 Bonfire 설치본을 갱신했다. 새 구조에 맞춰 프로젝트의 workflow·golden-path·Impeccable을 `skills/`로 이전하고 시작 안내·스킬 연결·검증 스크립트 경로를 갱신했다. 프로젝트별 기준을 보존했고 Impeccable의 실행 경로 표기만 새 위치로 바꿔 원본·프로젝트 수정본 해시를 각각 보관했다.
+- [핵심 기준](../skills/golden-path/references/core.md), [범위](../skills/golden-path/references/domains/02-scope.md), [검증](../skills/golden-path/references/domains/11-validation.md)에 [리뷰 수정 결과](review-repair.md)의 부분 구현, 실행한 검사, 실제 OIDC·조직 배정·파일 정책·2인 통화·NAS 검증의 남은 조건을 반영했다.
+- 문서 검증: `python scripts/verify-docs.py`로 Markdown 77개·로컬 링크 230개·영역 14개·요구사항 85장·Impeccable 수정본 해시와 원본 대조 64개 통과. 제품 테스트는 이번 문서·스킬 이전에서 재실행하지 않았다.
+
 ## 2026-10-03 리뷰 수정 인계
 
 현재 상태의 정본은 [f65216d 리뷰 수정 결과](review-repair.md)다. 아래 과거 완료 기록 중 공개 API·개발 로그인·PUBLIC 파일·목업 성공·독립 Queue complete 및 실제 연동 완료 표현은 이번 수정으로 대체한다.
@@ -11,15 +17,15 @@
 - 검증: Java 21/Gradle 8.12.1 서버 테스트 12개 PostgreSQL 17.11에서 통과. Frontend 테스트 8개·lint·production build 통과. 격리된 합성 조직/고객/JWT로 초안 저장·새로고침 복구·우측 이력과 편집기 동시 표시 확인. Nginx 설정 검증 통과.
 - 문서 검사: Markdown 77개·로컬 링크 213개·영역 14개·요구사항 85장·스킬 해시 64개 통과. Git diff whitespace 검사 통과.
 - Impeccable detector의 기존 스타일 경고 12개는 유지. 이번 변경은 안전한 기능 복구에 한정하며 시각 스타일 전면 개선을 완료했다고 보지 않는다.
-- `.agents` 기준 문서 쓰기 권한 요청은 사용자가 거절했다. core/scope/validation의 과거 미구현 상태 문구는 이번 구현에 맞춰 갱신하지 못했다. 이 절과 review-repair.md를 먼저 읽는다.
+- 당시 `.agents` 기준 문서 쓰기 권한 문제로 core/scope/validation 갱신을 보류했다. 이후 위 Bonfire 갱신에서 쓰기 가능한 `skills/`로 기준을 이전하고 해당 문서를 갱신했다.
 - 남은 일: 실제 OIDC API audience·첫 조직 Membership·파일 보존 정책 계약, 관리자 UI/TEAM·SELF·ACD, 미등록 상담 과거 이력의 고객 소급 연결, 기존 PUBLIC 파일 정리, 운영 DB migration/restore, HTTPS/2인 통화·실제 권한 회수 후 참가자 제거 검증.
 - 운영 및 원래 개발 스택은 재배포하지 않았다. 분리된 검증 서버·DB만 사용했다.
 
 ## 완료한 작업
 
-- 요구사항정의서 1~85장을 검토해 골든패스 원본의 core.md, 14개 영역, skills.md, decisions.md, 영역 색인을 작성했다. [핵심 기준](../.agents/skills/golden-path/references/core.md)부터 읽는다. 원문 요구사항은 수정하지 않았다.
+- 요구사항정의서 1~85장을 검토해 골든패스 원본의 core.md, 14개 영역, skills.md, decisions.md, 영역 색인을 작성했다. [핵심 기준](../skills/golden-path/references/core.md)부터 읽는다. 원문 요구사항은 수정하지 않았다.
 - MVP와 Phase 2~4, 확정 기술과 검토 후보, 구현 시 수락 기준과 미검증 상태를 구분했다. Bonfire 항목·내보내기/가져오기 참조는 보존했다.
-- Impeccable 4.5.0을 설치하고 reference/agents/scripts, LICENSE/NOTICE, 파일 해시를 보관했다. UI 작업 조건으로 골든패스에 등록했다. [출처](../.agents/skills/impeccable/SOURCE.md).
+- Impeccable 4.5.0을 설치하고 reference/agents/scripts, LICENSE/NOTICE, 파일 해시를 보관했다. UI 작업 조건으로 골든패스에 등록했다. [출처](../skills/impeccable/SOURCE.md).
 - 개발·운영 환경: 도메인, 포트, 레지스트리, 커밋 SHA 태그, Compose, SOPS + age, 운영 최소 배포물과 NAS 사양 기록. 상세는 [환경 기준](infrastructure.md)을 따른다.
 - [개발·협업 원칙](development.md): 큰 작업 단위별 검증·커밋·push·인계 절차와 사람 친화적 소스 구조 기준 기록.
 - AGENTS.md에서 환경 기준, 개발 원칙, 인계 기록을 연결.
