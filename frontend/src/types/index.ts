@@ -12,19 +12,23 @@ export interface QueueItem {
   priority: 'urgent' | 'normal' | 'low';
   summary: string;
   unread?: boolean;
+  isRegistered?: boolean;
 }
 
 export interface CustomerProfile {
   id: string;
+  isRegistered: boolean;
   name: string;
   title: string;
   company: string;
+  department?: string;
   tier: 'VIP' | 'Gold' | 'Standard';
   phoneNumber: string;
   email: string;
   lastContactDate: string;
   totalCalls: number;
   managerName: string;
+  customerNotes?: string;
 }
 
 export type TimelineChannel = 'all' | 'call' | 'email' | 'chat' | 'ticket';

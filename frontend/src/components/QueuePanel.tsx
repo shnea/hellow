@@ -136,6 +136,12 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                       긴급
                     </span>
                   )}
+
+                  {item.isRegistered === false && (
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-semibold border border-amber-500/40">
+                      미등록
+                    </span>
+                  )}
                 </div>
 
                 <span className="text-[11px] text-slate-400 font-mono">

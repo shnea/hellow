@@ -18,13 +18,19 @@ import {
   UserCheck,
   Tag,
   Bold,
-  Italic,
   List,
   FileText,
   Clock,
-  ExternalLink,
+  UserPlus,
+  UserCheck2,
+  Edit3,
+  Check,
+  X,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { CustomerProfile, ConsultationCategory } from '../types';
+import { CustomerProfile } from '../types';
 import { consultationCategories, quickTags } from '../data/mockData';
 
 interface ActiveWorkspaceProps {
@@ -42,6 +48,16 @@ interface ActiveWorkspaceProps {
     memo: string;
     isComplete: boolean;
   }) => void;
+  onRegisterCustomer: (data: {
+    name: string;
+    company: string;
+    title: string;
+    department: string;
+    email: string;
+    tier: 'VIP' | 'Gold' | 'Standard';
+    customerNotes: string;
+  }) => void;
+  onUpdateCustomer: (data: Partial<CustomerProfile>) => void;
   quotedText?: string;
   onClearQuotedText?: () => void;
 }
@@ -54,12 +70,39 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   onStartCall,
   onOpenTransfer,
   onSaveConsultation,
+  onRegisterCustomer,
+  onUpdateCustomer,
   quotedText,
   onClearQuotedText,
 }) => {
   // Call controls state
   const [isMuted, setIsMuted] = useState(false);
   const [isOnHold, setIsOnHold] = useState(false);
+
+  // Customer Info Card Editing/Registration state
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [isInfoExpanded, setIsInfoExpanded] = useState(true);
+
+  // Form states for Customer Info
+  const [formName, setFormName] = useState(customer.name || '');
+  const [formCompany, setFormCompany] = useState(customer.company || '');
+  const [formTitle, setFormTitle] = useState(customer.title || '');
+  const [formDepartment, setFormDepartment] = useState(customer.department || '');
+  const [formEmail, setFormEmail] = useState(customer.email || '');
+  const [formTier, setFormTier] = useState<'VIP' | 'Gold' | 'Standard'>(customer.tier || 'Standard');
+  const [formNotes, setFormNotes] = useState(customer.customerNotes || '');
+
+  // Reset form when customer changes
+  useEffect(() => {
+    setFormName(customer.name || '');
+    setFormCompany(customer.company || '');
+    setFormTitle(customer.title || '');
+    setFormDepartment(customer.department || '');
+    setFormEmail(customer.email || '');
+    setFormTier(customer.tier || 'Standard');
+    setFormNotes(customer.customerNotes || '');
+    setIsEditingInfo(false);
+  }, [customer.id, customer.isRegistered]);
 
   // Consultation memo form state
   const [mainCategory, setMainCategory] = useState(consultationCategories[0].main);
@@ -126,11 +169,43 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
     setLastSavedTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
   };
 
+  const handleRegisterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) {
+      alert('고객명을 입력해 주세요.');
+      return;
+    }
+    onRegisterCustomer({
+      name: formName.trim(),
+      company: formCompany.trim() || '미지정 회사',
+      title: formTitle.trim() || '담당자',
+      department: formDepartment.trim(),
+      email: formEmail.trim(),
+      tier: formTier,
+      customerNotes: formNotes.trim(),
+    });
+    setIsEditingInfo(false);
+  };
+
+  const handleUpdateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateCustomer({
+      name: formName.trim() || customer.name,
+      company: formCompany.trim() || customer.company,
+      title: formTitle.trim() || customer.title,
+      department: formDepartment.trim() || customer.department,
+      email: formEmail.trim() || customer.email,
+      tier: formTier,
+      customerNotes: formNotes.trim(),
+    });
+    setIsEditingInfo(false);
+  };
+
   return (
     <main className="flex-1 flex flex-col h-full bg-slate-900 min-w-0 select-none overflow-hidden">
       {/* 1. 상단 통화 컨트롤러 바 */}
       <div
-        className={`px-5 py-3 border-b flex items-center justify-between transition-colors ${
+        className={`px-5 py-2.5 border-b flex items-center justify-between transition-colors ${
           isOnHold
             ? 'bg-amber-950/60 border-amber-800/80'
             : isCallActive
@@ -164,21 +239,29 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           <div className="h-5 w-px bg-slate-800" />
 
           <div className="flex items-baseline space-x-2">
-            <span className="text-sm font-semibold text-slate-200">{customer.name}</span>
-            <span className="text-xs text-slate-400 font-mono">{customer.phoneNumber}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
-              WebRTC 음성
+            <span className="text-sm font-semibold text-slate-200">
+              {customer.isRegistered ? customer.name : '미등록 고객'}
             </span>
+            <span className="text-xs text-slate-400 font-mono">{customer.phoneNumber}</span>
+            {customer.isRegistered ? (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold">
+                등록 고객
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold animate-pulse">
+                미등록 발신
+              </span>
+            )}
           </div>
 
           {isOnHold && (
             <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-semibold animate-pulse">
-              통화 보류 중 (대기음 송출 중)
+              통화 보류 중 (대기음 송출)
             </span>
           )}
           {isMuted && (
             <span className="px-2.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full text-xs font-semibold">
-              마이크 음소거 상태
+              마이크 음소거
             </span>
           )}
         </div>
@@ -195,7 +278,6 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-400'
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`}
-                title={isMuted ? '음소거 해제' : '마이크 음소거'}
               >
                 {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 <span>{isMuted ? '음소거됨' : '음소거'}</span>
@@ -209,17 +291,15 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-400'
                     : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`}
-                title={isOnHold ? '보류 해제' : '통화 보류 (대기음)'}
               >
                 {isOnHold ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
-                <span>{isOnHold ? '보류 해제' : '통화 보류'}</span>
+                <span>{isOnHold ? '보류 해제' : '보류'}</span>
               </button>
 
               {/* Transfer Forward Button */}
               <button
                 onClick={onOpenTransfer}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
-                title="호전환 또는 타 부서 이관"
               >
                 <PhoneForwarded className="w-4 h-4 text-indigo-400" />
                 <span>호전환</span>
@@ -246,13 +326,26 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* 2. 고객 요약 카드 */}
-      <div className="p-4 border-b border-slate-800/80 bg-slate-950/30">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <h1 className="text-lg font-bold text-slate-100">{customer.name}</h1>
-              <span className="text-xs text-slate-400 font-medium">{customer.title}</span>
+      {/* 2. 고객 정보 영역 (등록 조회 / 미등록 표시 / 상담 중 즉시 등록) */}
+      <div className="border-b border-slate-800/80 bg-slate-950/40 transition-all">
+        {/* Header / Bar */}
+        <div className="px-4 py-2 bg-slate-900/90 border-b border-slate-800/60 flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold text-slate-200 flex items-center gap-1.5">
+              {customer.isRegistered ? (
+                <>
+                  <UserCheck2 className="w-4 h-4 text-emerald-400" />
+                  <span>고객 정보 조회</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-4 h-4 text-amber-400" />
+                  <span className="text-amber-300">미등록 고객 (신규 인입)</span>
+                </>
+              )}
+            </span>
+
+            {customer.isRegistered && (
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                   customer.tier === 'VIP'
@@ -264,38 +357,303 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               >
                 ★ {customer.tier} 등급
               </span>
-            </div>
-
-            <div className="flex items-center space-x-4 text-xs text-slate-300">
-              <div className="flex items-center space-x-1">
-                <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-medium text-slate-200">{customer.company}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <Mail className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-mono text-slate-300">{customer.email}</span>
-              </div>
-              <div className="flex items-center space-x-1 text-slate-400">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>최근 상담: {customer.lastContactDate}</span>
-              </div>
-            </div>
+            )}
           </div>
 
-          <div className="text-right text-xs text-slate-400">
-            <div className="flex items-center space-x-1 justify-end">
-              <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
-              <span>전담: {customer.managerName}</span>
-            </div>
-            <span className="text-[11px] text-slate-400">누적 상담 {customer.totalCalls}건</span>
+          <div className="flex items-center space-x-2">
+            {customer.isRegistered ? (
+              !isEditingInfo ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingInfo(true)}
+                  className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] flex items-center gap-1 border border-slate-700"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>정보 수정</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingInfo(false)}
+                  className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[11px] flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  <span>수정 취소</span>
+                </button>
+              )
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => setIsInfoExpanded(!isInfoExpanded)}
+              className="p-1 text-slate-400 hover:text-slate-200"
+              title={isInfoExpanded ? '접기' : '펼치기'}
+            >
+              {isInfoExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
           </div>
         </div>
+
+        {/* Collapsible Info Content */}
+        {isInfoExpanded && (
+          <div className="p-3.5 text-xs">
+            {/* [케이스 1] 등록된 고객 - 단순 조회 모드 */}
+            {customer.isRegistered && !isEditingInfo && (
+              <div className="grid grid-cols-4 gap-3">
+                <div>
+                  <span className="block text-[11px] text-slate-400">고객명 / 직책</span>
+                  <p className="font-semibold text-slate-100 mt-0.5">
+                    {customer.name}{' '}
+                    <span className="text-slate-400 font-normal">
+                      {customer.title} {customer.department ? `(${customer.department})` : ''}
+                    </span>
+                  </p>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] text-slate-400">회사명 / 소속</span>
+                  <p className="font-semibold text-slate-200 mt-0.5 flex items-center gap-1 truncate">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                    <span>{customer.company}</span>
+                  </p>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] text-slate-400">연락처 / 이메일</span>
+                  <p className="font-mono text-slate-200 mt-0.5 truncate">{customer.phoneNumber}</p>
+                  <p className="font-mono text-[11px] text-slate-400 truncate">{customer.email || '-'}</p>
+                </div>
+
+                <div className="border-l border-slate-800 pl-3">
+                  <span className="block text-[11px] text-slate-400">전담 관리 / 상담 이력</span>
+                  <p className="text-slate-300 mt-0.5 truncate">{customer.managerName}</p>
+                  <p className="text-[11px] text-slate-400">
+                    최근 상담: {customer.lastContactDate} ({customer.totalCalls}회)
+                  </p>
+                </div>
+
+                {customer.customerNotes && (
+                  <div className="col-span-4 mt-1 bg-slate-900/70 p-2 rounded-lg border border-slate-800/80 text-[11px] text-slate-300 flex items-center gap-2">
+                    <span className="font-semibold text-indigo-400 flex-shrink-0">고객 메모:</span>
+                    <span>{customer.customerNotes}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* [케이스 2] 등록된 고객 - 정보 수정 모드 */}
+            {customer.isRegistered && isEditingInfo && (
+              <form onSubmit={handleUpdateSubmit} className="space-y-2.5">
+                <div className="grid grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">고객명</label>
+                    <input
+                      type="text"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">회사명</label>
+                    <input
+                      type="text"
+                      value={formCompany}
+                      onChange={(e) => setFormCompany(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">부서 / 직책</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        placeholder="부서"
+                        value={formDepartment}
+                        onChange={(e) => setFormDepartment(e.target.value)}
+                        className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="직책"
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
+                    <select
+                      value={formTier}
+                      onChange={(e) => setFormTier(e.target.value as any)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="VIP">VIP</option>
+                      <option value="Gold">Gold</option>
+                      <option value="Standard">Standard</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2.5">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] text-slate-400 mb-1">이메일</label>
+                    <input
+                      type="email"
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[11px] text-slate-400 mb-1">고객 특이사항 메모</label>
+                    <input
+                      type="text"
+                      value={formNotes}
+                      onChange={(e) => setFormNotes(e.target.value)}
+                      placeholder="고객 성향, 담당자 특이사항 등"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingInfo(false)}
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm shadow-indigo-950"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>고객 정보 저장</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* [케이스 3] 미등록 고객 - 신규 고객 즉시 등록 폼 */}
+            {!customer.isRegistered && (
+              <form onSubmit={handleRegisterSubmit} className="space-y-2.5">
+                <div className="bg-amber-950/30 border border-amber-800/40 p-2.5 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-xs text-amber-200">
+                    <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <span>
+                      등록되지 않은 번호(<strong className="font-mono text-white">{customer.phoneNumber}</strong>)입니다.
+                      상담 중 확인된 기본 정보를 입력하고 즉시 신규 고객으로 등록할 수 있습니다.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      고객명 <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="예: 홍길동"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      회사명 / 조직명
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="예: (주)한국소프트"
+                      value={formCompany}
+                      onChange={(e) => setFormCompany(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">부서 / 직책</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        placeholder="부서"
+                        value={formDepartment}
+                        onChange={(e) => setFormDepartment(e.target.value)}
+                        className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="직책"
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
+                    <select
+                      value={formTier}
+                      onChange={(e) => setFormTier(e.target.value as any)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="Standard">Standard (일반)</option>
+                      <option value="Gold">Gold</option>
+                      <option value="VIP">VIP</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2.5 items-end">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] text-slate-400 mb-1">이메일 주소</label>
+                    <input
+                      type="email"
+                      placeholder="example@company.com"
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">발신 전화번호</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={customer.phoneNumber}
+                      className="w-full bg-slate-850 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-400 font-mono cursor-not-allowed text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <button
+                      type="submit"
+                      className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>신규 고객으로 등록</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 3. 확장형 실시간 상담 메모 작성기 (핵심 워크스페이스) */}
       <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
         {/* Category & Status Selectors */}
-        <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="grid grid-cols-3 gap-3 mb-2.5">
           {/* 대분류 */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-400 mb-1">
@@ -339,7 +697,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             <label className="block text-[11px] font-semibold text-slate-400 mb-1">
               처리 상태 <span className="text-rose-400">*</span>
             </label>
-            <div className="flex items-center space-x-1.5 bg-slate-800/80 p-1 rounded-lg border border-slate-700">
+            <div className="flex items-center space-x-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700">
               <button
                 type="button"
                 onClick={() => setStatus('in_progress')}
@@ -378,7 +736,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
         </div>
 
         {/* Quick Tag Chips */}
-        <div className="mb-2.5 flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs">
+        <div className="mb-2 flex items-center space-x-1.5 overflow-x-auto pb-0.5 text-xs">
           <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 flex-shrink-0 mr-1">
             <Tag className="w-3 h-3 text-slate-400" />
             빠른 태그:
@@ -390,7 +748,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                 key={tag}
                 type="button"
                 onClick={() => toggleTag(tag)}
-                className={`px-2.5 py-0.5 rounded-full text-xs transition-all flex-shrink-0 ${
+                className={`px-2 py-0.5 rounded-full text-xs transition-all flex-shrink-0 ${
                   isSelected
                     ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 font-medium'
                     : 'bg-slate-800/60 text-slate-400 border border-slate-700/60 hover:border-slate-600'

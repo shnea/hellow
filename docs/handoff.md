@@ -14,10 +14,13 @@
   - 상담 이력 탐색 중 후속 조치 즉시 연계 및 넓은 실시간 메모 공간 확보 요구 반영. [상담사 화면 UI 정의서](ui-direction.md).
 - **Next.js App Router + TypeScript 기반 상담사 작업 화면 인터랙티브 프로토타입 구현 완료 (`frontend/`)**:
   - **슬림 GNB (`SidebarGNB.tsx`)**: 64px 폭, 메뉴 탭 탐색 및 상담사 근무 상태(온라인/통화중/자리비움/퇴근) 모달 선택기 구현.
-  - **처리 대기열 패널 (`QueuePanel.tsx`)**: 탭 필터(전체/콜/콜백/티켓), 실시간 인바운드 콜 강조 애니메이션, 콜백 예약 및 할당 티켓, 대기열 선택 시 고객 워크스페이스 맥락 전환 연동.
+  - **처리 대기열 패널 (`QueuePanel.tsx`)**: 탭 필터(전체/콜/콜백/티켓), 실시간 인바운드 콜 강조 애니메이션, 콜백 예약 및 할당 티켓, 대기열 선택 시 고객 워크스페이스 맥락 전환 연동. 미등록 고객 뱃지 추가.
   - **중앙 활성 워크스페이스 (`ActiveWorkspace.tsx`)**:
     - 실시간 통화 경과 시간 카운트업 타이머, 음소거, 통화 보류(Hold 시 대기음 안내 상태 뱃지), 호전환 연계, 통화 종료 제어기.
-    - 고객 요약 카드(VIP 등급, 소속사, 직급, 담당자, 연락처).
+    - **고객 정보 상세 조회 / 인라인 수정 / 상담 중 신규 고객 등록 기능**:
+      - 등록 고객: 고객명, 직책/부서, 회사, 연락처, 이메일, 등급, 최근상담, 고객메모 상세 조회 및 `[정보 수정]` 인라인 폼 지원.
+      - 미등록 고객: `[미등록 고객 (신규 인입)]` 안내 배너와 함께 통화 중 확인된 정보를 즉시 입력하여 `[신규 고객으로 등록]`할 수 있는 인라인 등록 폼 지원.
+      - 접기/펼치기 토글을 제공하여 고객 정보 확인과 하단 상담 메모 작성 공간의 균형 확보.
     - 연동형 대분류·중분류 드롭다운, 처리 상태 선택, 빠른 태그 칩 토글.
     - 서식 에디터 툴바 및 원클릭 템플릿 삽입(견적 협의, 기술 장애, 부재 콜백).
     - 넉넉한 높이의 대형 실시간 메모장 및 하단 임시저장/관리자 에스컬레이션/상담 종료 및 완료 액션 바.
@@ -26,26 +29,25 @@
     - 타임라인 내 "인용" 클릭 시 중앙 실시간 상담 메모장에 과거 이력 자동 인용문 삽입.
     - 4가지 즉시 연계 후속 조치 패널: ① 엔지니어 방문/서비스 예약 접수, ② 콜백 일정 등록, ③ 실시간 가용 상담사 원클릭 호전환, ④ 고객 안내 알림톡/SMS 발송.
     - 후속 조치 접수 시 타임라인 실시간 추가 반영.
-  - **전역 피드백 시스템 (`Toast.tsx`)**: 임시저장, 상담 완료, 예약 접수, 호전환 등 모든 사용자 액션에 대한 시각적 피드백 제공.
-  - **한국어 실무 목업 데이터 세트 (`mockData.ts`)**: 실제 B2B CRM 업무 시나리오를 반영한 고밀도 가상 데이터 내장.
+  - **전역 피드백 시스템 개선 (`Toast.tsx`)**: 단순 클릭 알림 남발을 제거하고, 최대 5개까지만 깔끔하게 표시되며 3.5초 후 자동 소멸되도록 최적화.
+  - **한국어 실무 목업 데이터 세트 (`mockData.ts`)**: 미등록 고객 인입 콜(`queue-unregistered`)을 포함한 실무 데이터 내장.
 - **Docker Compose + Nginx (포트 `30160`) 개발 테스트 환경 구성 및 기동 완료**:
   - 프로젝트 환경 기준([환경 기준](infrastructure.md))에 따라 `compose.yaml`, `Dockerfile` (멀티스테이지 Node 24 빌드), `infra/nginx/default.conf` 구성.
   - 외부 인입 호스트 포트 `30160` -> Nginx `8080` -> `web:3000` 리버스 프록시 및 WebSocket/Upgrade 헤더 설정.
-  - 루트 `package.json` 및 `.dockerignore` 추가.
 
 ## 검증 및 Git 상태
 
 - `frontend`: `npm run build` 성공 (Turbopack 빌드, TypeScript 5 컴파일 오류 0건, 정적 라우트 생성 완료).
-- `docker compose up -d --build` 성공:
+- `docker compose up -d --build web` 성공:
   - `hellow-dev-web-1` (Up, healthy)
   - `hellow-dev-nginx-1` (Up, 0.0.0.0:30160->8080/tcp)
   - `curl -I http://localhost:30160` -> `HTTP/1.1 200 OK` (Server: nginx, X-Powered-By: Next.js) 확인.
 - `python scripts/verify-docs.py`: Markdown 문서, 로컬 링크, 요구사항 대응, 스킬 메타데이터, 원본 해시 검증 통과.
-- 이번 커밋 대상: `compose.yaml`, `Dockerfile`, `infra/nginx/default.conf`, `.dockerignore`, `package.json`, `docs/handoff.md`.
+- 이번 커밋 대상: `frontend/` 수정 소스 코드 전체, `docs/handoff.md`.
 
 ## 남은 일과 다음 시작점
 
-- 도커 컨테이너가 포트 `30160`으로 정상 구동 중이므로 `http://localhost:30160` 또는 `http://dev-hellow.shnea.kr:30160`에서 화면 인터랙션 및 레이아웃을 확인한다.
+- 도커 컨테이너가 포트 `30160`으로 정상 구동 중이므로 `http://localhost:30160` 또는 `http://dev-hellow.shnea.kr:30160`에서 고객 정보 조회/수정/신규등록 인터랙션과 알림 동작을 확인한다.
 - SHNEA 공식 `SERVICE_INTEGRATION.md`와 필요한 하위 명세를 확인해 OIDC·File·Editor·Job 계약을 설계한다.
 - 제품 백엔드(Java/Spring Boot) 구현, DB 연동, Compose 서비스 확장(DB/API), SOPS + age 환경 변수 암호화와 배포 자동화를 진행한다.
 - LiveKit 연동, 운영 NAS 컨테이너 실행 및 도메인 연결은 후속 단계에서 검증한다.

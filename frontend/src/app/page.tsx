@@ -11,7 +11,7 @@ import {
   mockCustomers,
   mockTimelines,
 } from '@/data/mockData';
-import { AgentStatus, QueueItem, TimelineItem } from '@/types';
+import { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
 export default function ConsultationWorkspacePage() {
   // Global GNB state
@@ -20,6 +20,7 @@ export default function ConsultationWorkspacePage() {
 
   // Queue and Customer state
   const [queueItems, setQueueItems] = useState<QueueItem[]>(mockQueueItems);
+  const [customers, setCustomers] = useState<Record<string, CustomerProfile>>(mockCustomers);
   const [selectedQueueId, setSelectedQueueId] = useState<string>('queue-1');
 
   // Call status
@@ -31,13 +32,13 @@ export default function ConsultationWorkspacePage() {
   const [quotedText, setQuotedText] = useState<string>('');
   const [activeFollowUpTab, setActiveFollowUpTab] = useState<'visit' | 'callback' | 'transfer' | 'notification'>('visit');
 
-  // Toast feedback state
+  // Toast feedback state (up to 5 toasts)
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Add toast helper
+  // Add toast helper - retains up to 5 recent toasts
   const addToast = (type: 'success' | 'info' | 'warning', title: string, message: string) => {
     const id = Date.now().toString() + Math.random().toString();
-    setToasts((prev) => [...prev, { id, type, title, message }]);
+    setToasts((prev) => [...prev.slice(-4), { id, type, title, message }]);
   };
 
   const removeToast = (id: string) => {
@@ -56,7 +57,19 @@ export default function ConsultationWorkspacePage() {
   }, [isCallActive]);
 
   // Current customer profile
-  const currentCustomer = mockCustomers[selectedQueueId] || mockCustomers['queue-1'];
+  const currentCustomer = customers[selectedQueueId] || {
+    id: 'unknown',
+    isRegistered: false,
+    name: '미등록 고객',
+    company: '알 수 없음',
+    title: '',
+    tier: 'Standard',
+    phoneNumber: '010-0000-0000',
+    email: '',
+    lastContactDate: '이력 없음',
+    totalCalls: 1,
+    managerName: '이소연 선임',
+  };
   const currentTimeline = timelines[selectedQueueId] || [];
 
   // Handlers
@@ -66,13 +79,11 @@ export default function ConsultationWorkspacePage() {
     if (targetItem) {
       if (targetItem.type === 'call') {
         setIsCallActive(true);
-        setCallDuration(14);
+        setCallDuration(targetItem.id === 'queue-unregistered' ? 45 : 14);
         setAgentStatus('busy');
-        addToast('info', '통화 연결', `${targetItem.customerName} 고객과의 인바운드 통화 세션이 활성화되었습니다.`);
       } else {
         setIsCallActive(false);
         setAgentStatus('online');
-        addToast('info', '고객 맥락 전환', `${targetItem.customerName} 고객의 대기 작업 정보로 전환되었습니다.`);
       }
     }
   };
@@ -80,28 +91,118 @@ export default function ConsultationWorkspacePage() {
   const handleEndCall = () => {
     setIsCallActive(false);
     setAgentStatus('online');
-    addToast('warning', '통화 종료', '통화가 종료되었습니다. 상담 내용 정리 후 완료 처리를 진행해 주세요.');
+    addToast('warning', '통화 종료', '통화가 종료되었습니다. 상담 내용을 저장해 주세요.');
   };
 
   const handleStartCall = () => {
     setIsCallActive(true);
     setCallDuration(0);
     setAgentStatus('busy');
-    addToast('success', '통화 발신', `${currentCustomer.name} (${currentCustomer.phoneNumber}) 고객에게 재발신 연결되었습니다.`);
+    addToast('success', '통화 연결', `${currentCustomer.phoneNumber} 고객에게 재발신 연결되었습니다.`);
   };
 
   const handleOpenTransfer = () => {
     setActiveFollowUpTab('transfer');
-    addToast('info', '호전환 패널 활성화', '우측 패널에서 실시간 가용 상담사를 선택하여 호전환할 수 있습니다.');
   };
 
   const handleQuoteTimeline = (content: string) => {
     setQuotedText(content);
-    addToast('info', '이력 인용 완료', '과거 상담 이력이 중앙 실시간 메모장에 추가되었습니다.');
+    addToast('info', '이력 인용', '과거 상담 내용이 실시간 메모장에 인용되었습니다.');
+  };
+
+  // 신규 고객 등록 처리 핸들러
+  const handleRegisterCustomer = (data: {
+    name: string;
+    company: string;
+    title: string;
+    department: string;
+    email: string;
+    tier: 'VIP' | 'Gold' | 'Standard';
+    customerNotes: string;
+  }) => {
+    const updatedCustomer: CustomerProfile = {
+      ...currentCustomer,
+      isRegistered: true,
+      name: data.name,
+      company: data.company,
+      title: data.title,
+      department: data.department,
+      email: data.email,
+      tier: data.tier,
+      customerNotes: data.customerNotes,
+      lastContactDate: '오늘 등록됨',
+    };
+
+    // Update customer store
+    setCustomers((prev) => ({
+      ...prev,
+      [selectedQueueId]: updatedCustomer,
+    }));
+
+    // Update queue item
+    setQueueItems((prev) =>
+      prev.map((item) =>
+        item.id === selectedQueueId
+          ? {
+              ...item,
+              customerName: data.name,
+              companyName: data.company,
+              isRegistered: true,
+            }
+          : item
+      )
+    );
+
+    // Add registration event to timeline
+    const registrationRecord: TimelineItem = {
+      id: 'time-reg-' + Date.now(),
+      date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      channel: 'ticket',
+      agentName: '이소연 선임 (본인)',
+      title: '신규 고객 정보 등록 완료',
+      content: `고객명: ${data.name} / 소속: ${data.company} (${data.department} ${data.title}) / 등급: ${data.tier} / 이메일: ${data.email || '미입력'}`,
+      tags: ['신규고객', '등록완료'],
+    };
+
+    setTimelines((prev) => ({
+      ...prev,
+      [selectedQueueId]: [registrationRecord, ...(prev[selectedQueueId] || [])],
+    }));
+
+    addToast('success', '고객 등록 완료', `${data.name} (${data.company}) 고객 정보가 정상 등록되었습니다.`);
+  };
+
+  // 기존 고객 정보 수정 핸들러
+  const handleUpdateCustomer = (data: Partial<CustomerProfile>) => {
+    const updatedCustomer: CustomerProfile = {
+      ...currentCustomer,
+      ...data,
+    };
+
+    setCustomers((prev) => ({
+      ...prev,
+      [selectedQueueId]: updatedCustomer,
+    }));
+
+    // Update queue item if name or company changed
+    if (data.name || data.company) {
+      setQueueItems((prev) =>
+        prev.map((item) =>
+          item.id === selectedQueueId
+            ? {
+                ...item,
+                customerName: data.name || item.customerName,
+                companyName: data.company || item.companyName,
+              }
+            : item
+        )
+      );
+    }
+
+    addToast('success', '고객 정보 수정', `${updatedCustomer.name} 고객 정보가 성공적으로 업데이트되었습니다.`);
   };
 
   const handleAddFollowUpAction = (actionType: string, details: string) => {
-    // Add new timeline record
     const newRecord: TimelineItem = {
       id: 'time-new-' + Date.now(),
       date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
@@ -129,7 +230,6 @@ export default function ConsultationWorkspacePage() {
     isComplete: boolean;
   }) => {
     if (data.isComplete) {
-      // Record completed consultation in timeline
       const completeRecord: TimelineItem = {
         id: 'time-complete-' + Date.now(),
         date: '오늘 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
@@ -145,22 +245,17 @@ export default function ConsultationWorkspacePage() {
         [selectedQueueId]: [completeRecord, ...(prev[selectedQueueId] || [])],
       }));
 
-      // Remove or mark queue item
       setQueueItems((prev) => prev.filter((item) => item.id !== selectedQueueId));
       setIsCallActive(false);
       setAgentStatus('online');
 
       addToast(
         'success',
-        '상담 저장 및 완료',
-        `${currentCustomer.name} 고객 상담 기록이 완료되고 대기열에서 처리 완료되었습니다.`
+        '상담 저장 완료',
+        `${currentCustomer.name || '고객'} 상담 기록이 저장되고 대기열에서 완료 처리되었습니다.`
       );
     } else {
-      addToast(
-        'info',
-        '임시 저장 완료',
-        '작성 중인 상담 메모 및 분류 정보가 로컬 세션에 안전하게 저장되었습니다.'
-      );
+      addToast('info', '임시 저장 완료', '작성 중인 상담 메모가 안전하게 임시 저장되었습니다.');
     }
   };
 
@@ -190,6 +285,8 @@ export default function ConsultationWorkspacePage() {
         onStartCall={handleStartCall}
         onOpenTransfer={handleOpenTransfer}
         onSaveConsultation={handleSaveConsultation}
+        onRegisterCustomer={handleRegisterCustomer}
+        onUpdateCustomer={handleUpdateCustomer}
         quotedText={quotedText}
         onClearQuotedText={() => setQuotedText('')}
       />
@@ -197,14 +294,14 @@ export default function ConsultationWorkspacePage() {
       {/* 4. 우측 고객 맥락 및 후속 조치 패널 (384px) */}
       <ContextActionPanel
         timeline={currentTimeline}
-        customerName={currentCustomer.name}
+        customerName={currentCustomer.name || '미등록 고객'}
         customerPhone={currentCustomer.phoneNumber}
         onQuoteTimeline={handleQuoteTimeline}
         onAddFollowUpAction={handleAddFollowUpAction}
         activeFollowUpTab={activeFollowUpTab}
       />
 
-      {/* 전역 피드백 토스트 컨테이너 */}
+      {/* 전역 피드백 토스트 컨테이너 (최대 1개 깔끔하게 표시) */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
