@@ -1,0 +1,82 @@
+/* My 상담 이력의 목록 디자인을 후속 업무, 이관, 현황·통계에도 적용한다. */
+.crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace){display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;padding:20px 24px;gap:16px;background:#0f172a;color:#e2e8f0;font-size:14px;line-height:1.5;overflow:hidden;scrollbar-color:#475569 #0f172a}
+.crm-list-workspace[hidden]{display:none}
+.crm-list-workspace .list-content{display:contents}
+.crm-list-workspace .list-content[hidden]{display:none}
+.crm-list-workspace .list-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin:0}
+.crm-list-workspace .list-heading h1{font-size:20px;font-weight:650}
+.crm-list-workspace .list-heading p{font-size:13px;color:#cbd5e1;margin:4px 0 0;max-width:75ch}
+.crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace) button{min-height:36px;padding:6px 12px;border:1px solid #475569;border-radius:6px;background:transparent;color:#e2e8f0;cursor:pointer;font-size:13px;white-space:nowrap}
+.crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace) button:hover:not(:disabled){background:#334155}
+.crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace) button:disabled{opacity:.45;cursor:default}
+.crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace) button:is(.followup-primary,.transfer-primary,.report-primary){background:#4338ca;border-color:#6366f1;color:#fff}
+.crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace) button:is(.followup-primary,.transfer-primary,.report-primary):hover:not(:disabled){background:#3730a3}
+.crm-list-workspace .list-filters{display:flex;flex-wrap:wrap;align-items:end;justify-content:flex-start;gap:12px;padding:16px 0;margin:0;border-block:1px solid #334155;font-size:12px}
+.crm-list-workspace .list-filters label{display:grid;gap:6px;flex:0 1 240px;min-width:130px;max-width:240px;color:#e2e8f0}
+.crm-list-workspace .list-filters :is(input,select){background:#020617;color:#e2e8f0;border:1px solid #475569;border-radius:5px;padding:8px;width:100%;min-width:0;min-height:36px;color-scheme:dark;font-size:13px}
+.crm-list-workspace .list-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#cbd5e1}
+.crm-list-workspace .list-table{flex:1;min-height:0;overflow:auto;scrollbar-color:#475569 #0f172a}
+.crm-list-workspace .list-table table{display:table;width:100%;border-collapse:separate;border-spacing:0;font-size:13px;text-align:left}
+.crm-list-workspace .list-table thead{display:table-header-group}
+.crm-list-workspace .list-table tbody{display:table-row-group}
+.crm-list-workspace .list-table tr{display:table-row}
+.crm-list-workspace .list-table td{display:table-cell}
+.crm-list-workspace .list-table th{position:sticky;top:0;z-index:1;background:#1e293b;color:#cbd5e1;font-weight:500;white-space:nowrap}
+.crm-list-workspace .list-table th,.crm-list-workspace .list-table td{padding:12px;border-bottom:1px solid #334155}
+.crm-list-workspace .list-table tbody tr:hover{background:#1e293b}
+.crm-list-workspace .list-table time{font-variant-numeric:tabular-nums;white-space:nowrap;color:#cbd5e1}
+.crm-list-workspace .list-status{white-space:nowrap}
+.crm-list-workspace .list-status-COMPLETED,.crm-list-workspace .list-status-ACCEPTED{color:#6ee7b7}
+.crm-list-workspace .list-status-CANCELLED,.crm-list-workspace .list-status-EXPIRED{color:#cbd5e1}
+.crm-list-workspace .list-status-IN_PROGRESS,.crm-list-workspace .list-status-CONNECTING{color:#a5b4fc}
+.crm-list-workspace .list-status-FAILED,.crm-list-workspace .list-status-REJECTED{color:#fcd34d}
+.crm-list-workspace .list-empty{padding:60px 20px;margin:0;max-width:none;text-align:center;color:#cbd5e1}
+.crm-list-workspace .list-error{color:#fcd34d}
+.crm-list-workspace .list-pagination{display:flex;align-items:center;justify-content:flex-end;gap:16px;margin:0;font-size:13px}
+.crm-list-workspace .list-filter-toggle{display:none}
+.crm-list-workspace.report-workspace{overflow:auto;gap:0}
+.crm-list-workspace .report-tabs{margin:16px 0}
+.crm-list-workspace .report-tabs button[aria-pressed=true]{background:#4338ca;border-color:#6366f1;color:#fff}
+.crm-list-workspace .report-table-scroll table{border-collapse:separate;border-spacing:0;font-size:13px}
+.crm-list-workspace .report-table-scroll thead th{font-weight:500;background:#1e293b;color:#cbd5e1}
+.crm-list-workspace .report-table-scroll tbody tr:hover{background:#1e293b}
+.crm-list-workspace .report-pagination{margin-top:24px}
+.crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog){width:min(880px,calc(100vw - 48px));max-height:calc(100dvh - 48px);padding:0;border-radius:10px;background:#0f172a;color:#e2e8f0;font-size:14px;line-height:1.5;overflow:auto;box-shadow:0 16px 48px #0008}
+.crm-list-dialog::backdrop{background:#020617b8}
+.crm-list-workspace .crm-list-dialog button{min-height:44px}
+.crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog) :is(input,select,textarea){min-height:44px;padding:8px 12px;border:1px solid #475569;border-radius:6px;background:#020617;color:#e2e8f0;font:inherit}
+.crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog) h2{font-size:20px;font-weight:600}
+.crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog) h3{font-size:16px;font-weight:600;margin:24px 0 8px}
+.crm-list-dialog .list-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0;padding:12px 16px;border-bottom:1px solid #334155}
+.crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog) .list-dialog-heading h2{font-size:16px;font-weight:600;margin:0}
+.crm-list-dialog .list-dialog-heading button{min-height:44px;padding:8px 12px;border:1px solid #475569;border-radius:6px;background:transparent}
+.crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog) .list-dialog-body{padding:20px 24px;border:0}
+@media(max-width:900px){
+ .crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace){padding:16px}
+ .crm-list-workspace .list-table table{min-width:900px}
+ .crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog){width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
+}
+@media(max-width:600px){
+ .crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace){padding:12px;gap:12px;overflow:auto}
+ .crm-list-workspace.report-workspace{gap:0}
+ .crm-list-workspace .list-heading{align-items:start}
+ .crm-list-workspace .list-heading h1{font-size:18px}
+ .crm-list-workspace .list-heading p{max-width:28ch}
+ .crm-list-workspace .list-filter-toggle{display:block;align-self:start}
+ .crm-list-workspace .list-filters:not(.filters-open){display:none}
+ .crm-list-workspace .list-filters label{flex:1 1 130px;min-width:calc(50% - 12px);max-width:240px}
+ .crm-list-workspace:is(.followup-workspace,.transfer-workspace,.report-workspace) button,.crm-list-workspace .list-filters :is(input,select){min-height:44px}
+ .crm-list-workspace.report-workspace .list-filter-toggle{margin-bottom:12px}
+ .crm-list-workspace .list-meta{flex-wrap:wrap}
+ .crm-list-workspace .list-table{min-height:240px}
+ .crm-list-workspace .list-table table,.crm-list-workspace .list-table tbody{display:block;min-width:0}
+ .crm-list-workspace .list-table thead{display:none}
+ .crm-list-workspace .list-table tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:14px 0;border-bottom:1px solid #334155}
+ .crm-list-workspace .list-table td{padding:0;border:0;min-width:0;overflow-wrap:anywhere}
+ .crm-list-workspace .list-table .list-row-main{grid-column:1/3;grid-row:2}
+ .crm-list-workspace .list-table .list-row-action{grid-column:3;grid-row:2;justify-self:end}
+ .crm-list-workspace .list-table .list-row-time{grid-column:1/-1;grid-row:1;font-size:12px}
+ .crm-list-workspace .list-table .list-row-summary{grid-column:1/-1;grid-row:4;max-width:100%}
+ .crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog){width:100vw;max-width:100vw;max-height:100dvh;border-radius:0}
+ .crm-list-dialog:is(.followup-detail-dialog,.transfer-detail-dialog) .list-dialog-body{padding:16px}
+}

@@ -5,6 +5,7 @@ import {scopeLabels,type DataScope} from '@/lib/admin';
 import {agentStateLabels,attemptLabels,type AgentState} from '@/lib/agent-state';
 import {nextReportingDay,reportingDate,reportingLabel,reportLabels,seconds,type ReportOptions,type AgentReport,type MonitoringSummary,type ConsultationReport,type FollowUpReport,type ReportSection} from '@/lib/reporting';
 import './reporting.css';
+import '../work-list.css';
 import {DailyTrend,Distribution,CallbackDistribution} from './ReportCharts';
 
 interface Props {active:boolean;organizationId:string;accessKey:string;canMonitor:boolean;canReport:boolean;canReadHistory:boolean;onHistory:()=>void;}
@@ -21,6 +22,7 @@ function Table({title,section,columns}:{title:string;section:ReportSection;colum
   </tbody></table></div>{!section.items.length&&<p className="report-empty">조회 조건에 맞는 항목이 없습니다. 기간이나 필터를 확인해 주세요.</p>}</section>;
 }
 export function ReportingWorkspace(props:Props){
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [mode,setMode]=useState<'monitor'|'reports'>(props.canReport?'reports':'monitor');
   const [filters,setFilters]=useState(initial);const [applied,setApplied]=useState(initial);
   const [page,setPage]=useState(0);const [refresh,setRefresh]=useState(0);const [automatic,setAutomatic]=useState(true);
@@ -64,11 +66,12 @@ export function ReportingWorkspace(props:Props){
   const report=data?.consultations;const totals=report?.report.queues.totals;
   const asOf=report?.asOf||data?.agents?.asOf;
   const more=Boolean(data?.agents?.hasMore||report?.report.queues.hasMore||report?.report.records.hasMore||data?.followups?.report.hasMore);
-  return <section className="report-workspace" aria-label="상담 현황·통계">
-    <header className="report-heading"><div><h1>상담 현황·기본 통계</h1><p>허용된 범위의 직원 상태와 상담·통화·콜백을 확인합니다.</p></div>{props.canReadHistory&&<button onClick={props.onHistory}>상담 이력 열기</button>}</header>
+  return <section className="report-workspace crm-list-workspace" aria-label="상담 현황·통계">
+    <header className="report-heading list-heading"><div><h1>상담 현황·기본 통계</h1><p>허용된 범위의 직원 상태와 상담·통화·콜백을 확인합니다.</p></div>{props.canReadHistory&&<button onClick={props.onHistory}>상담 이력 열기</button>}</header>
     <nav className="report-tabs" aria-label="현황·통계 전환">{props.canMonitor&&<button aria-pressed={mode==='monitor'} onClick={()=>{setMode('monitor');setPage(0);setData(null);setOptions(emptyOptions);}}>상담 현황</button>}{props.canReport&&<button aria-pressed={mode==='reports'} onClick={()=>{setMode('reports');setPage(0);setData(null);setOptions(emptyOptions);}}>기간 통계</button>}</nav>
     {!visible?<p role="status">이 화면의 조회 권한이 없습니다.</p>:<>
-      <form className="report-filters" onSubmit={e=>{e.preventDefault();setApplied({...filters});setPage(0);}}>
+      <button className="list-filter-toggle" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(v=>!v)}>조회 조건 {filtersOpen?'접기':'열기'}</button>
+      <form className={`report-filters list-filters ${filtersOpen?'filters-open':''}`} onSubmit={e=>{e.preventDefault();setApplied({...filters});setPage(0);}}>
         {mode==='reports'&&<><label>시작일<input type="date" required value={filters.from} max={filters.to} onChange={e=>setFilters(f=>({...f,from:e.target.value}))}/></label><label>종료일<input type="date" required value={filters.to} min={filters.from} onChange={e=>setFilters(f=>({...f,to:e.target.value}))}/></label></>}
         <label>팀<select value={filters.teamId} onChange={e=>setFilters(f=>({...f,teamId:e.target.value}))}><option value="">허용 범위 전체</option>{options.teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         {mode==='reports'&&<>
@@ -100,7 +103,7 @@ export function ReportingWorkspace(props:Props){
         {data?.followups&&<Table title="콜백 처리" section={data.followups.report} columns={callbackColumns}/>}
         <section className="report-section"><h2>수신 시도 결과</h2><p>조회 조건에 맞는 접수의 시도 수입니다. 한 접수에 여러 시도가 있을 수 있습니다.</p><dl className="report-inline-metrics">{report.report.attempts.map(a=><div key={a.label}><dt>{attemptLabels[a.label]||a.label}</dt><dd>{a.count}회</dd></div>)}</dl>{!report.report.attempts.length&&<p>저장된 수신 시도가 없습니다.</p>}</section>
       </>}
-      <footer className="report-pagination"><button disabled={!page||loading} onClick={()=>setPage(v=>v-1)}>이전</button><span>{page+1}페이지 · 표별 최대 50행</span><button disabled={!more||loading} onClick={()=>setPage(v=>v+1)}>다음</button></footer>
+      <footer className="report-pagination list-pagination"><button disabled={!page||loading} onClick={()=>setPage(v=>v-1)}>이전</button><span>{page+1}페이지 · 표별 최대 50행</span><button disabled={!more||loading} onClick={()=>setPage(v=>v+1)}>다음</button></footer>
     </>}
   </section>;
 }

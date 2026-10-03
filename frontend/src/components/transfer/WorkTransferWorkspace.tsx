@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {ApiError,jsonBody} from '@/lib/api';
 import {transferJson,transferLabels,type TransferDirection,type TransferEvent,type TransferPage,type WorkTransfer} from '@/lib/work-transfer';
 import './transfer.css';
+import '../work-list.css';
 
 export function WorkTransferWorkspace({active,organizationId,accessKey,canRead,focus,onChanged,onOpenRecord,onCloseDetail,popupOnly=false,localInputs=[]}:{
   active:boolean;organizationId:string;accessKey:string;canRead:boolean;focus:{id:string;revision:number;direction?:TransferDirection}|null;
@@ -10,6 +11,7 @@ export function WorkTransferWorkspace({active,organizationId,accessKey,canRead,f
   popupOnly?:boolean;onCloseDetail?:()=>void;
   localInputs?:{code:string;recordId:number;name:string;text:string}[];
 }) {
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [direction,setDirection]=useState<TransferDirection>('ALL');const [status,setStatus]=useState('');
   const [page,setPage]=useState(0);const [rows,setRows]=useState<WorkTransfer[]>([]);const [hasMore,setHasMore]=useState(false);
   const [selected,setSelected]=useState<string|null>(null);const [task,setTask]=useState<WorkTransfer|null>(null);
@@ -76,17 +78,17 @@ export function WorkTransferWorkspace({active,organizationId,accessKey,canRead,f
     catch(e){if(!abort.signal.aborted)setHistoryError((e as Error).message);}finally{if(!abort.signal.aborted)setHistoryBusy(false);}
   };
   const actionable=current&&(current.status==='OFFERED'||current.status==='CONNECTING')&&(current.canAccept||current.canReject||current.canCancel);
-  return <section hidden={!active} className={`transfer-workspace${popupOnly?' transfer-popup-only':''}`} aria-label="상담 이관">
-    <div hidden={popupOnly}><header><div><h1>상담 이관</h1><p>업무는 수락 후, 통화는 수락과 음성 연결 확인 후 담당자가 변경됩니다.</p></div><button disabled={busy} onClick={()=>setRefresh(v=>v+1)}>목록·선택 요청 다시 조회</button></header>
+  return <section hidden={!active} className={`transfer-workspace crm-list-workspace${popupOnly?' transfer-popup-only':''}`} aria-label="상담 이관">
+    <div hidden={popupOnly} className="list-content"><header className="list-heading"><div><h1>상담 이관</h1><p>업무는 수락 후, 통화는 수락과 음성 연결 확인 후 담당자가 변경됩니다.</p></div><button disabled={busy} onClick={()=>setRefresh(v=>v+1)}>새로고침</button></header>
     {localInputs.length>0&&<section className="transfer-draft" aria-label="보관한 미저장 상담 입력"><h2>보관한 미저장 상담 입력</h2><p>현재 담당 상담에서 제외된 미저장 입력입니다. 복사해서 보관할 수 있습니다.</p>{localInputs.map(input=><details key={input.code}><summary>{input.name} · 기록 #{input.recordId}</summary><label>내 입력 · 읽고 복사할 수 있습니다<textarea readOnly rows={5} value={input.text}/></label></details>)}</section>}
     {!canRead?<p role="alert">현재 조직의 이관 조회 권한이 없습니다.</p>:<>
-      <div className="transfer-filters"><label>요청 구분<select value={direction} disabled={busy} onChange={e=>{setDirection(e.target.value as TransferDirection);setPage(0);}}><option value="RECEIVED">받은 요청</option><option value="SENT">보낸 요청</option><option value="ALL">권한 범위 전체</option></select></label>
+      <button className="list-filter-toggle" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(v=>!v)}>조회 조건 {filtersOpen?'접기':'열기'}</button>
+      <div className={`transfer-filters list-filters ${filtersOpen?'filters-open':''}`}><label>요청 구분<select value={direction} disabled={busy} onChange={e=>{setDirection(e.target.value as TransferDirection);setPage(0);}}><option value="RECEIVED">받은 요청</option><option value="SENT">보낸 요청</option><option value="ALL">권한 범위 전체</option></select></label>
         <label>이관 상태<select value={status} disabled={busy} onChange={e=>{setStatus(e.target.value);setPage(0);}}><option value="">전체</option>{Object.entries(transferLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label></div>
-      {listError&&<p role="alert" className="transfer-error">{listError}</p>}{loading&&<p role="status">이관 목록 조회 중…</p>}
-      <div className="transfer-table-area"><h2>요청 목록</h2>{!rows.length&&!loading&&!listError&&<p>조건에 맞는 요청이 없습니다. 상담 기록에서 업무 이관을 요청할 수 있습니다.</p>}
-        <p>행을 더블 클릭하거나 상세 보기로 요청을 확인하세요.</p><div className="transfer-table-scroll"><table><thead><tr><th>요청 일시</th><th>보낸 직원 → 받는 직원</th><th>구분</th><th>상태</th><th>이관 사유</th><th>상세</th></tr></thead><tbody>{rows.map(row=><tr key={row.id} onDoubleClick={()=>choose(row.id)}><td><time dateTime={row.requestedAt}>{new Date(row.requestedAt).toLocaleString('ko-KR')}</time></td><td>{row.fromName} → {row.toName}</td><td>{row.kind==='CALL'?'통화':'업무'}</td><td>{transferLabels[row.status]}</td><td className="transfer-summary">{row.reason}</td><td><button disabled={busy} onClick={()=>choose(row.id)} aria-label={`${row.fromName} → ${row.toName} · ${row.reason} 상세 보기`}>상세 보기</button></td></tr>)}</tbody></table></div>
-        <nav className="transfer-actions" aria-label="이관 목록 페이지"><button disabled={busy||loading||page===0} onClick={()=>setPage(v=>v-1)}>이전</button><span>{page+1}페이지</span><button disabled={busy||loading||!hasMore} onClick={()=>setPage(v=>v+1)}>다음</button></nav>
-      </div></>}</div><dialog ref={dialog} className="transfer-dialog transfer-detail-dialog" aria-label="상담 이관 상세" onCancel={e=>{e.preventDefault();e.stopPropagation();closeDetail();}}><header><h2>상담 이관 상세</h2><button disabled={busy} onClick={closeDetail}>닫기</button></header><div className="transfer-detail">
+      {listError&&<p role="alert" className="transfer-error list-error">{listError}</p>}
+      <div className="transfer-table-area list-content"><div className="list-meta"><span>{page+1}페이지 · {rows.length}건</span><span>행을 더블 클릭하거나 상세 보기로 요청을 확인하세요.</span></div><div className="transfer-table-scroll list-table"><table aria-label="상담 이관 목록"><thead><tr><th>요청 일시</th><th>보낸 직원 → 받는 직원</th><th>구분</th><th>상태</th><th>이관 사유</th><th>상세</th></tr></thead><tbody>{rows.map(row=><tr key={row.id} onDoubleClick={()=>choose(row.id)}><td className="list-row-time"><time dateTime={row.requestedAt}>{new Date(row.requestedAt).toLocaleString('ko-KR')}</time></td><td className="list-row-main"><strong>{row.fromName} → {row.toName}</strong></td><td>{row.kind==='CALL'?'통화':'업무'}</td><td><span className={`list-status list-status-${row.status}`}>{transferLabels[row.status]}</span></td><td className="transfer-summary list-row-summary">{row.reason}</td><td className="list-row-action"><button disabled={busy} onClick={()=>choose(row.id)} aria-label={`${row.fromName} → ${row.toName} · ${row.reason} 상세 보기`}>상세 보기</button></td></tr>)}</tbody></table>{loading&&<p role="status" className="list-empty">이관 목록 조회 중…</p>}{!rows.length&&!loading&&!listError&&<p className="list-empty">조건에 맞는 요청이 없습니다. 상담 기록에서 업무 이관을 요청할 수 있습니다.</p>}</div>
+        <nav className="transfer-actions list-pagination" aria-label="이관 목록 페이지"><button disabled={busy||loading||page===0} onClick={()=>setPage(v=>v-1)}>이전</button><span>{page+1}페이지</span><button disabled={busy||loading||!hasMore} onClick={()=>setPage(v=>v+1)}>다음</button></nav>
+      </div></>}</div><dialog ref={dialog} className="transfer-dialog transfer-detail-dialog crm-list-dialog" aria-label="상담 이관 상세" onCancel={e=>{e.preventDefault();e.stopPropagation();closeDetail();}}><header className="list-dialog-heading"><h2>상담 이관 상세</h2><button disabled={busy} onClick={closeDetail}>닫기</button></header><div className="transfer-detail list-dialog-body">
         {error&&<p role="alert" className="transfer-error">{error}</p>}{notice&&<p role="status">{notice}</p>}{detailLoading&&<p role="status">선택 요청 확인 중…</p>}
         {current?<><h2>{current.fromName} → {current.toName}</h2><dl><dt>상태</dt><dd>{transferLabels[current.status]}</dd><dt>요청자</dt><dd>{current.requesterName}</dd><dt>저장된 상담</dt><dd>기록 #{current.consultationId}{current.liveWork?' · 처리 중 업무':''}</dd><dt>{current.status==='CONNECTING'?'연결 확인 기한':'수락 기한'}</dt><dd><time dateTime={current.expiresAt}>{new Date(current.expiresAt).toLocaleString('ko-KR')}</time></dd></dl>
           <h3>이관 사유</h3><p className="transfer-body">{current.reason}</p><h3>전달 메모</h3><p className="transfer-body">{current.memo||'전달 메모 없음'}</p>{current.outcome&&<><h3>처리 결과</h3><p className="transfer-body">{current.outcome}</p></>}
