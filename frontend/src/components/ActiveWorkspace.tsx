@@ -355,9 +355,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* Transfer Forward Button */}
               <button
-                disabled={readOnly || busy}
+                disabled
                 onClick={onOpenTransfer}
-                title="호전환 미연동"
+                title="실시간 통화 이관은 연결 검증 후 제공됩니다. 종료 후 업무 이관을 이용해 주세요."
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
               >
                 <PhoneForwarded className="w-4 h-4 text-indigo-400" />

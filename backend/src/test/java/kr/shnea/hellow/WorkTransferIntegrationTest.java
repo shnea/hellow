@@ -97,6 +97,11 @@ class WorkTransferIntegrationTest {
     bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("transfer:read"),true);members.save(bob);
     mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isForbidden());
   }
+  @Test void ongoingRecordReadRequiresEditingThroughTheQueueEvenWithoutQueueLookupGrant()throws Exception{
+    var c=source("ongoing",QueueItem.ItemType.TICKET,false);
+    var alice=members.findById(member("alice","a")).orElseThrow();alice.update("alice",Set.of("consultation:read","consultation:write"),true);members.save(alice);
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false)).andExpect(jsonPath("$.processing").value(true));
+  }
   @Test void directionIsFilteredBeforePaginationAndNeverMatchesSubjectAlone()throws Exception{
     // A recipient has 51 incoming and one outgoing request, so post-page filtering would be incomplete.
     for(int i=0;i<51;i++)offer(source(null,QueueItem.ItemType.TICKET,true));
@@ -125,6 +130,7 @@ class WorkTransferIntegrationTest {
     assertThat(attachments.findByOrganizationIdAndFileId("a","file-one").orElseThrow().getQueueCode()).isEqualTo("done");
   }
   @Test void dedupRecoveryAndChangedRequestAreTenantAndIdentityBound()throws Exception{
+    mvc.perform(actor(get("/api/me"),"alice","a")).andExpect(status().isOk()).andExpect(jsonPath("$.issuer").value(ISSUER));
     var c=source(null,QueueItem.ItemType.TICKET,true);var body=request(c,"bob");var t=ok(send(post("/api/transfers/work"),"alice","a",body));
     var again=ok(send(post("/api/transfers/work"),"alice","a",body));assertThat(again.path("id")).isEqualTo(t.path("id"));
     String key=body.get("requestId").toString();assertThat(ok(mvc.perform(actor(get("/api/transfers/request/"+key),"alice","a"))).path("id")).isEqualTo(t.path("id"));

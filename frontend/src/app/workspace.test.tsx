@@ -43,6 +43,19 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('announces an incoming work transfer and blocks receiving and switching organizations while reserved',async()=>{
+    items=[];const original=fetchMock.getMockImplementation()!;
+    const incoming={id:'t1',version:1,status:'OFFERED',fromName:'이전 담당',toName:'Alice',consultationId:7,reason:'업무 담당 변경',expiresAt:'2026-10-03T12:00:00Z',canAccept:true,canReject:true};
+    fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>{
+      if(path==='/api/me')return response({issuer:'issuer',subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions:[...permissions,'transfer:read']},{id:'org-b',name:'B',permissions}]});
+      if(path==='/api/agents/me/heartbeat'||path==='/api/agents/me')return response({...agent(),state:'TRANSFER_PENDING',workTransferId:'t1'});
+      if(path.startsWith('/api/transfers?'))return response({items:[incoming],page:0,hasMore:false});
+      return original(path,o);
+    });render(<Workspace/>);await flush();
+    expect(screen.getByRole('heading',{name:'업무 이관 요청이 도착했습니다'})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'나중에 확인'}));
+    expect((screen.getByRole('option',{name:'대기 · 상담 가능'}) as HTMLOptionElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();expect((screen.getByLabelText('현재 작업 조직') as HTMLSelectElement).disabled).toBe(true);expect(screen.getByText(/업무 이관 응답 대기 중입니다/)).toBeTruthy();
+  });
   it('blocks receiving and organization switching during followup work even without queue permissions',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>{

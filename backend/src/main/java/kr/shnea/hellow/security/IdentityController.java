@@ -47,6 +47,7 @@ public class IdentityController {
                                     "teamId", Optional.ofNullable(m.getTeamId()).orElse(""))))
             .toList();
     return Map.of(
+        "issuer", jwt.getIssuer().toString(),
         "subject",
         jwt.getSubject(),
         "name",

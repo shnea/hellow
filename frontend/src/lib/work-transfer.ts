@@ -1,4 +1,6 @@
 import {apiJson, jsonBody} from './api';
+import {readDocument} from './editor-document';
+import type {ConsultationDraft} from './workspace-data';
 
 export type TransferStatus='OFFERED'|'ACCEPTED'|'REJECTED'|'CANCELLED'|'EXPIRED'|'FAILED'|'REVOKED';
 export type TransferDirection='ALL'|'SENT'|'RECEIVED';
@@ -17,6 +19,17 @@ export type TransferInput=Omit<TransferRequest,'requestId'>;
 export const transferLabels:Record<TransferStatus,string>={
   OFFERED:'수락 대기',ACCEPTED:'이관 완료',REJECTED:'거절',CANCELLED:'취소',EXPIRED:'기한 만료',FAILED:'이관 실패',REVOKED:'권한·수신 상태 변경',
 };
+function canonical(value:unknown):unknown {
+  if(Array.isArray(value))return value.map(canonical);
+  if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,v])=>[key,canonical(v)]));
+  return value;
+}
+/** Formatting and attachments are part of the saved source, even when the plain text is unchanged. */
+export function sameConsultationDraft(left:ConsultationDraft,right:ConsultationDraft) {
+  const comparable=(d:ConsultationDraft)=>({categoryMain:d.categoryMain,categorySub:d.categorySub,categoryId:d.categoryId??null,resultId:d.resultId??null,
+    status:d.status,tags:d.selectedTags.filter(Boolean),document:readDocument(d.memo)});
+  return JSON.stringify(canonical(comparable(left)))===JSON.stringify(canonical(comparable(right)));
+}
 export function transferJson<T>(path:string,organizationId:string,options:RequestInit={}) {
   const headers=new Headers(options.headers);headers.set('X-Organization-ID',organizationId);
   return apiJson<T>(path,{...options,headers});
@@ -44,7 +57,7 @@ export function pendingTransfer(key:string,consultationId:number):TransferReques
     throw new Error('보관한 이관 요청을 읽지 못했습니다. 이관 목록에서 접수 여부를 확인해 주세요.');
   }
 }
-function confirmed(value:WorkTransfer|null,organizationId:string,consultationId:number):WorkTransfer {
+export function confirmedTransfer(value:WorkTransfer|null,organizationId:string,consultationId:number):WorkTransfer {
   if(!value||typeof value.id!=='string'||!uuid.test(value.id)||!Object.hasOwn(transferLabels,value.status)
     ||value.organizationId!==organizationId||value.consultationId!==consultationId||!Number.isSafeInteger(value.version)||value.version<0)
     throw new Error('이관 접수 응답을 확인하지 못했습니다. 보관한 요청으로 다시 확인해 주세요.');
@@ -57,12 +70,12 @@ export async function submitTransfer(organizationId:string,key:string,consultati
     if(input&&JSON.stringify(parseRequest({...input,requestId:payload.requestId},consultationId))!==JSON.stringify(payload))
       throw new Error('보관한 요청의 내용은 변경할 수 없습니다. 기존 접수 결과를 먼저 확인해 주세요.');
     const existing=await transferJson<WorkTransfer|null>(`/api/transfers/request/${payload.requestId}`,organizationId);
-    if(existing){const result=confirmed(existing,organizationId,consultationId);sessionStorage.removeItem(key);return result;}
+    if(existing){const result=confirmedTransfer(existing,organizationId,consultationId);sessionStorage.removeItem(key);return result;}
   } else {
     if(!input)throw new Error('이관 대상과 사유를 입력해 주세요.');
     payload=parseRequest({...input,requestId:crypto.randomUUID()},consultationId);
     sessionStorage.setItem(key,JSON.stringify(payload));
   }
-  const result=confirmed(await transferJson<WorkTransfer>('/api/transfers/work',organizationId,jsonBody(payload)),organizationId,consultationId);
+  const result=confirmedTransfer(await transferJson<WorkTransfer>('/api/transfers/work',organizationId,jsonBody(payload)),organizationId,consultationId);
   sessionStorage.removeItem(key);return result;
 }

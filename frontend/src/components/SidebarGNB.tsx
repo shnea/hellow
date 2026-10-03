@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PhoneCall, Users, Ticket, CalendarClock, BarChart3, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
+import { PhoneCall, Users, Ticket, CalendarClock, ArrowRightLeft, BarChart3, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
 import { AgentStatus } from '../types';
 import { buildLogoutUrl } from '@/lib/pkce';
 import { apiJson } from '@/lib/api';
@@ -14,6 +14,7 @@ interface SidebarGNBProps {
   statusLabel?:string;
   showSettings?: boolean;
   showFollowups?:boolean;
+  showTransfers?:boolean;
   supportLink?: string;
 }
 
@@ -25,6 +26,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   statusLabel,
   showSettings=false,
   showFollowups=false,
+  showTransfers=false,
   supportLink,
 }) => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -34,6 +36,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
     { id: 'customers', label: '고객·거래처 디렉터리', icon: Users },
     { id: 'tickets', label: '티켓 & 상담 이력', icon: Ticket },
     { id: 'followups', label: '콜백·방문 예약', icon: CalendarClock },
+    { id: 'transfers', label: '상담 업무 이관', icon: ArrowRightLeft },
     { id: 'stats', label: '상담 통계·리포트', icon: BarChart3 },
     { id: 'settings', label: '시스템 설정', icon: Settings },
   ];
@@ -57,7 +60,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
       {/* Main Navigation Tabs */}
       <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
-        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)).map((item) => {
+        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (

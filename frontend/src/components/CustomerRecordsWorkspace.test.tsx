@@ -9,6 +9,21 @@ const record={id:1,version:0,customerCode:'c',queueCode:'q',categoryMain:'일반
 const props={customers:[customer],organizationId:'org',accessKey:'staff',canRead:true,canWrite:true,canEditCustomer:false,active:true,activeQueues:{},onCustomerSaved:vi.fn(),canRequestFollowUp:true,onRequestFollowUp:vi.fn()};
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();});};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it('opens the exact transferred standalone record without a customer grant or querying a different customer',async()=>{
+  const fetcher=vi.fn(async(path:string)=>{expect(path).toBe('/api/consultations/1');return Response.json({...record,customerCode:null,queueCode:null});});vi.stubGlobal('fetch',fetcher);
+  render(<CustomerRecordsWorkspace {...props} customers={[]} focus={{id:1,revision:1}}/>);await flush();
+  expect(fetcher.mock.calls.every(([path])=>path==='/api/consultations/1')).toBe(true);expect((screen.getByLabelText('검수 본문') as HTMLTextAreaElement).value).toBe('원본');expect(screen.getByText(/고객 정보 조회 불가/)).toBeTruthy();
+});
+it('requires saving a changed draft before requesting responsibility transfer',async()=>{
+  const request=vi.fn();vi.stubGlobal('fetch',vi.fn(async()=>Response.json([record])));
+  render(<CustomerRecordsWorkspace {...props} canTransfer onRequestTransfer={request}/>);await flush();fireEvent.change(screen.getByLabelText('검수 본문'),{target:{value:'아직 저장하지 않은 수정'}});fireEvent.click(screen.getByRole('button',{name:'업무 이관 요청'}));
+  expect(request).not.toHaveBeenCalled();expect(screen.getByRole('alert').textContent).toContain('먼저 저장');expect((screen.getByLabelText('검수 본문') as HTMLTextAreaElement).value).toBe('아직 저장하지 않은 수정');
+});
+it('keeps a changed local document copyable when transfer or current scope removes the server record',async()=>{
+  let rows:unknown[]=[record];vi.stubGlobal('fetch',vi.fn(async()=>Response.json(rows)));const view=render(<CustomerRecordsWorkspace {...props}/>);await flush();
+  fireEvent.change(screen.getByLabelText('검수 본문'),{target:{value:'변경 후 아직 저장하지 않은 입력'}});rows=[];view.rerender(<CustomerRecordsWorkspace {...props} recordRefresh={1}/>);await flush();
+  expect(screen.getByText('화면에 없는 기록 #1 · 미저장 입력 보관')).toBeTruthy();expect((screen.getByLabelText('내 입력 · 읽고 복사할 수 있습니다') as HTMLTextAreaElement).value).toBe('변경 후 아직 저장하지 않은 입력');expect((screen.getByLabelText('내 입력 · 읽고 복사할 수 있습니다') as HTMLTextAreaElement).readOnly).toBe(true);
+});
 it('loads completed history when returning from the queue and supports requesting followup',async()=>{
   let rows:unknown[]=[];const fetcher=vi.fn(async()=>Response.json(rows));vi.stubGlobal('fetch',fetcher);
   const view=render(<CustomerRecordsWorkspace {...props}/>);await flush();expect(screen.getByText('상담 기록 0건')).toBeTruthy();view.rerender(<CustomerRecordsWorkspace {...props} active={false}/>);rows=[record];view.rerender(<CustomerRecordsWorkspace {...props}/>);await flush();

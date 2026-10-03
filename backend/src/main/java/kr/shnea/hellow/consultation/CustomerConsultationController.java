@@ -48,7 +48,9 @@ public class CustomerConsultationController {
   }
   private Map<String,Object> view(WorkspaceAccess.Actor actor,Consultation record) {
     Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
-    view.put("editable",actor.can("consultation:write",record));return view;
+    boolean processing=record.getQueueCode()!=null&&queues.findByOrganizationIdAndCode(actor.organizationId(),record.getQueueCode())
+        .map(q->q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING).orElse(false);
+    view.put("processing",processing);view.put("editable",actor.can("consultation:write",record)&&!processing);return view;
   }
   public record CreateRequest(@NotBlank String customerCode,@NotNull UUID requestId) {}
   @PostMapping
