@@ -7,7 +7,7 @@ export function apiFetch(path: string, options: RequestInit = {}) {
   const token = sessionStorage.getItem('hellow_access_token');
   const organization = sessionStorage.getItem('hellow_organization_id');
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (organization) headers.set('X-Organization-ID', organization);
+  if (organization && !headers.has('X-Organization-ID')) headers.set('X-Organization-ID', organization);
   return fetch(path, { ...options, headers, cache: 'no-store' });
 }
 

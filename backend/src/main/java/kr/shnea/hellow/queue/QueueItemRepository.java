@@ -20,6 +20,9 @@ public interface QueueItemRepository extends JpaRepository<QueueItem, Long> {
   boolean existsByOrganizationIdAndAssignedSubjectAndStatusAndCallEndedFalseAndType(
       String organizationId, String subject, QueueItem.QueueStatus status, QueueItem.ItemType type);
 
+  boolean existsByOrganizationIdAndAssignedSubjectAndStatusAndType(
+      String organizationId, String subject, QueueItem.QueueStatus status, QueueItem.ItemType type);
+
   long countByOrganizationIdAndStatus(String organizationId, QueueItem.QueueStatus status);
 
   Optional<QueueItem> findBySessionId(String sessionId);

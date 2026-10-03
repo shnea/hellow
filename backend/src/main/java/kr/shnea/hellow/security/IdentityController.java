@@ -8,14 +8,16 @@ public class IdentityController {
   private final WorkspaceAccess access;
   private final MembershipRepository memberships;
   private final OrganizationRepository organizations;
+  private final AdminAccess admin;
 
   public IdentityController(
       WorkspaceAccess access,
       MembershipRepository memberships,
-      OrganizationRepository organizations) {
+      OrganizationRepository organizations, AdminAccess admin) {
     this.access = access;
     this.memberships = memberships;
     this.organizations = organizations;
+    this.admin = admin;
   }
 
   @GetMapping("/api/me")
@@ -39,6 +41,7 @@ public class IdentityController {
                                     o.getId(),
                                     "name",
                                     o.getName(),
+                                    "publicCode", o.getPublicCode(),
                                     "permissions",
                                     m.getPermissions())))
             .toList();
@@ -48,6 +51,6 @@ public class IdentityController {
         "name",
         Optional.ofNullable(jwt.getClaimAsString("name")).orElse(jwt.getSubject()),
         "organizations",
-        orgs);
+        orgs, "platformAdmin", admin.isPlatformAdmin());
   }
 }

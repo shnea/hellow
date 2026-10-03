@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { PhoneCall, Users, Ticket, BarChart3, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
 import { AgentStatus } from '../types';
 import { buildLogoutUrl } from '@/lib/pkce';
+import { apiJson } from '@/lib/api';
 
 interface SidebarGNBProps {
   agentName: string;
@@ -11,6 +12,8 @@ interface SidebarGNBProps {
   onTabChange: (tab: string) => void;
   agentStatus: AgentStatus;
   onAgentStatusChange: (status: AgentStatus) => void;
+  showSettings?: boolean;
+  supportLink?: string;
 }
 
 export const SidebarGNB: React.FC<SidebarGNBProps> = ({
@@ -19,6 +22,8 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   onTabChange,
   agentStatus,
   onAgentStatusChange,
+  showSettings=false,
+  supportLink,
 }) => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
@@ -49,7 +54,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
       {/* Main Navigation Tabs */}
       <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
-        {menuItems.map((item) => {
+        {menuItems.filter(item=>item.id!=='settings'||showSettings).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (
@@ -78,9 +83,9 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
       </nav>
 
       {/* Customer Web Support Link */}
-      <div className="mb-3 px-2 w-full">
+      {supportLink&&<div className="mb-3 px-2 w-full">
         <a
-          href="/support"
+          href={supportLink}
           target="_blank"
           rel="noopener noreferrer"
           className="relative group w-full h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all"
@@ -91,7 +96,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
             고객용 웹 상담창 열기 ↗
           </span>
         </a>
-      </div>
+      </div>}
 
       {/* Agent Profile & Status */}
       <div className="relative w-full px-2">
@@ -148,6 +153,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
                   type="button"
                   onClick={async () => {
                     const idToken = typeof window !== 'undefined' ? sessionStorage.getItem('hellow_id_token') : null;
+                    await apiJson('/api/session/logout', {method:'POST'}).catch(()=>{});
                     document.cookie = 'hellow_logged_in=; path=/; max-age=0';
                     sessionStorage.clear();
 

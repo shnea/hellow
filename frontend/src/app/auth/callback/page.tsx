@@ -75,6 +75,7 @@ function AuthCallbackContent() {
         sessionStorage.setItem('hellow_access_token',tokenData.access_token);
         sessionStorage.setItem('hellow_id_token',tokenData.id_token);
         const me=await apiJson<{name:string}>('/api/me');
+        await apiJson('/api/session/login', {method:'POST'});
         const agentName=me.name;
         const email=typeof payload.email==='string' ? payload.email : '';
         sessionStorage.setItem('hellow_agent_name',agentName);

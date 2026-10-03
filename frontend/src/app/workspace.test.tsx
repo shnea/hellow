@@ -21,12 +21,15 @@ const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.
 let items:ReturnType<typeof queue>[];
 let fetchMock:ReturnType<typeof vi.fn<(path:string,options?:RequestInit)=>Promise<Response>>>;
 beforeEach(()=>{
+  HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+  HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   sessionStorage.clear();sessionStorage.setItem('hellow_access_token','test-access-token');items=[queue()];
   fetchMock=vi.fn(async(path:string)=>{
     if(path==='/api/me')return response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions}]});
     if(path==='/api/queue')return response(items);
     if(path==='/api/customers')return response([serverCustomer]);
     if(path.startsWith('/api/timeline/'))return response([]);
+    if(path.startsWith('/api/consultations/customer/'))return response([]);
     if(path.startsWith('/api/consultations/'))return response(null,204);
     return response({});
   });vi.stubGlobal('fetch',fetchMock);
@@ -74,7 +77,23 @@ describe('workspace regressions',()=>{
   it('notifies the first arrival after a successfully synchronized empty queue',async()=>{
     vi.useFakeTimers();items=[];render(<Workspace/>);await flush();items=[queue()];items[0].status='WAITING';
     await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
-    expect(screen.getByText('새 상담 요청')).toBeTruthy();
+    expect(screen.getByRole('dialog',{name:'새 상담 요청이 도착했습니다'})).toBeTruthy();
+  });
+  it('keeps historical records editable when the queue is empty',async()=>{
+    items=[];const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
+      if(path==='/api/consultations/customer/cust-1')return response([{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical memo',tags:'',agentName:'Alice',createdAt:'2026-10-02T12:00:00'}]);
+      return original(path,options);
+    });
+    render(<Workspace/>);await flush();expect(screen.getByText('Historical memo')).toBeTruthy();expect(screen.getByText('editor-editable')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'새 기록'})).toBeTruthy();
+  });
+  it('blocks incoming calls throughout after-call processing',async()=>{
+    items=[{...queue(),type:'CALL',callEnded:true},{...queue('queue-2'),type:'CALL',status:'WAITING',assignedSubject:''}];
+    render(<Workspace/>);await flush();
+    const modal=screen.getByRole('dialog',{name:'전화 상담이 들어왔습니다'});expect(modal).toBeTruthy();
+    expect((screen.getByRole('button',{name:'통화 수락'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('후처리 중 · 새 통화 수신 차단')).toBeTruthy();
   });
   it('does not overlap slow polls and aborts outstanding reads on unmount',async()=>{
     vi.useFakeTimers();let signal:AbortSignal|undefined;

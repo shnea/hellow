@@ -27,6 +27,9 @@ public class Membership {
   @Column(nullable = false)
   private String dataScope;
 
+  @Version private Long version;
+  @Column(length = 100) private String displayName;
+
   @ElementCollection(fetch = FetchType.EAGER)
   private Set<String> permissions;
 
@@ -71,5 +74,11 @@ public class Membership {
 
   public String getDataScope() {
     return dataScope;
+  }
+
+  public Long getVersion() { return version; }
+  public String getDisplayName() { return displayName; }
+  public void update(String displayName, Set<String> permissions, boolean active) {
+    this.displayName = displayName; this.permissions = new java.util.HashSet<>(permissions); this.active = active;
   }
 }

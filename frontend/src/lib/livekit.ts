@@ -1,6 +1,6 @@
 'use client';
 
-import { Room, RoomEvent, Track, ConnectionState, Participant } from 'livekit-client';
+import { Room, RoomEvent, Track, ConnectionState, Participant, DisconnectReason } from 'livekit-client';
 
 export interface LiveKitCallbacks {
   onConnected?: (room: Room) => void;
@@ -15,6 +15,7 @@ export class LiveKitCallSession {
   private room: Room | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private callbacks: LiveKitCallbacks;
+  private disposed = false;
 
   constructor(callbacks: LiveKitCallbacks = {}) {
     this.callbacks = callbacks;
@@ -36,7 +37,7 @@ export class LiveKitCallSession {
 
   public async connect(url: string, token: string): Promise<Room> {
     // 이전 연결 정리
-    this.disconnect();
+    if (this.disposed) throw new Error('종료된 통화 연결입니다.');
 
     const room = new Room({
       adaptiveStream: true,
@@ -53,9 +54,12 @@ export class LiveKitCallSession {
       this.callbacks.onConnected?.(room);
     });
 
-    room.on(RoomEvent.Disconnected, () => {
+    room.on(RoomEvent.Disconnected, (reason) => {
       this.callbacks.onDisconnected?.();
       this.cleanupAudio();
+      if(!this.disposed) this.callbacks.onError?.(new Error(reason===DisconnectReason.DUPLICATE_IDENTITY
+        ? '다른 브라우저에서 같은 계정으로 통화에 연결하여 음성 연결이 종료됐습니다.'
+        : '음성 서버 연결이 끊겼습니다. 상담 내용은 유지됩니다.'));
     });
 
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -88,13 +92,16 @@ export class LiveKitCallSession {
       try {
         await room.connect(wsUrl, token);
       } catch (proxyErr) {
+        if(this.disposed) throw proxyErr;
         console.warn('LiveKit proxy connect failed, trying direct server url:', url, proxyErr);
         // fallback: 백엔드가 내려준 direct url (예: ws://localhost:30162)
         await room.connect(url, token);
       }
 
       // 2. 마이크 활성화 및 로컬 오디오 스트림 송출
+      if(this.disposed) { await room.disconnect(); throw new Error('통화 연결이 취소되었습니다.'); }
       await room.localParticipant.setMicrophoneEnabled(true);
+      if(this.disposed) { await room.disconnect(); throw new Error('통화 연결이 취소되었습니다.'); }
 
       return room;
     } catch (err) {
@@ -111,6 +118,7 @@ export class LiveKitCallSession {
   }
 
   public disconnect(): void {
+    this.disposed = true;
     if (this.room) {
       try {
         this.room.disconnect();

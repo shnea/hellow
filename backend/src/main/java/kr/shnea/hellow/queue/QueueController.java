@@ -48,12 +48,12 @@ public class QueueController {
     if (q.getStatus() == QueueItem.QueueStatus.PROCESSING
         && actor.subject().equals(q.getAssignedSubject())) return q;
     if (q.getType() == QueueItem.ItemType.CALL
-        && queues.existsByOrganizationIdAndAssignedSubjectAndStatusAndCallEndedFalseAndType(
+        && queues.existsByOrganizationIdAndAssignedSubjectAndStatusAndType(
             actor.organizationId(),
             actor.subject(),
             QueueItem.QueueStatus.PROCESSING,
             QueueItem.ItemType.CALL))
-      throw new ResponseStatusException(CONFLICT, "진행 중인 통화를 먼저 종료해 주세요.");
+      throw new ResponseStatusException(CONFLICT, "진행 중인 통화 또는 후처리 기록을 저장·완료한 뒤 새 통화를 수락해 주세요.");
     q.acceptBy(actor.subject(), actor.name());
     return queues.save(q);
   }

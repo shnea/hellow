@@ -19,18 +19,20 @@ public class EditorAttachmentController {
   private final AttachmentRepository files;
   private final QueueItemRepository queues;
   private final WorkspaceAccess access;
+  private final kr.shnea.hellow.consultation.ConsultationRepository consultations;
 
   public EditorAttachmentController(
       PlatformClient platform,
       PlatformProperties properties,
       AttachmentRepository files,
       QueueItemRepository queues,
-      WorkspaceAccess access) {
+      WorkspaceAccess access, kr.shnea.hellow.consultation.ConsultationRepository consultations) {
     this.platform = platform;
     this.properties = properties;
     this.files = files;
     this.queues = queues;
     this.access = access;
+    this.consultations = consultations;
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -43,11 +45,17 @@ public class EditorAttachmentController {
       @RequestParam String kind)
       throws java.io.IOException {
     var actor = access.require("consultation:write");
-    var q =
-        queues
-            .lockByCode(actor.organizationId(), queueCode)
-            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    q.requireOwner(actor.subject());
+    if(queueCode.startsWith("record-")) {
+      var c = record(actor.organizationId(),queueCode);
+      if(c.getQueueCode()!=null) {
+        var q=queues.findByOrganizationIdAndCode(actor.organizationId(),c.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
+        if(q.getStatus()==QueueItem.QueueStatus.PROCESSING || q.getStatus()==QueueItem.QueueStatus.WAITING)
+          throw new ResponseStatusException(CONFLICT,"진행 중인 상담의 첨부는 대기열에서 추가해 주세요.");
+      }
+    } else {
+      var q=queues.lockByCode(actor.organizationId(), queueCode).orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+      q.requireOwner(actor.subject());
+    }
     String expectedScope = actor.organizationId() + ":" + queueCode;
     if (!expectedScope.equals(scope)
         || !Set.of("image", "file", "video", "audio").contains(kind)
@@ -89,9 +97,8 @@ public class EditorAttachmentController {
         files
             .findByOrganizationIdAndFileId(actor.organizationId(), fileId)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    queues
-        .findByOrganizationIdAndCode(actor.organizationId(), file.getQueueCode())
-        .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    if(file.getQueueCode().startsWith("record-")) record(actor.organizationId(),file.getQueueCode());
+    else queues.findByOrganizationIdAndCode(actor.organizationId(),file.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
     return ResponseEntity.ok()
         .cacheControl(CacheControl.noStore())
         .body(platform.getViewTicket(fileId));
@@ -109,5 +116,9 @@ public class EditorAttachmentController {
         file.getName(),
         "size",
         file.getSize());
+  }
+  private kr.shnea.hellow.consultation.Consultation record(String org,String context) {
+    try { return consultations.findByOrganizationIdAndId(org,Long.parseLong(context.substring(7))).orElseThrow(()->new ResponseStatusException(NOT_FOUND)); }
+    catch(NumberFormatException e){throw new ResponseStatusException(BAD_REQUEST);}
   }
 }

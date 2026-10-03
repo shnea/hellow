@@ -41,6 +41,8 @@ interface ActiveWorkspaceProps {
   initialDraft?: ConsultationDraft;
   onDraftChange: (draft: ConsultationDraft) => void;
   readOnly?: boolean;
+  customerReadOnly?: boolean;
+  recordMode?: boolean;
   busy?: boolean;
   mediaStatus: 'idle' | 'connecting' | 'connected' | 'error';
   onMute: (muted: boolean) => Promise<void> | undefined;
@@ -74,7 +76,7 @@ interface ActiveWorkspaceProps {
 }
 
 export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
-  customer, queueCode, organizationId, initialDraft, onDraftChange, readOnly=false, busy=false, mediaStatus, onMute,
+  customer, queueCode, organizationId, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute,
   callDuration,
   isCallActive,
   onEndCall,
@@ -223,10 +225,10 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   };
 
   return (
-    <main className="flex-1 flex flex-col h-full bg-slate-900 min-w-0 select-none overflow-hidden">
+    <main className="active-workspace flex-1 flex flex-col h-full bg-slate-900 min-w-0 min-h-0 select-none overflow-hidden">
       {actionError && <p role="alert" className="p-3 text-amber-200 bg-amber-950">{actionError}</p>}
       {/* 1. 상단 통화 컨트롤러 바 */}
-      <div
+      {!recordMode && <div
         className={`px-5 py-2.5 border-b flex items-center justify-between transition-colors ${
           isOnHold
             ? 'bg-amber-950/60 border-amber-800/80'
@@ -388,7 +390,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* 2. 고객 정보 영역 (기업/개인 구분, 등록 조회 / 미등록 표시 / 상담 중 즉시 등록) */}
       <div className="border-b border-slate-800/80 bg-slate-950/40 transition-all">
@@ -436,9 +438,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             {customer.isRegistered ? (
               !isEditingInfo ? (
                 <button
-                disabled={readOnly || busy}
+                disabled={customerReadOnly || busy}
                   type="button"
-                  onClick={() => setIsEditingInfo(true)}
+                  onClick={() => {setIsEditingInfo(true);setIsInfoExpanded(true);}}
                   className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] flex items-center gap-1 border border-slate-700"
                 >
                   <Edit3 className="w-3 h-3" />
@@ -446,7 +448,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                 </button>
               ) : (
                 <button
-                disabled={readOnly || busy}
+                disabled={customerReadOnly || busy}
                   type="button"
                   onClick={() => setIsEditingInfo(false)}
                   className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded text-[11px] flex items-center gap-1"
@@ -540,7 +542,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <span className="text-[11px] font-semibold text-slate-400">고객 유형:</span>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="radio"
                       name="editCustomerType"
                       checked={formType === 'corporate'}
@@ -551,7 +553,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="radio"
                       name="editCustomerType"
                       checked={formType === 'individual'}
@@ -565,7 +567,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer ml-auto">
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="checkbox"
                       checked={formIsComplainant}
                       onChange={(e) => setFormIsComplainant(e.target.checked)}
@@ -579,7 +581,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">고객명</label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="text"
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
@@ -591,7 +593,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       {formType === 'corporate' ? '회사명' : '소속/분류'}
                     </label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="text"
                       value={formCompany}
                       onChange={(e) => setFormCompany(e.target.value)}
@@ -607,7 +609,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       {formType === 'corporate' ? (
                         <>
                           <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                             type="text"
                             placeholder="부서"
                             value={formDepartment}
@@ -615,7 +617,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                             className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                           />
                           <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                             type="text"
                             placeholder="직책"
                             value={formTitle}
@@ -625,7 +627,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                         </>
                       ) : (
                         <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                           type="text"
                           placeholder="예: 일반 이용자"
                           value={formTitle}
@@ -638,7 +640,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
                     <select
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       value={formTier}
                       onChange={(e) => setFormTier(e.target.value as 'VIP' | 'Gold' | 'Standard')}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -654,7 +656,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div className="col-span-2">
                     <label className="block text-[11px] text-slate-400 mb-1">이메일</label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="email"
                       value={formEmail}
                       onChange={(e) => setFormEmail(e.target.value)}
@@ -664,7 +666,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div className="col-span-2">
                     <label className="block text-[11px] text-slate-400 mb-1">고객 특이사항 / 컴플레인 메모</label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="text"
                       value={formNotes}
                       onChange={(e) => setFormNotes(e.target.value)}
@@ -676,7 +678,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
                 <div className="flex justify-end space-x-2 pt-1">
                   <button
-                disabled={readOnly || busy}
+                disabled={customerReadOnly || busy}
                     type="button"
                     onClick={() => setIsEditingInfo(false)}
                     className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
@@ -684,7 +686,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     취소
                   </button>
                   <button
-                disabled={readOnly || busy}
+                disabled={customerReadOnly || busy}
                     type="submit"
                     className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm shadow-indigo-950"
                   >
@@ -713,7 +715,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <span className="text-[11px] font-semibold text-slate-300">신규 등록 유형:</span>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="radio"
                       name="registerCustomerType"
                       checked={formType === 'corporate'}
@@ -724,7 +726,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer">
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="radio"
                       name="registerCustomerType"
                       checked={formType === 'individual'}
@@ -738,7 +740,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   </label>
                   <label className="flex items-center space-x-1.5 cursor-pointer ml-auto">
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="checkbox"
                       checked={formIsComplainant}
                       onChange={(e) => setFormIsComplainant(e.target.checked)}
@@ -754,7 +756,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       고객명 <span className="text-rose-400">*</span>
                     </label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="text"
                       required
                       placeholder="예: 홍길동"
@@ -769,7 +771,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       {formType === 'corporate' ? '회사명 / 조직명' : '소속 / 구분'}
                     </label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="text"
                       placeholder={formType === 'corporate' ? '예: (주)한국소프트' : '개인 고객'}
                       value={formCompany}
@@ -785,7 +787,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     {formType === 'corporate' ? (
                       <div className="flex gap-1">
                         <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                           type="text"
                           placeholder="부서"
                           value={formDepartment}
@@ -793,7 +795,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                           className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
                         />
                         <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                           type="text"
                           placeholder="직책"
                           value={formTitle}
@@ -803,7 +805,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                       </div>
                     ) : (
                       <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                         type="text"
                         placeholder="예: 일반 소비자"
                         value={formTitle}
@@ -816,7 +818,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
                     <select
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       value={formTier}
                       onChange={(e) => setFormTier(e.target.value as 'VIP' | 'Gold' | 'Standard')}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -832,7 +834,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   <div className="col-span-2">
                     <label className="block text-[11px] text-slate-400 mb-1">이메일 주소</label>
                     <input
-                      disabled={readOnly || busy}
+                      disabled={customerReadOnly || busy}
                       type="email"
                       placeholder="example@email.com"
                       value={formEmail}
@@ -853,7 +855,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
                   <div>
                     <button
-                disabled={readOnly || busy}
+                disabled={customerReadOnly || busy}
                       type="submit"
                       className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
                     >
@@ -885,6 +887,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               }}
               className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
+              {!consultationCategories.some(c=>c.main===mainCategory)&&<option value={mainCategory}>{mainCategory}</option>}
               {consultationCategories.map((c) => (
                 <option key={c.main} value={c.main}>
                   {c.main}
@@ -898,6 +901,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               onChange={(e) => setSubCategory(e.target.value)}
               className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
+              {!consultationCategories.find(c=>c.main===mainCategory)?.subs.includes(subCategory)&&<option value={subCategory}>{subCategory}</option>}
               {consultationCategories
                 .find((c) => c.main === mainCategory)
                 ?.subs.map((s) => (

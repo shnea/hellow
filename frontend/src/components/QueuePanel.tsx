@@ -9,6 +9,7 @@ interface QueuePanelProps {
   selectedQueueId: string;
   onSelectQueueItem: (id: string) => void;
   onAcceptCall?: (item: QueueItem) => void;
+  callBlocked?: boolean;
 }
 
 export const QueuePanel: React.FC<QueuePanelProps> = ({
@@ -16,6 +17,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   selectedQueueId,
   onSelectQueueItem,
   onAcceptCall,
+  callBlocked=false,
 }) => {
   const [filterType, setFilterType] = useState<'all' | QueueItemType>('all');
 
@@ -29,7 +31,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   const ticketCount = queueItems.filter((i) => i.type === 'ticket').length;
 
   return (
-    <section className="w-80 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none">
+    <section className="queue-panel w-80 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none">
       {/* Header */}
       <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center space-x-2">
@@ -186,6 +188,8 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
 
                 {item.status === 'WAITING' && onAcceptCall && (
                   <button
+                    disabled={item.type==='call'&&callBlocked}
+                    title={item.type==='call'&&callBlocked?'현재 통화와 후처리를 완료해 주세요.':undefined}
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectQueueItem(item.id);

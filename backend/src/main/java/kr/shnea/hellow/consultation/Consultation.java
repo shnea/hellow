@@ -55,6 +55,9 @@ public class Consultation extends kr.shnea.hellow.security.OrganizationOwned {
 
   @Version private Long version;
 
+  @Column(unique = true, length = 64) private String requestKey;
+  public void setRequestKey(String key) { this.requestKey = key; }
+
   public String getQueueCode() {
     return queueCode;
   }

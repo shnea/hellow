@@ -5,6 +5,8 @@ import java.util.*;
 import org.springframework.data.jpa.repository.*;
 
 public interface MembershipRepository extends JpaRepository<Membership, Long> {
+  List<Membership> findByOrganizationIdOrderById(String organizationId);
+  Optional<Membership> findByOrganizationIdAndIssuerAndSubject(String organizationId, String issuer, String subject);
   Optional<Membership> findByOrganizationIdAndIssuerAndSubjectAndActiveTrue(
       String organizationId, String issuer, String subject);
 

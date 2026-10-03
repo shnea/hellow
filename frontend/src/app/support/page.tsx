@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { 
   Headphones, 
   PhoneCall, 
@@ -35,6 +36,7 @@ interface SessionData {
 export default function CustomerSupportPage() {
   const [organizationCode,setOrganizationCode]=useState('');
   const [organizationName,setOrganizationName]=useState('');
+  const [branding,setBranding]=useState({title:'상담 문의를 접수해 주세요',description:'문의 내용을 남겨주시면 담당 상담사가 확인합니다.',buttonLabel:'상담 연결 요청하기',primaryColor:'#4f46e5',logoUrl:''});
   const requestId=useRef<string>('');
   // 폼 입력 상태
   const [customerName, setCustomerName] = useState('');
@@ -70,7 +72,7 @@ export default function CustomerSupportPage() {
     if(!code) {setErrorMessage('조직의 상담 접수 링크로 접속해 주세요.');return;}
     fetch(`/api/support/organization/${encodeURIComponent(code)}`).then(async response => {
       if(!response.ok) throw new Error('현재 상담 접수를 지원하는 조직이 아닙니다.');
-      const data=await response.json();setOrganizationName(data.name);
+      const data=await response.json();setOrganizationName(data.name);if(data.branding)setBranding(data.branding);
     }).catch(error=>setErrorMessage(error.message));
   },[]);
   // 1. 상담 요청 접수
@@ -259,12 +261,12 @@ export default function CustomerSupportPage() {
       {/* 헤더 */}
       <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-30 px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Headphones className="w-5 h-5 text-white" />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{backgroundColor:branding.primaryColor}}>
+            {branding.logoUrl?<Image src={branding.logoUrl} alt={`${organizationName} 로고`} width={36} height={36} unoptimized className="rounded-xl object-contain"/>:<Headphones className="w-5 h-5 text-white"/>}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-lg text-white tracking-tight">hellow</span>
+              <span className="font-bold text-lg text-white tracking-tight">{organizationName||'hellow'}</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">고객지원센터</span>
             </div>
             <p className="text-xs text-slate-400">온라인 실시간 상담 및 문의 접수</p>
@@ -287,8 +289,8 @@ export default function CustomerSupportPage() {
                   <Sparkles className="w-3.5 h-3.5" />
                   빠른 전문 상담사 연결
                 </div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">상담 문의를 접수해 주세요</h1>
-                <p className="text-sm text-slate-400 mt-1">문의 내용을 남겨주시면 담당 전문 상담사와 바로 연결해 드립니다.</p>
+                <h1 className="text-2xl font-bold text-white tracking-tight">{branding.title}</h1>
+                <p className="text-sm text-slate-400 mt-1">{branding.description}</p>
               </div>
 
               {errorMessage && (
@@ -446,7 +448,8 @@ export default function CustomerSupportPage() {
                   <button
                     type="submit"
                     disabled={submitting || !organizationName}
-                    className="w-full min-h-12 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full min-h-12 py-3 px-4 rounded-xl text-white font-bold text-sm transition flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110"
+                    style={{backgroundColor:branding.primaryColor}}
                   >
                     {submitting ? (
                       <>
@@ -455,7 +458,7 @@ export default function CustomerSupportPage() {
                       </>
                     ) : (
                       <>
-                        상담 연결 요청하기
+                        {branding.buttonLabel}
                         <ChevronRight className="w-4 h-4" />
                       </>
                     )}

@@ -35,6 +35,7 @@ class WorkspaceIntegrationTest {
   @Autowired QueueItemRepository queues;
   @Autowired CustomerRepository customers;
   @Autowired ConsultationRepository consultations;
+  @Autowired ConsultationRevisionRepository revisions;
   @Autowired TimelineRepository timelines;
   @Autowired FollowUpRepository followups;
   @Autowired AttachmentRepository files;
@@ -44,6 +45,7 @@ class WorkspaceIntegrationTest {
   @BeforeEach
   void setup() {
     files.deleteAll();
+    revisions.deleteAll();
     timelines.deleteAll();
     followups.deleteAll();
     consultations.deleteAll();
@@ -190,6 +192,34 @@ class WorkspaceIntegrationTest {
             decoded.getExpiresAtAsInstant().getEpochSecond()
                 - decoded.getIssuedAtAsInstant().getEpochSecond())
         .isEqualTo(120);
+  }
+
+  @Test
+  void afterCallProcessingBlocksNextCallUntilRecordIsCompleted() throws Exception {
+    queues.save(queue("q-next","org-a"));
+    accept("alice","q-a");
+    mvc.perform(actor(post("/api/queue/q-a/end-call"),"alice","org-a")).andExpect(status().isOk());
+    mvc.perform(actor(post("/api/queue/q-next/accept"),"alice","org-a")).andExpect(status().isConflict());
+    mvc.perform(actor(put("/api/consultations/queue/q-a"),"alice","org-a").contentType(MediaType.APPLICATION_JSON).content(body(0,true))).andExpect(status().isOk());
+    mvc.perform(actor(post("/api/queue/q-next/accept"),"alice","org-a")).andExpect(status().isOk());
+  }
+
+  @Test
+  void independentCustomerRecordPreservesOriginalAndRejectsForeignOrStaleUpdates() throws Exception {
+    var customer=new Customer("cust-a",Customer.CustomerType.INDIVIDUAL,true,"Customer",null,null,null,"Standard","010","",null,"",false);
+    customer.setOrganizationId("org-a");customers.save(customer);
+    var historical=new Consultation("cust-a","Support","Product",Consultation.ConsultationStatus.COMPLETED,"Original memo","","Original author",43);
+    historical.setOrganizationId("org-a");consultations.saveAndFlush(historical);
+    String path="/api/consultations/"+historical.getId();
+    mvc.perform(actor(get("/api/consultations/customer/cust-a"),"alice","org-a")).andExpect(jsonPath("$[0].memo").value("Original memo"));
+    mvc.perform(actor(put(path),"eve","org-b").contentType(MediaType.APPLICATION_JSON).content(body(0,true))).andExpect(status().isNotFound());
+    mvc.perform(actor(put(path),"alice","org-a").contentType(MediaType.APPLICATION_JSON).content(body(0,true))).andExpect(status().isOk()).andExpect(jsonPath("$.agentName").value("Original author")).andExpect(jsonPath("$.callDurationSeconds").value(43));
+    mvc.perform(actor(put(path),"bob","org-a").contentType(MediaType.APPLICATION_JSON).content(body(0,true))).andExpect(status().isConflict());
+    assertThat(revisions.findAll()).hasSize(1);assertThat(revisions.findAll().getFirst().getBeforeDocument()).contains("Original memo");
+    String create="{\"customerCode\":\"cust-a\",\"requestId\":\""+UUID.randomUUID()+"\"}";
+    mvc.perform(actor(post("/api/consultations"),"alice","org-a").contentType(MediaType.APPLICATION_JSON).content(create)).andExpect(status().isOk());
+    mvc.perform(actor(post("/api/consultations"),"alice","org-a").contentType(MediaType.APPLICATION_JSON).content(create)).andExpect(status().isOk());
+    assertThat(consultations.count()).isEqualTo(2);assertThat(queues.count()).isEqualTo(2);
   }
 
   @Test

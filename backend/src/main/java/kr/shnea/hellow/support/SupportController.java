@@ -19,18 +19,21 @@ public class SupportController {
   private final QueueItemRepository queues;
   private final OrganizationRepository organizations;
   private final LiveKitService media;
+  private final kr.shnea.hellow.settings.SupportSettingsService settings;
 
   public SupportController(
-      QueueItemRepository queues, OrganizationRepository organizations, LiveKitService media) {
+      QueueItemRepository queues, OrganizationRepository organizations, LiveKitService media,
+      kr.shnea.hellow.settings.SupportSettingsService settings) {
     this.queues = queues;
     this.organizations = organizations;
     this.media = media;
+    this.settings = settings;
   }
 
   @GetMapping("/organization/{publicCode}")
-  public Map<String, String> organization(@PathVariable String publicCode) {
+  public Map<String, Object> organization(@PathVariable String publicCode) {
     var o = publicOrg(publicCode);
-    return Map.of("name", o.getName());
+    return Map.of("name", o.getName(), "branding", settings.effective(o.getId()));
   }
 
   public record Request(
