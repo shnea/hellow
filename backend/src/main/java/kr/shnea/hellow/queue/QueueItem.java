@@ -70,6 +70,15 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   @Column(unique = true)
   private String requestKey;
 
+  private java.time.Instant supportExpiresAt;
+  @Column(length=64) private String requestFingerprint;
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public java.time.Instant getSupportExpiresAt(){return supportExpiresAt;}
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public String getRequestFingerprint(){return requestFingerprint;}
+  public void initializeSupportSession(java.time.Instant expiresAt,String fingerprint){supportExpiresAt=expiresAt;requestFingerprint=fingerprint;}
+  public boolean supportExpired(java.time.Instant now){return supportExpiresAt!=null&&!supportExpiresAt.isAfter(now);}
+
   public void setRequestKey(String key) {
     this.requestKey = key;
   }

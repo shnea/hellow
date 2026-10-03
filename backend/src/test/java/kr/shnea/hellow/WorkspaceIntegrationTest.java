@@ -330,7 +330,7 @@ class WorkspaceIntegrationTest {
     queues.delete(queues.findByCode("q-a").orElseThrow());
     String payload =
         """
-        {"organizationCode":"public-a","requestId":"browser-request-1","customerType":"INDIVIDUAL","customerName":"Public customer","phoneNumber":"01000000000","inquiryType":"Support","message":"Help please","channel":"CALL"}
+        {"organizationCode":"public-a","requestId":"078c2220-f3f0-4a9c-80e5-bc4c5f348ed5","customerType":"INDIVIDUAL","customerName":"Public customer","phoneNumber":"01000000000","inquiryType":"Support","message":"Help please","channel":"CALL"}
         """;
     String response =
         mvc.perform(

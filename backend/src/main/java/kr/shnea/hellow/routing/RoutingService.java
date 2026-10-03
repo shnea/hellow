@@ -157,6 +157,7 @@ public class RoutingService {
     for(var candidate:waiting){
       if(candidate.getType()==QueueItem.ItemType.CALLBACK)continue; // Scheduling decides when callback work becomes due.
       var q=queue(org,candidate.getCode());
+      if(q.supportExpired(now)){q.cancel();continue;}
       if(q.getStatus()!=QueueItem.QueueStatus.WAITING||attempts.activeForQueue(org,q.getCode()).isPresent())continue;
       var previous=history(q);if(previous.size()>=MAX_ATTEMPTS)continue;
       var tried=new HashSet<String>();previous.forEach(a->tried.add(a.getPresenceId()));
@@ -172,6 +173,7 @@ public class RoutingService {
   private void reconcile(String org,Instant now){
     for(var a:attempts.activeInOrganization(org)){
       var q=queues.lockByCode(org,a.getQueueCode());var p=presence.findById(a.getPresenceId()).orElseThrow();
+      if(q.isPresent()&&q.get().getStatus()==QueueItem.QueueStatus.WAITING&&q.get().supportExpired(now))q.get().cancel();
       if(q.isEmpty()||q.get().getStatus()!=QueueItem.QueueStatus.WAITING){finish(a,p,CANCELLED,now);continue;}
       if(!p.getOrganizationId().equals(org)){finish(a,p,ORGANIZATION_CHANGED,now);continue;}
       var actor=agentActor(p);
@@ -197,7 +199,7 @@ public class RoutingService {
   private Optional<WorkspaceAccess.Actor> agentActor(AgentPresence p){return members.findByOrganizationIdAndIssuerAndSubjectAndActiveTrue(p.getOrganizationId(),p.getIssuer(),p.getSubject()).flatMap(m->{
     var grants=authority.grants(m);return grants.containsKey("queue:accept")&&grants.containsKey("queue:read")?Optional.of(actor(m,p.getDisplayName(),grants)):Optional.empty();});}
   private WorkspaceAccess.Actor actor(Membership m,String name,Map<String,DataScope> grants){return new WorkspaceAccess.Actor(m.getOrganizationId(),m.getSubject(),name,m.getIssuer(),m.getTeamId(),grants.get("queue:accept"),authority.teamScope(m),grants);}
-  private boolean eligibleQueue(WorkspaceAccess.Actor actor,QueueItem q){return actor.organizationId().equals(q.getOrganizationId())&&(q.getOwnerSubject()==null||actor.can("queue:accept",q)&&actor.can("queue:read",q));}
+  private boolean eligibleQueue(WorkspaceAccess.Actor actor,QueueItem q){return !q.supportExpired(clock.instant())&&actor.organizationId().equals(q.getOrganizationId())&&(q.getOwnerSubject()==null||actor.can("queue:accept",q)&&actor.can("queue:read",q));}
   private boolean owned(QueueItem q,WorkspaceAccess.Actor actor){return Objects.equals(q.getOwnerIssuer(),actor.issuer())&&Objects.equals(q.getAssignedSubject(),actor.subject());}
   private QueueItem queue(String org,String code){return queues.lockByCode(org,code).orElseThrow(()->new ResponseStatusException(NOT_FOUND));}
   private void acquire(String org){lock.acquire().orElseThrow(()->new IllegalStateException("Routing lock missing"));organizations.lockById(org).orElseThrow(()->new ResponseStatusException(NOT_FOUND));}

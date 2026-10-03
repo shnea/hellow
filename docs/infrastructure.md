@@ -61,6 +61,8 @@ DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다
 
 ## 환경 변수와 암호화
 
+- 공개 상담의 신규 대기 요청 한도는 `HELLOW_PUBLIC_PENDING_LIMIT`(기본 조직당 100건)이다. 같은 요청의 복원/재전송을 차단하지 않는다. 고객 세션 만료 worker는 기본 활성이고 격리된 복원 검수 때만 `HELLOW_SUPPORT_CLEANUP_ENABLED=false`를 사용할 수 있다. 공개 세션 계약은 [공개 접수 계약](public-support.md)에 둔다.
+
 - 개발 환경은 `.env.dev`, 운영 환경은 `.env.prod`로 분리한다.
 - 두 환경 파일을 각각 SOPS + age로 암호화하여 Git에 저장한다.
 - 평문 환경 파일과 age 개인키는 Git에 저장하지 않는다.
