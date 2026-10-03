@@ -57,6 +57,7 @@ public class FollowUpAction extends kr.shnea.hellow.security.OrganizationOwned {
   public String getCustomerCode() {
     return customerCode;
   }
+  public void associateCustomer(String code){this.customerCode=code;}
 
   public String getActionType() {
     return actionType;

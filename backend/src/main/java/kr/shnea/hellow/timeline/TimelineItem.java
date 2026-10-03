@@ -86,6 +86,8 @@ public class TimelineItem extends kr.shnea.hellow.security.OrganizationOwned {
     return customerCode;
   }
 
+  public void associateCustomer(String code){this.customerCode=code;}
+
   public ChannelType getChannel() {
     return channel;
   }

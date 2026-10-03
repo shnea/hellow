@@ -78,6 +78,26 @@
 .template-picker select { padding:8px; background:#0f172a; color:#f1f5f9; border:1px solid #64748b; border-radius:8px; width:100%; }
 .template-picker button { padding:8px 12px; background:#4338ca; border-radius:8px; }
 .template-picker details { width:100%; }
+.history-link-dialog { width:min(780px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); margin:auto; padding:24px; overflow:auto; border:1px solid #475569; border-radius:12px; background:#0f172a; color:#f1f5f9; font-size:14px; }
+.history-link-dialog::backdrop { background:rgb(2 6 23 / 80%); }
+.history-link-dialog header,.history-link-search,.history-link-selected,.history-link-dialog nav { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.history-link-dialog header { position:sticky; top:0; z-index:1; padding:8px 0; background:#0f172a; }
+.history-link-dialog h2 { font-size:20px; font-weight:600; }
+.history-link-dialog h3 { margin:24px 0 8px; font-size:16px; font-weight:600; }
+.history-link-dialog p { margin:12px 0; color:#cbd5e1; overflow-wrap:anywhere; }
+.history-link-dialog button { min-height:44px; padding:8px 12px; border-radius:8px; background:#334155; }
+.history-link-dialog button:disabled { opacity:.5; cursor:default; }
+.history-link-dialog :focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; }
+.history-link-search { margin:16px 0; align-items:end; }
+.history-link-search label { display:grid; gap:4px; flex:1; min-width:0; }
+.history-link-search input { width:100%; min-height:44px; padding:8px; border:1px solid #64748b; border-radius:8px; background:#1e293b; font-size:16px; }
+.history-link-row { display:flex; gap:12px; align-items:center; padding:12px 0; min-height:44px; border-bottom:1px solid #334155; }
+.history-link-row span span,.history-link-selected span span { display:block; margin-top:4px; color:#cbd5e1; }
+.history-link-selected { padding:8px 0; }
+.history-link-confirm { display:flex; gap:8px; align-items:center; min-height:44px; margin:12px 0; }
+.history-link-dialog input[type=checkbox] { width:18px; height:18px; flex-shrink:0; accent-color:#6366f1; }
+.history-link-dialog .history-link-primary { background:#4338ca; }
+@media(max-width:767px) { .history-link-dialog { padding:16px; }.history-link-selected { flex-wrap:wrap; }.records-toolbar { flex-wrap:wrap; } }
 .template-picker details p { max-height:180px; overflow:auto; padding:8px; color:#cbd5e1; }
 .editor-content-tools summary { min-height:44px; }
 .editor-content-tools :focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; }

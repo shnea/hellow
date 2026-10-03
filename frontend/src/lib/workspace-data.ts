@@ -14,6 +14,7 @@ export interface ServerCustomer {
   email: string; lastContactAt: string | null; totalCalls: number; managerName: string;
   customerNotes: string; complainant: boolean;
   editable?:boolean;
+  consultationVersion?:number;
 }
 export function queueItem(q: ServerQueue): QueueItem {
   return { id: q.code, customerCode: q.customerCode, type: q.type.toLowerCase() as QueueItem['type'],

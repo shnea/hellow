@@ -18,13 +18,16 @@ public class CustomerController {
   private final QueueItemRepository queues;
   private final WorkspaceAccess access;
   private final com.fasterxml.jackson.databind.ObjectMapper json;
+  private final CustomerHistoryService history;
+  private final AuditEvents audit;
 
   public CustomerController(
-      CustomerRepository customers, QueueItemRepository queues, WorkspaceAccess access,com.fasterxml.jackson.databind.ObjectMapper json) {
+      CustomerRepository customers, QueueItemRepository queues, WorkspaceAccess access,com.fasterxml.jackson.databind.ObjectMapper json,CustomerHistoryService history,AuditEvents audit) {
     this.customers = customers;
     this.queues = queues;
     this.access = access;
     this.json=json;
+    this.history=history;this.audit=audit;
   }
 
   @GetMapping
@@ -58,7 +61,7 @@ public class CustomerController {
 
   @PostMapping
   @Transactional
-  public Customer register(@Valid @RequestBody CustomerRequest r) {
+  public Map<String,Object> register(@Valid @RequestBody CustomerRequest r) {
     var actor = access.require("customer:write");
     if (r.queueCode() == null) throw new ResponseStatusException(BAD_REQUEST, "등록할 상담을 지정해 주세요.");
     var q =
@@ -66,7 +69,11 @@ public class CustomerController {
             .lockByCode(actor.organizationId(), r.queueCode())
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
     q.requireOwner(actor.subject());
-    if (q.getCustomerCode() != null) return owned(actor, q.getCustomerCode());
+    requireIdentityOwner(actor,q);
+    actor.requireRow(q);
+    if (q.getCustomerCode() != null) {
+      var existing=owned(actor,q.getCustomerCode());history.synchronize(q,null,existing.getCode(),actor,false);return linkedView(existing,q);
+    }
     Customer c =
         new Customer(
             "cust-" + UUID.randomUUID(),
@@ -86,8 +93,10 @@ public class CustomerController {
     c.assignOwner(actor);
     customers.save(c);
     q.linkCustomer(c);
+    history.synchronize(q,null,c.getCode(),actor,false);
     queues.save(q);
-    return c;
+    audit.record(actor.organizationId(),"customer.register",c.getCode(),"queue="+q.getCode());
+    return linkedView(c,q);
   }
 
   @PutMapping("/{code}")
@@ -112,19 +121,32 @@ public class CustomerController {
 
   @PostMapping("/queue/{code}/link")
   @Transactional
-  public Customer link(@PathVariable String code, @Valid @RequestBody LinkRequest request) {
+  public Map<String,Object> link(@PathVariable String code, @Valid @RequestBody LinkRequest request) {
     var actor = access.require("customer:write");
     var q =
         queues
             .lockByCode(actor.organizationId(), code)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
     q.requireOwner(actor.subject());
+    requireIdentityOwner(actor,q);
+    actor.requireRow(q);
     if (q.getCustomerCode() != null && !q.getCustomerCode().equals(request.customerCode()))
       throw new ResponseStatusException(CONFLICT, "이미 연결된 고객을 임의로 바꿀 수 없습니다.");
     var customer = owned(actor, request.customerCode());
     q.linkCustomer(customer);
+    history.synchronize(q,null,customer.getCode(),actor,false);
     queues.save(q);
-    return customer;
+    audit.record(actor.organizationId(),"customer.queue.link",customer.getCode(),"queue="+q.getCode());
+    return linkedView(customer,q);
+  }
+
+  private Map<String,Object> linkedView(Customer customer,QueueItem q){
+    Map<String,Object> view=json.convertValue(customer,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
+    var record=history.record(q);view.put("consultationVersion",record==null?0:record.getVersion());return view;
+  }
+  private void requireIdentityOwner(WorkspaceAccess.Actor actor,QueueItem q){
+    if(!actor.issuer().equals(q.getOwnerIssuer())||!actor.subject().equals(q.getOwnerSubject()))
+      throw new ResponseStatusException(NOT_FOUND,"본인이 수락한 상담이 아닙니다.");
   }
 
   private Customer owned(WorkspaceAccess.Actor actor, String code) {

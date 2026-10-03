@@ -37,6 +37,18 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('keeps unsaved text and adopts the server draft version after linking a customer',async()=>{
+    items=[{...queue(),customerCode:null as unknown as string,registered:false}];const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>{
+      if(path==='/api/customers/queue/queue-1/link')return response({...serverCustomer,consultationVersion:5});
+      if(path==='/api/consultations/queue/queue-1'&&o?.method==='PUT')return response({version:6,categoryMain:'Support',categorySub:'Product',categoryId:null,resultId:null});
+      return original(path,o);
+    });
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    fireEvent.change(screen.getByLabelText('기존 고객 연결'),{target:{value:'cust-1'}});await flush();expect(screen.getByText('A unique draft')).toBeTruthy();
+    fireEvent.click(screen.getByText('complete'));await flush();const saved=fetchMock.mock.calls.find(([path,o])=>path==='/api/consultations/queue/queue-1'&&o?.method==='PUT');
+    expect(JSON.parse(saved?.[1]?.body as string)).toMatchObject({expectedVersion:5,memo:'A unique draft'});
+  });
   it('keeps an unsaved historical record mounted while settings are open',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>path.startsWith('/api/consultations/customer/')?response([{id:7,version:1,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical record',tags:'',agentName:'Alice',createdAt:'2026-10-03T01:00:00Z'}]):original(path,o));

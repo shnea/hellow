@@ -143,7 +143,8 @@ export default function ConsultationWorkspacePage() {
   const selectQueue=(code:string)=>{setSelected(code);setCurrentTab('workspace');setMobilePanel('editor');};
   const linkCustomer = (code: string) => { if(code) void run(async () => {
     if(!item) return;
-    await apiJson(`/api/customers/queue/${item.id}/link`,jsonBody({customerCode:code}));
+    const linked=await apiJson<ServerCustomer>(`/api/customers/queue/${item.id}/link`,jsonBody({customerCode:code}));
+    if(linked.consultationVersion!==undefined)versions.current[item.id]=linked.consultationVersion;
     setQueue(prev=>prev.map(q=>q.id===item.id?{...q,customerCode:code}:q));setTimelineRefresh(v=>v+1);
     notify('success','기존 고객 연결','상담과 고객 이력을 연결했습니다.');
   }).catch(()=>{}); };
@@ -229,6 +230,7 @@ export default function ConsultationWorkspacePage() {
     const merged = { ...customer, ...data };
     const result = await apiJson<ServerCustomer>(register ? '/api/customers' : `/api/customers/${customer.id}`, jsonBody({ ...merged,
       customerType: merged.customerType.toUpperCase(), complainant: merged.isComplainant || false, queueCode: item.id }, register ? 'POST' : 'PUT'));
+    if(register&&result.consultationVersion!==undefined)versions.current[item.id]=result.consultationVersion;
     setCustomers(prev => ({ ...prev, [result.code]: customerProfile(result) }));
     setQueue(prev => prev.map(q => q.id === item.id ? { ...q, customerCode: result.code } : q)); notify('success', '고객 정보 저장', '고객 ID와 상담 연결을 확인했습니다.');
   });

@@ -141,6 +141,8 @@ public class Consultation extends kr.shnea.hellow.security.OrganizationOwned {
     return customerCode;
   }
 
+  public void associateCustomer(String code){this.customerCode=code;}
+
   public String getCategoryMain() {
     return categoryMain;
   }

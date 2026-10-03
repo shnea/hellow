@@ -32,6 +32,13 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   @Column(nullable = false, length = 50)
   private String phoneNumber;
 
+  @Column(length=50) private String phoneKey;
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public String getPhoneKey(){return phoneKey;}
+
+  /** Historical association keeps the original caller's submitted details. */
+  public void associateCustomer(String code,boolean registered){this.customerCode=code;this.registered=registered;}
+
   @Column(length = 50)
   private String waitTimeOrSchedule;
 
@@ -159,6 +166,7 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
     this.customerName = customerName;
     this.companyName = companyName;
     this.phoneNumber = phoneNumber;
+    this.phoneKey = kr.shnea.hellow.customer.PhoneNumbers.key(phoneNumber);
     this.waitTimeOrSchedule = waitTimeOrSchedule;
     this.priority = priority;
     this.summary = summary;

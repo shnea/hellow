@@ -20,7 +20,7 @@
 | ID | 요구사항·사용자 흐름 | 입력·기대 결과·확인 방법 | 우선순위 | 현재 상태 |
 | --- | --- | --- | --- | --- |
 | MVP-01 | OIDC 로그인·Platform Super Admin·Organization 생성·최초 Admin·초대·로그인 이력·Team·Role·Permission·Data Scope | 가입 후 자동 조직/권한 없음, 조직 격리·권한 회수·관리자 보호·관측 가능한 로그인 이력 검증 | MVP | 부분 구현: Bearer JWT·API audience 검증, Organization/Membership/Permission/ORG 서버 격리와 권한 회수 테스트. 실제 OIDC 발급 계약·첫 조직 권한 배정, 관리자 UI·Team·SELF/TEAM 등은 남음 |
-| MVP-02 | Customer·상담유형·상담결과·Consultation | 미등록 고객 상담 가능, 고객·상담·배정 시도 관계와 후처리·초안/확정 구분 | MVP | 부분 구현: Queue/Customer 식별자 분리, 상담별 초안·version, Editor JSON, 저장·이력·완료 원자 처리와 재조회. 미등록 시점 과거 이력의 고객 소급 연결은 남음 |
+| MVP-02 | Customer·상담유형·상담결과·Consultation | 미등록 고객 상담 가능, 고객·상담·배정 시도 관계와 후처리·초안/확정 구분 | MVP | 부분 구현: Queue/Customer 식별자 분리, 상담별 초안·version, Editor JSON, 저장·이력·완료 원자 처리와 재조회. 등록 시 저장된 이력 동기화와 직원 확인에 따른 과거 미연결 이력의 연결·취소 구현. 실사용/첨부 수락은 남음 |
 | MVP-03 | Agent 상태·Queue·기본 ACD·WebRTC 1:1·통화 조작·통화/배정 이력 | 원자 배정·수락/거절·음소거/보류 구분·연결/재접속 실패·시도별 이력 검증 | MVP | 부분 구현: Queue 수락 잠금·상담사당 CALL 하나, LiveKit 토큰·종료 재시도, 활성 통화/조회 분리. ACD 가용 상태·실제 2인 통화·재접속 수락은 남음 |
 | MVP-04 | 공통 고객 웹 상담 페이지·공개 URL·홈페이지 버튼·최소 로고/색상/문구 | 명시 요청·유효 세션·연결 준비 후 배정, 미리보기/중복 클릭이 Queue 중복 생성 안 함 | MVP | 부분 구현: 고객 웹 상담 진입과 Queue 요청, 폴링·오래된 응답 폐기. 실제 서비스 환경의 중복 진입·연결 실패 수락은 남음 |
 | MVP-05 | Callback·Reservation·Transfer | 담당자·일정·재배정·통화/업무 이관 구분·실패 복구, WebRTC만으로 PSTN 발신 약속 안 함 | MVP | 부분 구현: 방문·콜백 PENDING 접수. 일정·가용 인력 확정, 실제 전환·재발신·메시징은 미연동 |
