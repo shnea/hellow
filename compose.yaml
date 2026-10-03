@@ -63,15 +63,19 @@ services:
       retries: 12
 
   livekit:
-    image: livekit/livekit-server:latest
-    command: --dev --bind 0.0.0.0
+    image: livekit/livekit-server:v1.13.7
+    command: --config /etc/livekit.yaml
     environment:
       TZ: Asia/Seoul
-      LIVEKIT_KEYS: "devkey: secret"
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-secret}"
+    volumes:
+      - ./infra/livekit/development.yaml:/etc/livekit.yaml:ro
     ports:
       - "30162:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
+      # Router WAN 30163 -> host 7881 -> container/advertised ICE 30163.
+      - "7881:30163"
+      - "7882:30164/udp"
+      - "3478:30167/udp"
     restart: unless-stopped
 
   nginx:

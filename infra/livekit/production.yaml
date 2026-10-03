@@ -1,0 +1,15 @@
+port: 7880
+# Production Docker mappings: 7881:30165, 7882:30166/udp, 3478:30168/udp.
+# Router WAN ports 30165/30166/30168 forward to host ports 7881/7882/3478.
+bind_addresses: ["0.0.0.0"]
+rtc:
+  tcp_port: 30165
+  udp_port: 30166
+  use_external_ip: true
+  advertise_internal_ip: true
+turn:
+  enabled: true
+  udp_port: 30168
+  tls_port: 0
+logging:
+  level: info

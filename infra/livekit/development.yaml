@@ -1,0 +1,15 @@
+port: 7880
+# Keep the host ports conventional; Docker maps them to these advertised WAN ports.
+# Router 30163 -> host 7881 -> container 30163 (TCP), 30164 -> 7882 -> 30164 (UDP).
+bind_addresses: ["0.0.0.0"]
+rtc:
+  tcp_port: 30163
+  udp_port: 30164
+  use_external_ip: true
+  advertise_internal_ip: true
+turn:
+  enabled: true
+  udp_port: 30167
+  tls_port: 0
+logging:
+  level: info
