@@ -1,5 +1,14 @@
 # 작업 인계 기록
 
+## 2026-10-03 상담사 상태·본인 배정 수신 화면 연결
+
+- 서버의 상태/heartbeat와 상단 대기·자리비움·오프라인 선택을 연결했다. 본인 제안만 큰 모달로 표시하고 화면에 표시된 시도 ID의 수신 확인·수락·거절, 배정 이력 조회/실패 재조회·버전 기반 명시적 재시작을 제공한다. 상태 조회 실패 시 수신을 차단하며 기존 CRM 기록/입력은 유지한다. 진행 중 CALL/TICKET·후처리의 조직 변경을 차단하고 다른 조직 창의 충돌은 명시적 수신 조직 선택으로 복구한다. 사이드바의 임의 수동 ‘상담 중’ 선택과 가상 팀/내선 표시는 서버 상태 표시로 바꿨다.
+- 검증: frontend Vitest 43건·lint·Docker production build 통과. 본인 제안만 모달 표시, 표시 ID 확인, 같은 접수의 새 시도 표시, 정확한 수락/거절 ID, 거절 실패 후 재시도, 상태 변경 충돌/heartbeat 실패 때 역사 기록 입력 보존, 이력 실패/재조회와 요청 변경의 이전 조회 취소 회귀를 확인했다. 기존 backend RoutingIntegrationTest 12건과 PostgreSQL 증거는 아래 서버 단위 기록을 유지한다.
+- 별도 복원 DB/합성 JWT의 실제 production 웹/API에서 거절·배정 이력·명시적 재시작→다음 직원 모달/수락, 본문 입력/줄바꿈·초안 저장/재로드 복원·후처리 수락 차단·상담 완료 후 선택한 AWAY 유지를 확인했다. 후처리 UI 검수는 합성 TICKET의 상태를 CALL 종료 상태로 설정했으며 실제 Media 통화 종료로 주장하지 않는다. 기록 완료 상태와 본문·ACCEPTED/REJECTED 이력은 실제 PostgreSQL/API로 추가 확인했다. 증거는 Git 제외 `output/routing-ui-proof.json`과 `output/review/routing-*.jpg`다.
+- 모바일 첫 검사에서 본문 50px를 발견해 문서 공간을 보완했다. 최종 1280×800/768×1024/375×812 가로 넘침 없음, 모바일 본문 178px/태블릿 203px·상태/저장/완료 최소 44px, 내부 스크롤로 완료 버튼 접근을 확인했다. 수신 모달 375px에서 337×468 중앙 배치·48px 버튼과 Escape 닫기/초점 복귀를 확인했다. Impeccable detector 1회 신규 대상 3파일 0건(기존 다른 파일의 경고 해소를 뜻하지 않음). 독립 finish review는 supplied incumbent Operate extension 범위에서 `ship`, material fixes 없음이며 정식 5-block 계약/QUALITY BAR 미제공을 명시했다.
+- 독립 documenter는 최종 화면 4장과 현재 CSS/컴포넌트를 비교해 기존 팔레트/글꼴/간격/형태 유지와 일반 확장을 확인했다. `DESIGN.md`/sidecar는 생성하지 않았고 기존 gradient·글꼴 설정 불일치 등 drift는 이번 작업에서 정비하지 않았다.
+- 현재 검수 이미지 `hellow-dev-web:routing-check`/`hellow-dev-api:routing-check`는 개발 환경 **미배포**다. 커밋·push, 반영 직전 쓰기 중지/새 백업의 복원 V10 검증을 거쳐 웹/API 함께 반영한다. 관리자 스크롤 수정은 기존 개발 `e0107d8`에도 이미 포함되어 있다. 전체 남은 작업은 [진행표](mvp-progress.md)를 유지하며 다음 구현은 고객 공개 진입점 마무리다.
+
 ## 2026-10-03 서버 상담사 상태·자동 배정 기반
 
 - 서버의 가용 상태·heartbeat·배정 시도와 LONGEST_IDLE worker를 구현했다. 플랫폼 issuer/subject당 상태 한 개로 여러 조직의 중복 예약을 막고, 현재 Membership/동적 역할의 조회·수락 범위를 재검사한다. 통화/티켓 하나를 처리하며 CALL 종료 후 상담 완료까지 AFTER_CALL로 유지한다. 선택한 AWAY/OFFLINE은 완료 후에도 유지한다. 상세 계약과 API는 [초기 자동 배정 계약](contact-routing.md)에 둔다.

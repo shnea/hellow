@@ -13,7 +13,11 @@ import { CustomerRecordsWorkspace } from '@/components/CustomerRecordsWorkspace'
 import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
+import { AgentStatusControl } from '@/components/AgentStatusControl';
+import { AssignmentHistory } from '@/components/AssignmentHistory';
+import {agentStateLabels,type AgentView,type Availability,type AgentState} from '@/lib/agent-state';
 import './workspace.css';
+import './routing.css';
 import type { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
 interface Identity { subject: string; name: string; platformAdmin?: boolean; organizations: { id: string; name: string; publicCode?: string; permissions: string[];scopes?:Record<string,string>;teamId?:string }[]; }
@@ -30,12 +34,13 @@ export default function ConsultationWorkspacePage() {
   const [authError, setAuthError] = useState('');
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const queueRef = useRef<QueueItem[]>([]);
-  const synchronized = useRef(false);
   const [customers, setCustomers] = useState<Record<string, CustomerProfile>>({});
   const [selected, setSelected] = useState('');
   const [currentTab,setCurrentTab]=useState('workspace');
   const [mobilePanel,setMobilePanel]=useState<'queue'|'editor'|'history'>('editor');
-  const [dismissedIncoming,setDismissedIncoming]=useState<string[]>([]);
+  const [dismissedOffers,setDismissedOffers]=useState<string[]>([]);
+  const receivedOffer=useRef<string|null>(null);
+  const markReceived=useCallback((id:string)=>{receivedOffer.current=id;},[]);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [timelineError, setTimelineError] = useState('');
   const [queueError, setQueueError] = useState('');
@@ -54,7 +59,10 @@ export default function ConsultationWorkspacePage() {
   useEffect(()=>{if(activeCall&&call.duration>0)durations.current[activeCall]=call.duration;},[activeCall,call.duration]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [agentStatus, setAgentStatus] = useState<AgentStatus>('online');
+  const [agentView,setAgentView]=useState<AgentView|null>(null);
+  const agentRef=useRef<AgentView|null>(null);
+  const [agentError,setAgentError]=useState('');
+  const storeAgent=useCallback((view:AgentView|null)=>{agentRef.current=view;setAgentView(view);},[]);
   const [quotedText, setQuotedText] = useState('');
   const [followupTab, setFollowupTab] = useState<'visit' | 'callback' | 'transfer' | 'notification'>('visit');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -71,7 +79,7 @@ export default function ConsultationWorkspacePage() {
       const org = me.organizations.find(o => o.id === prior) || me.organizations[0];
       if(org?.id!==organizationRef.current){
         setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);setSelected('');
-        setDrafts({});versions.current={};setDraftReady({});synchronized.current=false;
+        setDrafts({});versions.current={};setDraftReady({});storeAgent(null);receivedOffer.current=null;setDismissedOffers([]);
       }
       organizationRef.current=org?.id||'';
       if (org) { sessionStorage.setItem('hellow_organization_id', org.id); setOrganizationId(org.id);setAuthError('');
@@ -80,7 +88,7 @@ export default function ConsultationWorkspacePage() {
     }).catch(error => { if (!abort.signal.aborted&&identityGeneration.current===current) setAuthError(error.message); })
       .finally(()=>{if(!abort.signal.aborted&&identityGeneration.current===current)setCheckingIdentity(false);});
     return () => abort.abort();
-  }, [identityRefresh]);
+  }, [identityRefresh,storeAgent]);
   useEffect(()=>{
     const visible=()=>{if(document.visibilityState==='visible')refreshIdentity();};
     window.addEventListener('focus',refreshIdentity);document.addEventListener('visibilitychange',visible);
@@ -97,19 +105,25 @@ export default function ConsultationWorkspacePage() {
         const org=me.organizations.find(o=>o.id===organizationId);
         if(!org)throw new ApiError(403,'이 조직의 접근 권한이 회수되었습니다.');
         const permitted=(permission:string)=>org.permissions.includes(permission);
+        let state:AgentView|null=null;let stateError='';
+        if(permitted('queue:read')&&permitted('queue:accept'))try{
+          state=await apiJson<AgentView>('/api/agents/me/heartbeat',{...jsonBody({receivedAttemptId:receivedOffer.current}),signal:abort.signal});
+        }catch(error){
+          if(error instanceof ApiError&&[401,403].includes(error.status))throw error;
+          stateError=(error as Error).message;
+          if(error instanceof ApiError&&error.status===409)try{state=await apiJson<AgentView>('/api/agents/me',{signal:abort.signal});}catch{/* Keep the independent state error visible; CRM reads continue. */}
+        }
         const [items, profiles] = await Promise.all([
           permitted('queue:read')?apiJson<ServerQueue[]>('/api/queue', { signal: abort.signal }):Promise.resolve([]),
           permitted('customer:read')?apiJson<ServerCustomer[]>('/api/customers', { signal: abort.signal }):Promise.resolve([]),
         ]);
         if (abort.signal.aborted || generation.current !== current) return;
         setIdentity(me);
+        storeAgent(state);setAgentError(stateError);
+        if(state?.attemptId!==receivedOffer.current)receivedOffer.current=null;
         const mapped = items.map(queueItem);
-        if (synchronized.current) {
-          const ids = new Set(queueRef.current.map(q => q.id));
-          const incoming = mapped.filter(q => !ids.has(q.id) && q.status === 'WAITING');
-          if (incoming.length) setDismissedIncoming(prev=>prev.filter(id=>mapped.some(q=>q.id===id)));
-        }
-        synchronized.current = true; queueRef.current = mapped; setQueue(mapped);
+        setDismissedOffers(prev=>prev.filter(id=>mapped.some(q=>q.offer?.id===id)));
+        queueRef.current = mapped; setQueue(mapped);
         setCustomers(Object.fromEntries(profiles.map(c => [c.code, customerProfile(c)])));
         setSelected(previous => previous || mapped[0]?.id || '');
         const mine = mapped.find(q => q.type === 'call' && q.status === 'PROCESSING' && q.assignedSubject === identity?.subject && !q.callEnded);
@@ -117,6 +131,7 @@ export default function ConsultationWorkspacePage() {
       } catch (error) {
         if (!abort.signal.aborted && generation.current === current) {
           setQueueError(`${(error as Error).message} 표시 중인 정보는 마지막 조회 결과입니다.`);
+          setAgentError('상담 상태를 확인하지 못했습니다. 다시 조회한 뒤 수신해 주세요.');
           if (error instanceof ApiError && [401, 403].includes(error.status)) {
             setActiveCall(null); setQueue([]); queueRef.current = []; setCustomers({}); setTimeline([]); setAuthError(error.message);
           }
@@ -126,7 +141,7 @@ export default function ConsultationWorkspacePage() {
       }
     };
     void poll(); return () => { abort.abort(); clearTimeout(timer); };
-  }, [organizationId, identity?.subject, refresh, notify]);
+  }, [organizationId, identity?.subject, refresh, notify,storeAgent]);
   const item = queue.find(q => q.id === selected);
   const selectedQueueCode=item?.id;
   const customerCode=item?.customerCode;
@@ -137,8 +152,11 @@ export default function ConsultationWorkspacePage() {
   const accessKey=JSON.stringify([currentOrganization?.teamId,Object.entries(currentOrganization?.scopes||{}).sort(),currentOrganization?.permissions.slice().sort()]);
   const canReadConsultation=can('consultation:read');
   const unfinishedCall=queue.find(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
-  const receivingBlocked=unfinishedCall ? unfinishedCall.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 통화를 수락할 수 있습니다.' : '통화 중입니다. 현재 통화와 후처리를 완료해 주세요.' : '';
-  const incoming=queue.find(q=>q.status==='WAITING'&&!dismissedIncoming.includes(q.id));
+  const unfinishedInteraction=queue.find(q=>q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
+  const receivingBlocked=unfinishedInteraction ? unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 상담을 수락할 수 있습니다.' : '상담 중입니다. 현재 상담과 후처리를 완료해 주세요.' : '';
+  const effectiveAgentState:AgentState|undefined=unfinishedInteraction?(unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded?'AFTER_CALL':'CALLING'):agentView?.state;
+  const sidebarStatus:AgentStatus=effectiveAgentState==='AWAY'?'away':effectiveAgentState==='OFFLINE'||!effectiveAgentState?'offline':effectiveAgentState==='AVAILABLE'?'online':'busy';
+  const incoming=!receivingBlocked&&!agentError?queue.find(q=>q.status==='WAITING'&&q.canAccept===true&&q.offer&&q.offer.subject===identity?.subject&&!dismissedOffers.includes(q.offer.id)):undefined;
   const showRecords=currentTab==='customers'||currentTab==='tickets'||!item;
   const selectQueue=(code:string)=>{setSelected(code);setCurrentTab('workspace');setMobilePanel('editor');};
   const linkCustomer = (code: string) => { if(code) void run(async () => {
@@ -185,34 +203,59 @@ export default function ConsultationWorkspacePage() {
   const switchOrganization=async(id:string)=>{
     if(id===organizationId)return;
     try{await run(async()=>{
-      const unfinished=queueRef.current.some(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
-      if(unfinished)throw new Error('현재 통화와 후처리를 완료한 뒤 조직을 변경해 주세요.');
+      const unfinished=queueRef.current.some(q=>q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
+      if(unfinished)throw new Error('현재 상담과 후처리를 완료한 뒤 조직을 변경해 주세요.');
       const me=await apiJson<Identity>('/api/me');
       const org=me.organizations.find(o=>o.id===id);
       if(!org)throw new Error('이 조직의 활성 권한이 없습니다. 조직 권한을 다시 확인해 주세요.');
+      const state=agentRef.current;
+      if(state&&can('queue:read')&&can('queue:accept')){
+        const receiving=org.permissions.includes('queue:read')&&org.permissions.includes('queue:accept');
+        const next=await apiJson<AgentView>('/api/agents/me/status',{...jsonBody({state:receiving?state.availability:'OFFLINE',expectedVersion:state.version},'PUT'),headers:{'Content-Type':'application/json','X-Organization-ID':receiving?id:organizationId}});
+        storeAgent(receiving?next:null);
+      }else storeAgent(null);
       identityGeneration.current++;setCheckingIdentity(false);
       organizationDrafts.current[organizationId]={drafts,versions:{...versions.current},ready:draftReady,selected};
       const saved=organizationDrafts.current[id];
       // Invalidate old reads before changing the header used by all workspace requests.
-      generation.current++;setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);synchronized.current=false;
+      generation.current++;setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);receivedOffer.current=null;setDismissedOffers([]);
       setDrafts(saved?.drafts||{});versions.current=saved?.versions||{};setDraftReady(saved?.ready||{});setSelected(saved?.selected||'');
       organizationRef.current=id;sessionStorage.setItem('hellow_organization_id',id);setIdentity(me);setOrganizationId(id);setAuthError('');
-      setTimelineRefresh(value=>value+1);setAgentStatus('online');
+      setTimelineRefresh(value=>value+1);setAgentError('');
       notify('success','작업 조직 변경',`${org.name}의 권한과 데이터를 사용합니다.`);
     });}catch{/* run reports the failure while retaining the current organization. */}
   };
+  const changeAgent=(state:Availability)=>{void run(async()=>{
+    const current=agentRef.current||await apiJson<AgentView>('/api/agents/me');
+    const saved=await apiJson<AgentView>('/api/agents/me/status',jsonBody({state,expectedVersion:current.version},'PUT'));
+    storeAgent(saved);setAgentError('');receivedOffer.current=null;
+    notify('success','수신 상태 변경',agentStateLabels[saved.state]);
+  }).catch(()=>{});};
   const accept = (q: QueueItem) => { void run(async () => {
-    const accepted = queueItem(await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`, { method: 'POST' }));
+    if(q.canAccept!==true||receivingBlocked||agentError)throw new Error('대기 상태와 본인 수신 배정을 먼저 확인해 주세요.');
+    const accepted = queueItem(await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`,jsonBody({attemptId:q.offer?.id??null})));
     setQueue(previous => previous.map(item => item.id === accepted.id ? accepted : item));
     queueRef.current = queueRef.current.map(item => item.id === accepted.id ? accepted : item);
-    setSelected(q.id); setCurrentTab('workspace');setMobilePanel('editor');setAgentStatus('busy');
-    setDismissedIncoming(prev=>[...prev,q.id]);
-    notify('success', '상담 수락', '배정이 확인됐습니다. 음성 연결 상태는 통화 표시에서 확인해 주세요.');
+    setSelected(q.id); setCurrentTab('workspace');setMobilePanel('editor');receivedOffer.current=null;
+    notify('success', '상담 수락', accepted.type==='call'?'배정이 확인됐습니다. 음성 연결 상태는 통화 표시에서 확인해 주세요.':'배정이 확인됐습니다. 상담 기록을 작성해 주세요.');
   }).catch(() => {}); };
+  const reject=(q:QueueItem)=>{void run(async()=>{
+    if(!q.offer||q.canAccept!==true)throw new Error('본인에게 배정된 요청만 거절할 수 있습니다.');
+    const id=q.offer.id;
+    const state=await apiJson<AgentView>(`/api/queue/${q.id}/reject`,jsonBody({attemptId:id}));
+    storeAgent(state);receivedOffer.current=null;setDismissedOffers(prev=>[...prev,id]);
+    const clear=(rows:QueueItem[])=>rows.map(row=>row.offer?.id===id?{...row,offer:null,canAccept:false}:row);
+    setQueue(clear);queueRef.current=clear(queueRef.current);
+    notify('info','상담 거절','다음 가능한 상담사에게 배정합니다.');
+  }).catch(()=>{});};
+  const restartRouting=(q:QueueItem)=>{void run(async()=>{
+    await apiJson(`/api/queue/${q.id}/restart-routing`,jsonBody({expectedVersion:q.version}));
+    notify('success','배정 다시 시작','이전 배정 이력을 보존하고 다시 배정합니다.');
+  }).catch(()=>{});};
   const endCall = () => { if (activeCall) void run(async () => {
     const ended=queueItem(await apiJson<ServerQueue>(`/api/queue/${activeCall}/end-call`, { method: 'POST' }));
     setQueue(prev=>prev.map(q=>q.id===ended.id?ended:q));queueRef.current=queueRef.current.map(q=>q.id===ended.id?ended:q);
-    setActiveCall(null); setAgentStatus('busy');
+    setActiveCall(null);
     notify('info', '통화 종료', '상담 기록은 후처리 후 별도로 완료해 주세요.');
   }).catch(() => {}); };
   const save = async (data: ConsultationDraft & { isComplete: boolean }) => run(async () => {
@@ -252,11 +295,12 @@ export default function ConsultationWorkspacePage() {
     <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
-      agentStatus={unfinishedCall?'busy':agentStatus} onAgentStatusChange={setAgentStatus} />
+      agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
     <div className="flex flex-1 flex-col min-w-0">
-      <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
+      <div className="workspace-heading px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
         <span>{busy ? '서버 처리 중' : activeCall ? `통화 진행 중 · ${call.status === 'connected' ? '음성 연결됨' : call.status === 'error' ? '음성 연결 실패' : '연결 확인 중'}` : unfinishedCall?.callEnded ? '후처리 중 · 새 통화 수신 차단' : '진행 중인 통화 없음'}</span>
         {unfinishedCall && (showRecords || unfinishedCall.id !== selected) && <button className="text-indigo-300 underline" onClick={() => selectQueue(unfinishedCall.id)}>현재 상담으로 돌아가기</button>}</div>
+      {can('queue:read')&&can('queue:accept')&&<AgentStatusControl view={agentView} state={effectiveAgentState} organizationId={organizationId} busy={busy} error={agentError} onChange={changeAgent} onRetry={()=>setRefresh(v=>v+1)}/>}
       {call.error&&<p role="alert" className="p-3 text-amber-200">{call.error}</p>}
       <nav className="workspace-mobile-tabs flex gap-2 p-2 border-b border-slate-800" aria-label="상담 화면 전환">
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('queue');}}>대기열 {queue.length}</button>
@@ -268,7 +312,9 @@ export default function ConsultationWorkspacePage() {
       {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
       <div className="workspace-layout flex flex-1 min-h-0">
         <div className={`queue-pane ${mobilePanel==='queue'&&!showRecords?'mobile-visible':''} ${showRecords?'records-active':''}`}>
-          <QueuePanel queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined} />
+          <QueuePanel queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
+            onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}
+            assignmentHistory={item&&can('queue:read')?<AssignmentHistory key={item.id} item={item} busy={busy} canRestart={can('queue:accept')&&!queueError&&!agentError} onRestart={()=>restartRouting(item)}/>:undefined}/>
         </div>
         <CustomerRecordsWorkspace key={organizationId} active={showRecords} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
           activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>
@@ -284,7 +330,7 @@ export default function ConsultationWorkspacePage() {
                 : item.assignedAgent ? `${item.assignedAgent} 담당 상담입니다. 본인이 수락한 상담에서 기록을 작성할 수 있습니다.` : '완료된 상담은 이력에서 확인할 수 있습니다.'}</p></div>
             {item.status === 'WAITING' && can('queue:accept') && can('consultation:write') && <button type="button"
               className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50"
-              disabled={busy || Boolean(queueError) || (item.type==='call'&&Boolean(receivingBlocked))} onClick={() => accept(item)}>
+              disabled={busy || Boolean(queueError) || Boolean(agentError) || Boolean(receivingBlocked) || item.canAccept!==true} onClick={() => accept(item)}>
               {busy ? '수락 중…' : item.type === 'call' ? '수신 후 기록 작성' : '상담 수락 후 기록 작성'}
             </button>}
           </div>}
@@ -304,6 +350,7 @@ export default function ConsultationWorkspacePage() {
       </div>
     </div>
   </div><ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
-    {incoming&&can('queue:accept')&&<IncomingRequestModal key={incoming.id} item={incoming} busy={busy} blocked={queueError||(incoming.type==='call'?receivingBlocked:'')} onAccept={()=>accept(incoming)} onDismiss={()=>setDismissedIncoming(prev=>[...prev,incoming.id])}/>}
+    {incoming&&can('queue:accept')&&<IncomingRequestModal key={incoming.offer!.id} item={incoming} busy={busy} blocked={queueError||agentError||receivingBlocked} onAccept={()=>accept(incoming)} onReject={()=>reject(incoming)} onReceived={markReceived}
+      onDismiss={()=>{setDismissedOffers(prev=>[...prev,incoming.offer!.id]);setCurrentTab('workspace');setMobilePanel('queue');}}/>}
   </>;
 }

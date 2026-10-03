@@ -16,18 +16,24 @@ vi.mock('@/components/Toast', () => ({ ToastContainer: ({toasts}: {toasts:{id:st
 
 const permissions=['queue:read','queue:accept','customer:read','customer:write','consultation:read','consultation:write','followup:write'];
 const serverCustomer={code:'cust-1',registered:true,customerType:'INDIVIDUAL',name:'Latest server name',tier:'Standard',phoneNumber:'010',email:'',totalCalls:0};
-function queue(code='queue-1'){return {code,customerCode:'cust-1',type:'TICKET',customerType:'INDIVIDUAL',customerName:'Old request name',companyName:'',phoneNumber:'010',status:'PROCESSING',assignedSubject:'alice',assignedAgent:'Alice',callEnded:false,version:0,summary:'Request',registered:true};}
+function queue(code='queue-1'){return {code,customerCode:'cust-1',type:'TICKET',customerType:'INDIVIDUAL',customerName:'Old request name',companyName:'',phoneNumber:'010',status:'PROCESSING',assignedSubject:'alice',assignedAgent:'Alice',callEnded:false,version:0,summary:'Request',registered:true,offer:null as null|{id:string;subject:string;name:string;expiresAt:string;received:boolean},canAccept:false,attemptCount:0};}
+function waiting(code='queue-1',who='alice',id='offer-one'){return {...queue(code),status:'WAITING',assignedSubject:'',offer:{id,subject:who,name:who,expiresAt:'2099-01-01T00:00:30Z',received:false},canAccept:who==='alice',attemptCount:1};}
 const response=(body:unknown,status=200)=>new Response(status===204?null:JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();});};
 let items:ReturnType<typeof queue>[];
 let fetchMock:ReturnType<typeof vi.fn<(path:string,options?:RequestInit)=>Promise<Response>>>;
+let availability:string;let agentRevision:number;let activeOrg:string;
+function agent(){const job=items.find(q=>q.status==='PROCESSING'&&q.assignedSubject==='alice');const offered=items.find(q=>q.status==='WAITING'&&q.offer?.subject==='alice');return {state:job?job.type==='CALL'&&job.callEnded?'AFTER_CALL':'CALLING':offered?'RINGING':availability,availability,version:agentRevision,activeOrganizationId:activeOrg,queueCode:job?.code||offered?.code||null,attemptId:offered?.offer?.id||null};}
 beforeEach(()=>{
   HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
   HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   sessionStorage.clear();sessionStorage.setItem('hellow_access_token','test-access-token');items=[queue()];
-  fetchMock=vi.fn(async(path:string)=>{
+  availability='AVAILABLE';agentRevision=1;activeOrg='org-a';
+  fetchMock=vi.fn(async(path:string,options?:RequestInit)=>{
     if(path==='/api/me')return response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions}]});
     if(path==='/api/queue')return response(items);
+    if(path==='/api/agents/me/heartbeat'||path==='/api/agents/me')return response(agent());
+    if(path==='/api/agents/me/status'){const body=JSON.parse(options?.body as string);availability=body.state;agentRevision++;activeOrg=new Headers(options?.headers).get('X-Organization-ID')||'org-a';return response(agent());}
     if(path==='/api/customers')return response([serverCustomer]);
     if(path.startsWith('/api/timeline/'))return response([]);
     if(path.startsWith('/api/consultations/customer/'))return response([]);
@@ -73,24 +79,25 @@ describe('workspace regressions',()=>{
     joined=true;fireEvent.click(screen.getByRole('button',{name:'조직 권한 다시 확인'}));await flush();
     expect(screen.getByText('cust-1:Latest server name')).toBeTruthy();expect(screen.queryByText(/활성 조직 권한이 없습니다/)).toBeNull();
   });
-  it('switches an ordinary employee between memberships with the selected organization header and separate drafts',async()=>{
+  it('switches an ordinary employee between memberships with the selected organization header and scoped requests',async()=>{
     const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
       if(path==='/api/me')return response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions},{id:'org-b',name:'B',permissions:['queue:read','queue:accept','consultation:write','consultation:read']}]});
-      if(path==='/api/queue')return response([queue(new Headers(options?.headers).get('X-Organization-ID')==='org-b'?'queue-b':'queue-1')]);
+      if(path==='/api/queue')return response([{...queue(new Headers(options?.headers).get('X-Organization-ID')==='org-b'?'queue-b':'queue-1'),assignedSubject:'coworker'}]);
+      if(path==='/api/agents/me/heartbeat'||path==='/api/agents/me')return response({...agent(),state:'AVAILABLE'});
       return original(path,options);
     });
-    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    render(<Workspace/>);await flush();
     fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
     expect(screen.queryByText('관리 대상:org-a')).toBeNull();
     fireEvent.change(screen.getByLabelText('현재 작업 조직'),{target:{value:'org-b'}});await flush();
     expect(sessionStorage.getItem('hellow_organization_id')).toBe('org-b');
     fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();
-    expect(screen.getByText('queue-b')).toBeTruthy();expect(screen.queryByText('A unique draft')).toBeNull();
+    expect(screen.getByText('queue-b')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([path,o])=>path==='/api/queue'&&new Headers(o?.headers).get('X-Organization-ID')==='org-b')).toBe(true);
     expect(fetchMock.mock.calls.filter(([path,o])=>path==='/api/customers'&&new Headers(o?.headers).get('X-Organization-ID')==='org-b')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();fireEvent.change(screen.getByLabelText('현재 작업 조직'),{target:{value:'org-a'}});await flush();
-    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();expect(screen.getByText('A unique draft')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();expect(screen.getByText('queue-1')).toBeTruthy();
   });
   it('blocks an organization switch throughout after-call processing',async()=>{
     items=[{...queue(),type:'CALL',callEnded:true}];
@@ -111,7 +118,7 @@ describe('workspace regressions',()=>{
     expect(screen.queryByText('작업 실패 · 입력 보존')).toBeNull();
   });
   it('explains the waiting editor and enables writing from the accepted server response',async()=>{
-    items=[{...queue(),status:'WAITING',assignedSubject:''}];
+    items=[waiting()];
     const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
       if(path==='/api/queue/queue-1/accept'){items=[queue()];return response(items[0]);}
@@ -119,9 +126,51 @@ describe('workspace regressions',()=>{
     });
     render(<Workspace/>);await flush();expect(screen.getByText('editor-readonly')).toBeTruthy();
     expect(screen.getByText('상담 기록 · 읽기 전용')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'대기열에서 확인'}));await flush();
     fireEvent.click(screen.getByRole('button',{name:'상담 수락 후 기록 작성'}));await flush();
     expect(screen.getByText('editor-editable')).toBeTruthy();
     expect(screen.queryByText('상담 기록 · 읽기 전용')).toBeNull();
+    expect(JSON.parse(fetchMock.mock.calls.find(([path])=>path==='/api/queue/queue-1/accept')?.[1]?.body as string)).toEqual({attemptId:'offer-one'});
+  });
+  it('only interrupts for this employee offer, and acknowledges the displayed attempt',async()=>{
+    vi.useFakeTimers();items=[waiting('queue-1','coworker')];render(<Workspace/>);await flush();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    items=[waiting()];await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
+    const heartbeats=fetchMock.mock.calls.filter(([p])=>p==='/api/agents/me/heartbeat');
+    expect(JSON.parse(heartbeats.at(-1)?.[1]?.body as string)).toEqual({receivedAttemptId:'offer-one'});
+    fireEvent.click(screen.getByRole('button',{name:'대기열에서 확인'}));await flush();
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});expect(screen.queryByRole('dialog')).toBeNull();
+    items=[waiting('queue-1','alice','offer-two')];await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+  it('keeps the current offer on rejection failure, then rejects that exact attempt on retry',async()=>{
+    items=[waiting()];let fail=true;const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(p,o)=>{
+      if(p==='/api/queue/queue-1/reject'){if(fail)return response({detail:'Conflict'},409);items=[];return response(agent());}
+      return original(p,o);
+    });render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'상담 거절'}));await flush();
+    expect(screen.getByRole('dialog')).toBeTruthy();expect(screen.getByText('작업 실패 · 입력 보존')).toBeTruthy();
+    fail=false;fireEvent.click(screen.getByRole('button',{name:'상담 거절'}));await flush();expect(screen.queryByRole('dialog')).toBeNull();
+    const rejections=fetchMock.mock.calls.filter(([p])=>p==='/api/queue/queue-1/reject');
+    expect(rejections.map(([,o])=>JSON.parse(o?.body as string))).toEqual([{attemptId:'offer-one'},{attemptId:'offer-one'}]);
+  });
+  it('preserves historical editing when heartbeat fails and does not claim the agent is ready',async()=>{
+    items=[];const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/heartbeat'?response({detail:'State unavailable'},503):p.startsWith('/api/consultations/customer/')?response([{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}]):original(p,o));
+    render(<Workspace/>);await flush();expect(screen.getByText('editor-editable')).toBeTruthy();
+    fireEvent.click(screen.getByText('type-draft'));expect(screen.getByText('A unique draft')).toBeTruthy();
+    expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByRole('button',{name:'상태 다시 확인'})).toBeTruthy();
+  });
+  it('keeps server availability after a failed manual change and retries with its revision',async()=>{
+    items=[];availability='AWAY';const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/status'?response({detail:'Stale state'},409):p.startsWith('/api/consultations/customer/')?response([{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}]):original(p,o));
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    fireEvent.change(screen.getByLabelText('수신 상태 선택'),{target:{value:'AVAILABLE'}});await flush();
+    expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).value).toBe('AWAY');expect(screen.getByText('A unique draft')).toBeTruthy();
+    expect(JSON.parse(fetchMock.mock.calls.find(([p])=>p==='/api/agents/me/status')?.[1]?.body as string)).toEqual({state:'AVAILABLE',expectedVersion:1});
   });
   it('uses explicit customer ID and latest profile instead of queue-keyed mock data',async()=>{
     render(<Workspace/>);await flush();expect(await screen.findByText('cust-1:Latest server name')).toBeTruthy();
@@ -149,7 +198,7 @@ describe('workspace regressions',()=>{
     expect(fetchMock).toHaveBeenCalledTimes(1);expect(screen.queryByText('queue-1')).toBeNull();
   });
   it('notifies the first arrival after a successfully synchronized empty queue',async()=>{
-    vi.useFakeTimers();items=[];render(<Workspace/>);await flush();items=[queue()];items[0].status='WAITING';
+    vi.useFakeTimers();items=[];render(<Workspace/>);await flush();items=[waiting()];
     await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
     expect(screen.getByRole('dialog',{name:'새 상담 요청이 도착했습니다'})).toBeTruthy();
   });
@@ -165,8 +214,9 @@ describe('workspace regressions',()=>{
   it('blocks incoming calls throughout after-call processing',async()=>{
     items=[{...queue(),type:'CALL',callEnded:true},{...queue('queue-2'),type:'CALL',status:'WAITING',assignedSubject:''}];
     render(<Workspace/>);await flush();
-    const modal=screen.getByRole('dialog',{name:'전화 상담이 들어왔습니다'});expect(modal).toBeTruthy();
-    expect((screen.getByRole('button',{name:'통화 수락'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('dialog',{name:'전화 상담이 들어왔습니다'})).toBeNull();
+    fireEvent.click(screen.getByText('queue-2'));await flush();
+    expect((screen.getByRole('button',{name:'수신 후 기록 작성'}) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('후처리 중 · 새 통화 수신 차단')).toBeTruthy();
   });
   it('opens a team-visible record read-only when its write scope belongs to another employee',async()=>{

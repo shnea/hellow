@@ -10,6 +10,8 @@ interface QueuePanelProps {
   onSelectQueueItem: (id: string) => void;
   onAcceptCall?: (item: QueueItem) => void;
   callBlocked?: boolean;
+  onReject?:(item:QueueItem)=>void;
+  assignmentHistory?:React.ReactNode;
 }
 
 export const QueuePanel: React.FC<QueuePanelProps> = ({
@@ -18,6 +20,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   onSelectQueueItem,
   onAcceptCall,
   callBlocked=false,
+  onReject,assignmentHistory,
 }) => {
   const [filterType, setFilterType] = useState<'all' | QueueItemType>('all');
 
@@ -181,6 +184,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
 
               {/* Action Buttons */}
               {item.status === 'PROCESSING' && <p className="mt-2 text-xs text-slate-300">{item.assignedAgent || '담당 상담사'} · {item.callEnded ? '후처리 중' : '처리 중'}</p>}
+              {item.status==='WAITING'&&<p className="queue-routing-status">{item.offer?`${item.offer.name}에게 수신 배정 · ${item.offer.received?'화면 확인됨':'수신 확인 중'}`:item.routingPaused?'배정 시도 한도에 도달했습니다. 이력에서 배정을 다시 시작할 수 있습니다.':'상담 가능한 직원을 기다리고 있습니다.'}</p>}
               <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
                 <span className="text-[11px] text-indigo-400 font-medium group-hover:underline">
                   {isSelected ? '현재 워크스페이스 활성' : '클릭하여 상담 열기 →'}
@@ -188,8 +192,8 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
 
                 {item.status === 'WAITING' && onAcceptCall && (
                   <button
-                    disabled={item.type==='call'&&callBlocked}
-                    title={item.type==='call'&&callBlocked?'현재 통화와 후처리를 완료해 주세요.':undefined}
+                    disabled={item.canAccept!==true||callBlocked}
+                    title={callBlocked?'현재 상담과 후처리를 완료해 주세요.':item.canAccept!==true?'대기 상태와 현재 수신 배정을 확인해 주세요.':undefined}
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectQueueItem(item.id);
@@ -201,6 +205,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                     {item.type === 'call' ? '수신' : '상담 수락'}
                   </button>
                 )}
+                {item.status==='WAITING'&&item.offer&&item.canAccept&&onReject&&<button className="queue-reject" onClick={event=>{event.stopPropagation();onReject(item);}}>거절</button>}
                 {item.type === 'callback' && (
                   <button
                     onClick={(e) => {
@@ -213,6 +218,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                   </button>
                 )}
               </div>
+              {isSelected&&assignmentHistory&&<div onClick={event=>event.stopPropagation()}>{assignmentHistory}</div>}
             </div>
           );
         })}

@@ -866,7 +866,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       </div>
 
       {/* 3. 확장형 실시간 상담 메모 작성기 (핵심 워크스페이스) */}
-      <div className="flex-1 flex flex-col p-3 overflow-hidden min-h-0">
+      <div className="consultation-editor-area flex-1 flex flex-col p-3 overflow-hidden min-h-0">
         {/* Compact Integrated Category, Tags & Status Bar */}
         <div className="classification-bar flex flex-wrap items-center justify-between gap-2 mb-2 p-1.5 px-3 bg-slate-950/70 border border-slate-800 rounded-xl shrink-0">
           <ConsultationClassification catalog={content.catalog?.effective||null} value={effectiveClassification} resultId={resultId} resultName={resultName} disabled={readOnly||busy}
@@ -958,7 +958,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
         </details>
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="consultation-document-area flex-1 flex flex-col min-h-0 overflow-hidden">
           <ShneaConsultationEditor
             documentKey={queueCode}
             initialText={memoText}

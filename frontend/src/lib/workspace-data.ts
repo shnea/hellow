@@ -7,6 +7,7 @@ export interface ServerQueue {
   unread: boolean; registered: boolean; complainant: boolean;
   status: QueueItem['status']; assignedSubject: string | null; assignedAgent: string | null;
   callEnded: boolean; version: number;
+  offer?:QueueItem['offer'];canAccept?:boolean;routingPaused?:boolean;attemptCount?:number;
 }
 export interface ServerCustomer {
   code: string; registered: boolean; customerType: string; name: string; title: string;
@@ -22,7 +23,8 @@ export function queueItem(q: ServerQueue): QueueItem {
     companyName: q.companyName || '', phoneNumber: q.phoneNumber, waitTimeOrSchedule: q.waitTimeOrSchedule,
     priority: q.priority, summary: q.summary, unread: q.unread, isRegistered: q.registered,
     isComplainant: q.complainant, status: q.status, assignedSubject: q.assignedSubject,
-    assignedAgent: q.assignedAgent, callEnded: q.callEnded, version: q.version };
+    assignedAgent: q.assignedAgent, callEnded: q.callEnded, version: q.version,
+    offer:q.offer,canAccept:q.canAccept,routingPaused:q.routingPaused,attemptCount:q.attemptCount };
 }
 export function customerProfile(c: ServerCustomer): CustomerProfile {
   return { id: c.code, isRegistered: c.registered, customerType: c.customerType === 'CORPORATE' ? 'corporate' : 'individual',

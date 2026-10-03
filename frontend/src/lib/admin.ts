@@ -20,6 +20,7 @@ export function adminJson<T>(path:string, organizationId:string, options:Request
   return apiJson<T>(path,{...options,headers});
 }
 export const actionLabels:Record<string,string> = {
+  'agent.state.change':'상담사 수신 상태 변경','queue.routing.restart':'상담 배정 다시 시작',
   'customer.register':'고객 신규 등록','customer.queue.link':'상담에 기존 고객 연결',
   'customer.history.link':'등록 전 이력 연결','customer.history.undo':'등록 전 이력 연결 취소',
   ORGANIZATION_CREATED:'조직 생성', MEMBER_ADDED:'직원 등록', MEMBER_CHANGED:'직원 권한 변경', MEMBER_REVOKED:'직원 접근 회수',

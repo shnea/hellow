@@ -11,7 +11,7 @@ interface SidebarGNBProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   agentStatus: AgentStatus;
-  onAgentStatusChange: (status: AgentStatus) => void;
+  statusLabel?:string;
   showSettings?: boolean;
   supportLink?: string;
 }
@@ -21,7 +21,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   currentTab,
   onTabChange,
   agentStatus,
-  onAgentStatusChange,
+  statusLabel,
   showSettings=false,
   supportLink,
 }) => {
@@ -103,7 +103,8 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
         <button
           onClick={() => setStatusMenuOpen(!statusMenuOpen)}
           className="relative w-full flex flex-col items-center p-1 rounded-xl hover:bg-slate-900 transition-colors"
-          title="상담사 상태 변경"
+          title="상담사 상태·로그아웃"
+          aria-expanded={statusMenuOpen}
         >
           <div className="relative">
             <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-semibold text-slate-200">
@@ -127,26 +128,9 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
             <div className="absolute bottom-14 left-2 w-52 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 text-xs z-50 text-slate-200">
               <div className="px-2 py-1.5 border-b border-slate-800 mb-1">
                 <p className="font-semibold text-slate-100">
-                  {typeof window !== 'undefined' ? (sessionStorage.getItem('hellow_agent_name') || '이소연 선임상담사') : '이소연 선임상담사'}
+                  {agentName}
                 </p>
-                <p className="text-[11px] text-slate-400">CS 1팀 (ext. 1012)</p>
-              </div>
-              <div className="space-y-1">
-                {(Object.keys(statusConfig) as AgentStatus[]).map((st) => (
-                  <button
-                    key={st}
-                    onClick={() => {
-                      onAgentStatusChange(st);
-                      setStatusMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center space-x-2 px-2 py-1.5 rounded-lg text-left transition-colors ${
-                      agentStatus === st ? 'bg-indigo-950/80 text-indigo-300 font-medium' : 'hover:bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${statusConfig[st].color}`} />
-                    <span>{statusConfig[st].label}</span>
-                  </button>
-                ))}
+                <p className="text-[11px] text-slate-400">{statusLabel||statusConfig[agentStatus].label}</p>
               </div>
               <div className="pt-1.5 mt-1.5 border-t border-slate-800">
                 <button

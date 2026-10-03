@@ -11,6 +11,10 @@ export interface QueueItem {
   assignedAgent?: string | null;
   callEnded?: boolean;
   version?: number;
+  offer?: {id:string;subject:string;name:string;expiresAt:string;received:boolean}|null;
+  canAccept?:boolean;
+  routingPaused?:boolean;
+  attemptCount?:number;
   type: QueueItemType;
   customerType?: CustomerType;
   customerName: string;
