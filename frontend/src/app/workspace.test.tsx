@@ -16,7 +16,7 @@ vi.mock('@/components/Toast', () => ({ ToastContainer: ({toasts}: {toasts:{id:st
 const permissions=['queue:read','queue:accept','customer:read','customer:write','consultation:read','consultation:write','followup:write'];
 const serverCustomer={code:'cust-1',registered:true,customerType:'INDIVIDUAL',name:'Latest server name',tier:'Standard',phoneNumber:'010',email:'',totalCalls:0};
 function queue(code='queue-1'){return {code,customerCode:'cust-1',type:'TICKET',customerType:'INDIVIDUAL',customerName:'Old request name',companyName:'',phoneNumber:'010',status:'PROCESSING',assignedSubject:'alice',assignedAgent:'Alice',callEnded:false,version:0,summary:'Request',registered:true};}
-const response=(body:unknown,status=200)=>({ok:status>=200&&status<300,status,json:async()=>body}) as Response;
+const response=(body:unknown,status=200)=>new Response(status===204?null:JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();});};
 let items:ReturnType<typeof queue>[];
 let fetchMock:ReturnType<typeof vi.fn<(path:string,options?:RequestInit)=>Promise<Response>>>;
