@@ -29,6 +29,11 @@ public class Membership {
 
   @Version private Long version;
   @Column(length = 100) private String displayName;
+  @Column(length = 64) private String teamId;
+  @ElementCollection(fetch = FetchType.EAGER)
+  @CollectionTable(name="membership_roles", joinColumns=@JoinColumn(name="membership_id"))
+  @Column(name="role_id",length=64)
+  private Set<String> roleIds = new java.util.HashSet<>();
 
   @ElementCollection(fetch = FetchType.EAGER)
   private Set<String> permissions;
@@ -78,6 +83,11 @@ public class Membership {
 
   public Long getVersion() { return version; }
   public String getDisplayName() { return displayName; }
+  public String getTeamId() { return teamId; }
+  public Set<String> getRoleIds() { return roleIds; }
+  public void assignAccess(String teamId, Set<String> roles, DataScope directScope) {
+    this.teamId=teamId;this.roleIds=new java.util.HashSet<>(roles);this.dataScope=directScope.name();
+  }
   public void update(String displayName, Set<String> permissions, boolean active) {
     this.displayName = displayName; this.permissions = new java.util.HashSet<>(permissions); this.active = active;
   }

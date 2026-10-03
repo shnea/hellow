@@ -24,18 +24,20 @@ public class MediaCleanupWorker {
   private final OrganizationRepository organizations;
   private final PlatformProperties platform;
   private final LiveKitService media;
+  private final MembershipAccess authority;
 
   public MediaCleanupWorker(
       QueueItemRepository queues,
       MembershipRepository members,
       OrganizationRepository organizations,
       PlatformProperties platform,
-      LiveKitService media) {
+      LiveKitService media, MembershipAccess authority) {
     this.queues = queues;
     this.members = members;
     this.organizations = organizations;
     this.platform = platform;
     this.media = media;
+    this.authority=authority;
   }
 
   @Scheduled(fixedDelay = 2000)
@@ -49,8 +51,7 @@ public class MediaCleanupWorker {
                       q.getOrganizationId(), platform.getOidcIssuer(), q.getAssignedSubject())
                   .map(
                       m ->
-                          m.getPermissions().contains("queue:accept")
-                              && "ORGANIZATION".equals(m.getDataScope()))
+                          authority.grants(m).containsKey("queue:accept"))
                   .orElse(false);
       if (!permitted) {
         q.endCall();

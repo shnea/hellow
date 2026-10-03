@@ -3,7 +3,7 @@ package kr.shnea.hellow.customer;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface CustomerRepository extends JpaRepository<Customer, Long> {
+public interface CustomerRepository extends JpaRepository<Customer, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Customer> {
   Optional<Customer> findByCode(String code);
 
   java.util.List<Customer> findByOrganizationId(String organizationId);

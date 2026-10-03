@@ -32,19 +32,20 @@ public class TimelineController {
   public List<TimelineItem> customer(@PathVariable String code) {
     var actor = access.require("consultation:read");
     customers
-        .findByOrganizationIdAndCode(actor.organizationId(), code)
+        .findOne(BusinessScope.customers(actor).and(BusinessScope.equal("code",code)))
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    return timelines.findByOrganizationIdAndCustomerCodeOrderByCreatedAtDesc(
-        actor.organizationId(), code);
+    return timelines.findAll(BusinessScope.<TimelineItem>rows(actor).and(BusinessScope.equal("customerCode",code)),
+        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt"));
   }
 
   @GetMapping("/queue/{code}")
   public List<TimelineItem> queue(@PathVariable String code) {
     var actor = access.require("consultation:read");
-    queues
+    var queue=queues
         .findByOrganizationIdAndCode(actor.organizationId(), code)
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    return timelines.findByOrganizationIdAndQueueCodeOrderByCreatedAtDesc(
-        actor.organizationId(), code);
+    actor.requireRow(queue);
+    return timelines.findAll(BusinessScope.<TimelineItem>rows(actor).and(BusinessScope.equal("queueCode",code)),
+        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt"));
   }
 }

@@ -106,6 +106,7 @@ public class ConsultationController {
                       0);
               created.setOrganizationId(actor.organizationId());
               created.bind(code, actor.subject());
+              created.copyOwner(q);
               return created;
             });
     long current = c.getVersion() == null ? 0 : c.getVersion();
@@ -138,6 +139,7 @@ public class ConsultationController {
               r.tags());
       item.setOrganizationId(actor.organizationId());
       item.setQueueCode(code);
+      item.copyOwner(q);
       timelines.save(item);
       q.complete();
       queues.save(q);

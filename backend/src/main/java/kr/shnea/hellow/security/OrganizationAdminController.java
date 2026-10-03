@@ -31,7 +31,7 @@ public class OrganizationAdminController {
     if (admin.isPlatformAdmin()) return organizations.findAll();
     var jwt = access.identity();
     return memberships.findByIssuerAndSubjectAndActiveTrue(jwt.getIssuer().toString(), jwt.getSubject()).stream()
-        .filter(m -> "ORGANIZATION".equals(m.getDataScope()) && m.getPermissions().contains("organization:admin"))
+        .filter(m -> access.authority().isAdmin(m))
         .flatMap(m -> organizations.findById(m.getOrganizationId()).filter(Organization::isActive).stream()).toList();
   }
   public record OrganizationRequest(@NotBlank @Size(max = 150) String name, @NotBlank @Size(max = 255) String initialAdminSubject) {}
@@ -45,11 +45,13 @@ public class OrganizationAdminController {
     return org;
   }
   @GetMapping("/memberships")
-  public List<Membership> members() { return memberships.findByOrganizationIdOrderById(admin.organization()); }
+  public List<MemberView> members() { return memberships.findByOrganizationIdOrderById(admin.organization()).stream()
+      .map(m->new MemberView(m.getId(),m.getSubject(),m.getDisplayName(),m.getPermissions(),m.isActive(),m.getVersion(),m.getTeamId(),m.getRoleIds(),m.getDataScope(),access.authority().grants(m))).toList(); }
+  public record MemberView(Long id,String subject,String displayName,Set<String> permissions,boolean active,Long version,String teamId,Set<String> roleIds,String dataScope,Map<String,DataScope> effectiveScopes){}
   public record MemberRequest(@NotBlank @Size(max = 255) String subject, @Size(max = 100) String displayName, @NotNull Set<String> permissions) {}
   public record MemberUpdate(@NotNull Long expectedVersion, @Size(max = 100) String displayName, @NotNull Set<String> permissions, boolean active) {}
   static void validatePermissions(Set<String> permissions) {
-    if (!PERMISSIONS.containsAll(permissions)) throw new ResponseStatusException(BAD_REQUEST, "지원하지 않는 권한입니다.");
+    if (permissions.stream().anyMatch(Objects::isNull)||!PERMISSIONS.containsAll(permissions)) throw new ResponseStatusException(BAD_REQUEST, "지원하지 않는 권한입니다.");
   }
   @PostMapping("/memberships") @Transactional
   public Map<String, Long> add(@Valid @RequestBody MemberRequest r) {
@@ -70,27 +72,23 @@ public class OrganizationAdminController {
     if (!Objects.equals(member.getVersion(), r.expectedVersion()))
       throw new ResponseStatusException(CONFLICT, "직원 정보가 변경됐습니다. 다시 조회해 주세요.");
     validatePermissions(r.permissions());
-    protectLastAdmin(member, r.active() && r.permissions().contains("organization:admin"));
+    if(r.permissions().contains("organization:admin")&&!"ORGANIZATION".equals(member.getDataScope()))
+      throw new ResponseStatusException(BAD_REQUEST,"조직 관리 권한은 조직 전체 범위가 필요합니다. 접근 범위를 먼저 변경해 주세요.");
     member.update(r.displayName(), r.permissions(), r.active()); memberships.saveAndFlush(member);
+    access.authority().protectAdministrators(org);
     audit.record(org, "MEMBER_CHANGED", member.getSubject(), "active=" + r.active() + "; permissions=" + String.join(",", new TreeSet<>(r.permissions())));
     return member;
   }
   @PostMapping("/memberships/{id}/revoke") @Transactional
   public void revoke(@PathVariable Long id) {
     String org = admin.lockOrganization();
-    var member = ownedMember(id, org); protectLastAdmin(member, false);
-    member.revoke(); memberships.save(member);
+    var member = ownedMember(id, org);
+    member.revoke(); memberships.saveAndFlush(member);access.authority().protectAdministrators(org);
     audit.record(org, "MEMBER_REVOKED", member.getSubject(), "조직 접근 회수");
   }
   private Membership ownedMember(Long id, String org) {
     return memberships.findById(id).filter(m -> org.equals(m.getOrganizationId()))
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "직원을 찾을 수 없습니다."));
-  }
-  private void protectLastAdmin(Membership member, boolean remainsAdmin) {
-    if (member.isActive() && member.getPermissions().contains("organization:admin") && !remainsAdmin
-        && memberships.findByOrganizationIdOrderById(member.getOrganizationId()).stream()
-            .noneMatch(m -> !m.getId().equals(member.getId()) && m.isActive() && m.getPermissions().contains("organization:admin")))
-      throw new ResponseStatusException(CONFLICT, "마지막 관리자는 해제할 수 없습니다. 다른 관리자를 먼저 지정해 주세요.");
   }
   @GetMapping("/audit")
   public List<AuditEvent> audit() { return events.findTop100ByOrganizationIdOrderByOccurredAtDesc(admin.organization()); }

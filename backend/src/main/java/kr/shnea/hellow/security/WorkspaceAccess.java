@@ -12,10 +12,12 @@ import org.springframework.web.server.ResponseStatusException;
 public class WorkspaceAccess {
   private final MembershipRepository memberships;
   private final OrganizationRepository organizations;
+  private final MembershipAccess authority;
 
-  public WorkspaceAccess(MembershipRepository memberships, OrganizationRepository organizations) {
+  public WorkspaceAccess(MembershipRepository memberships, OrganizationRepository organizations, MembershipAccess authority) {
     this.memberships = memberships;
     this.organizations = organizations;
+    this.authority = authority;
   }
 
   public Jwt identity() {
@@ -36,13 +38,25 @@ public class WorkspaceAccess {
             .findByOrganizationIdAndIssuerAndSubjectAndActiveTrue(
                 organizationId, jwt.getIssuer().toString(), jwt.getSubject())
             .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "활성 조직 권한이 없습니다."));
+    var grants=authority.grants(member);
     if (!organizations.findById(organizationId).map(Organization::isActive).orElse(false)
-        || !"ORGANIZATION".equals(member.getDataScope())
-        || !member.getPermissions().contains(permission))
+        || !grants.containsKey(permission))
       throw new ResponseStatusException(FORBIDDEN, "이 작업의 권한이 없습니다.");
     String name = jwt.getClaimAsString("name");
-    return new Actor(organizationId, jwt.getSubject(), name == null ? jwt.getSubject() : name);
+    return new Actor(organizationId, jwt.getSubject(), name == null ? jwt.getSubject() : name,
+        jwt.getIssuer().toString(), member.getTeamId(), grants.get(permission), authority.teamScope(member), grants);
   }
 
-  public record Actor(String organizationId, String subject, String name) {}
+  public record Actor(String organizationId, String subject, String name, String issuer,
+      String teamId, DataScope dataScope, java.util.Set<String> teamIds, java.util.Map<String,DataScope> grants) {
+    public boolean allows(OrganizationOwned row) {
+      return organizationId.equals(row.getOrganizationId()) && (dataScope==DataScope.ORGANIZATION
+        || issuer.equals(row.getOwnerIssuer())&&subject.equals(row.getOwnerSubject())
+        || dataScope==DataScope.TEAM&&row.getTeamId()!=null&&teamIds.contains(row.getTeamId()));
+    }
+    public void requireRow(OrganizationOwned row) {
+      if(!allows(row))throw new ResponseStatusException(NOT_FOUND,"접근할 수 있는 기록이 없습니다.");
+    }
+  }
+  public MembershipAccess authority(){return authority;}
 }

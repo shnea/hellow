@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface QueueItemRepository extends JpaRepository<QueueItem, Long> {
+public interface QueueItemRepository extends JpaRepository<QueueItem, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<QueueItem> {
   Optional<QueueItem> findByCode(String code);
 
   Optional<QueueItem> findByOrganizationIdAndCode(String organizationId, String code);

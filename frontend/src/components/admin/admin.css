@@ -42,6 +42,12 @@
 .admin-organization-list li { display:flex; flex-wrap:wrap; gap:12px; padding:12px 0; border-bottom:1px solid #334155; }
 .admin-shell code { font-size:12px; overflow-wrap:anywhere; }
 .admin-link { display:block; padding:12px; background:#1e293b; border-radius:8px; }
+.admin-structure-list li { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid #334155; }
+.admin-structure-list li > div { min-width:0; overflow-wrap:anywhere; }
+.admin-scope-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.admin-shell h4 { font-size:16px; font-weight:600; }
+.admin-shell summary { padding:12px 0; cursor:pointer; }
+.admin-shell section[id] { scroll-margin-top:24px; }
 @media(max-width:640px) {
  .admin-shell { padding:16px; }
  .admin-header { align-items:flex-start; flex-direction:column; gap:12px; }
@@ -49,4 +55,7 @@
  .admin-permissions { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .admin-effective div { grid-template-columns:1fr; gap:4px; }
  .admin-shell td,.admin-shell th { min-width:100px; padding:8px; }
+ .admin-scope-grid { grid-template-columns:1fr; }
+ .admin-shell button,.admin-shell input:not([type=checkbox]),.admin-shell select,.admin-shell summary { min-height:44px; }
+ .admin-shell input:not([type=checkbox]),.admin-shell select { font-size:16px; }
 }

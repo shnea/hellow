@@ -9,6 +9,7 @@ import kr.shnea.hellow.customer.CustomerRepository;
 import kr.shnea.hellow.platform.AttachmentRepository;
 import kr.shnea.hellow.queue.*;
 import kr.shnea.hellow.security.WorkspaceAccess;
+import kr.shnea.hellow.security.BusinessScope;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,33 +32,36 @@ public class CustomerConsultationController {
   }
   @GetMapping("/customer/{code}")
   public List<Consultation> list(@PathVariable String code) {
-    var actor=access.require("consultation:read"); requireCustomer(actor.organizationId(),code);
-    return records.findByOrganizationIdAndCustomerCodeOrderByCreatedAtDesc(actor.organizationId(),code);
+    var actor=access.require("consultation:read"); requireCustomer(actor,code);
+    return records.findAll(BusinessScope.<Consultation>rows(actor).and(BusinessScope.equal("customerCode",code)),
+        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt"));
   }
   public record CreateRequest(@NotBlank String customerCode,@NotNull UUID requestId) {}
   @PostMapping
   @Transactional
   public Consultation create(@Valid @RequestBody CreateRequest r) {
-    var actor=access.require("consultation:write");requireCustomer(actor.organizationId(),r.customerCode());
+    var actor=access.require("consultation:write");requireCustomer(actor,r.customerCode());
     String key=UUID.nameUUIDFromBytes((actor.organizationId()+":"+actor.subject()+":"+r.requestId()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
     var prior=records.findByRequestKey(key);
     if(prior.isPresent()) {
+      actor.requireRow(prior.get());
       if(!Objects.equals(prior.get().getCustomerCode(),r.customerCode())) throw new ResponseStatusException(CONFLICT);
       return prior.get();
     }
     var record=new Consultation(r.customerCode(),"일반 상담","일반 문의",Consultation.ConsultationStatus.IN_PROGRESS,"","",actor.name(),0);
     record.setOrganizationId(actor.organizationId());record.bind(null,actor.subject());record.setRequestKey(key);
+    record.assignOwner(actor);
     return records.saveAndFlush(record);
   }
   @GetMapping("/{id}/revisions")
   public List<ConsultationRevision> revisions(@PathVariable Long id) {
-    var actor=access.require("consultation:read");requireRecord(actor.organizationId(),id);
+    var actor=access.require("consultation:read");requireRecord(actor,id);
     return revisions.findByOrganizationIdAndConsultationIdOrderByChangedAtDesc(actor.organizationId(),id);
   }
   @PutMapping("/{id}")
   @Transactional
   public Consultation update(@PathVariable Long id,@Valid @RequestBody ConsultationController.SaveRequest r) throws com.fasterxml.jackson.core.JsonProcessingException {
-    var actor=access.require("consultation:write");var record=requireRecord(actor.organizationId(),id);
+    var actor=access.require("consultation:write");var record=requireRecord(actor,id);
     // An ongoing interaction must use its owner's queue save endpoint, so completion remains atomic.
     if(record.getQueueCode()!=null) {
       var q=queues.findByOrganizationIdAndCode(actor.organizationId(),record.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
@@ -82,6 +86,6 @@ public class CustomerConsultationController {
     }
     node.elements().forEachRemaining(child->validateFiles(child,record));
   }
-  private Consultation requireRecord(String org,Long id){return records.findByOrganizationIdAndId(org,id).orElseThrow(()->new ResponseStatusException(NOT_FOUND));}
-  private void requireCustomer(String org,String code){if(customers.findByOrganizationIdAndCode(org,code).isEmpty())throw new ResponseStatusException(NOT_FOUND);}
+  private Consultation requireRecord(WorkspaceAccess.Actor actor,Long id){return records.findOne(BusinessScope.<Consultation>rows(actor).and(BusinessScope.equal("id",id))).orElseThrow(()->new ResponseStatusException(NOT_FOUND));}
+  private void requireCustomer(WorkspaceAccess.Actor actor,String code){if(customers.findOne(BusinessScope.customers(actor).and(BusinessScope.equal("code",code))).isEmpty())throw new ResponseStatusException(NOT_FOUND);}
 }

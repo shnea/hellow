@@ -17,6 +17,7 @@ public class ConsultationRevision extends kr.shnea.hellow.security.OrganizationO
   public ConsultationRevision(Consultation record, String subject, String name, String snapshot) {
     setOrganizationId(record.getOrganizationId()); consultationId=record.getId(); actorSubject=subject;
     actorName=name; beforeDocument=snapshot; changedAt=Instant.now();
+    copyOwner(record);
   }
   public Long getId(){return id;}
   public Long getConsultationId(){return consultationId;}

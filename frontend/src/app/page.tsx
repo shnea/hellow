@@ -14,7 +14,7 @@ import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 import './workspace.css';
 import type { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
-interface Identity { subject: string; name: string; platformAdmin?: boolean; organizations: { id: string; name: string; publicCode?: string; permissions: string[] }[]; }
+interface Identity { subject: string; name: string; platformAdmin?: boolean; organizations: { id: string; name: string; publicCode?: string; permissions: string[];scopes?:Record<string,string>;teamId?:string }[]; }
 interface SavedConsultation { version: number; categoryMain: string; categorySub: string; tags: string; editorDocument: string; memo: string; }
 
 export default function ConsultationWorkspacePage() {
@@ -73,10 +73,16 @@ export default function ConsultationWorkspacePage() {
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
+        const me=await apiJson<Identity>('/api/me',{signal:abort.signal});
+        const org=me.organizations.find(o=>o.id===organizationId);
+        if(!org)throw new ApiError(403,'이 조직의 접근 권한이 회수되었습니다.');
+        const permitted=(permission:string)=>org.permissions.includes(permission);
         const [items, profiles] = await Promise.all([
-          apiJson<ServerQueue[]>('/api/queue', { signal: abort.signal }), apiJson<ServerCustomer[]>('/api/customers', { signal: abort.signal }),
+          permitted('queue:read')?apiJson<ServerQueue[]>('/api/queue', { signal: abort.signal }):Promise.resolve([]),
+          permitted('customer:read')?apiJson<ServerCustomer[]>('/api/customers', { signal: abort.signal }):Promise.resolve([]),
         ]);
         if (abort.signal.aborted || generation.current !== current) return;
+        setIdentity(me);
         const mapped = items.map(queueItem);
         if (synchronized.current) {
           const ids = new Set(queueRef.current.map(q => q.id));
@@ -87,7 +93,7 @@ export default function ConsultationWorkspacePage() {
         setCustomers(Object.fromEntries(profiles.map(c => [c.code, customerProfile(c)])));
         setSelected(previous => previous || mapped[0]?.id || '');
         const mine = mapped.find(q => q.type === 'call' && q.status === 'PROCESSING' && q.assignedSubject === identity?.subject && !q.callEnded);
-        setActiveCall(mine?.id || null); setQueueError('');
+        setActiveCall(permitted('queue:accept')?mine?.id||null:null); setQueueError('');setAuthError('');
       } catch (error) {
         if (!abort.signal.aborted && generation.current === current) {
           setQueueError(`${(error as Error).message} 표시 중인 정보는 마지막 조회 결과입니다.`);
@@ -104,9 +110,12 @@ export default function ConsultationWorkspacePage() {
   const item = queue.find(q => q.id === selected);
   const selectedQueueCode=item?.id;
   const customerCode=item?.customerCode;
-  const customer = item ? (item.customerCode ? customers[item.customerCode] : requestProfile(item)) : null;
+  const customer = item ? (item.customerCode ? customers[item.customerCode]||requestProfile(item) : requestProfile(item)) : null;
   const writable = item?.status === 'PROCESSING' && item.assignedSubject === identity?.subject;
   const can = (permission: string) => identity?.organizations.find(o => o.id === organizationId)?.permissions.includes(permission) || false;
+  const currentOrganization=identity?.organizations.find(o=>o.id===organizationId);
+  const accessKey=JSON.stringify([currentOrganization?.teamId,Object.entries(currentOrganization?.scopes||{}).sort(),currentOrganization?.permissions.slice().sort()]);
+  const canReadConsultation=can('consultation:read');
   const unfinishedCall=queue.find(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
   const receivingBlocked=unfinishedCall ? unfinishedCall.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 통화를 수락할 수 있습니다.' : '통화 중입니다. 현재 통화와 후처리를 완료해 주세요.' : '';
   const incoming=queue.find(q=>q.status==='WAITING'&&!dismissedIncoming.includes(q.id));
@@ -122,14 +131,14 @@ export default function ConsultationWorkspacePage() {
     // Drop context from the previous selection before loading this interaction.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTimeline([]); setTimelineError(''); setQuotedText('');
-    if (!selectedQueueCode) return;
+    if (!selectedQueueCode || !canReadConsultation) return;
     const abort = new AbortController();
     const path = customerCode ? `customer/${customerCode}` : `queue/${selectedQueueCode}`;
     apiJson<ServerTimeline[]>(`/api/timeline/${path}`, { signal: abort.signal })
       .then(rows => { if (!abort.signal.aborted) setTimeline(rows.map(timelineItem)); })
       .catch(error => { if (!abort.signal.aborted) setTimelineError(error.message); });
     return () => abort.abort();
-  }, [selectedQueueCode, customerCode, timelineRefresh, organizationId]);
+  }, [selectedQueueCode, customerCode, timelineRefresh, organizationId, canReadConsultation, accessKey]);
   useEffect(() => {
     // Reset the prior interaction's load error; actual data arrives asynchronously.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -216,7 +225,7 @@ export default function ConsultationWorkspacePage() {
         <div className={`queue-pane ${mobilePanel==='queue'&&!showRecords?'mobile-visible':''} ${showRecords?'records-active':''}`}>
           <QueuePanel queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined} />
         </div>
-        <CustomerRecordsWorkspace active={showRecords} customers={Object.values(customers)} organizationId={organizationId} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
+        <CustomerRecordsWorkspace active={showRecords} customers={Object.values(customers)} organizationId={organizationId} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
           activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>
         {customer && item && !showRecords ? <div className="interaction-workspace flex flex-1 min-w-0 min-h-0"><div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
           {writable && !item.customerCode && can('customer:write') && <label className="p-2 text-sm text-slate-300">기존 고객 연결 (직원 확인)

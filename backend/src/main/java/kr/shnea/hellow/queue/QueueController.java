@@ -31,9 +31,12 @@ public class QueueController {
   @GetMapping
   public List<QueueItem> list() {
     var actor = access.require("queue:read");
-    return queues.findByOrganizationIdAndStatusInOrderByCreatedAtDesc(
-        actor.organizationId(),
-        List.of(QueueItem.QueueStatus.WAITING, QueueItem.QueueStatus.PROCESSING));
+    org.springframework.data.jpa.domain.Specification<QueueItem> scope=BusinessScope.rows(actor);
+    // Unassigned requests form the shared intake queue only for staff allowed to accept.
+    if(actor.grants().containsKey("queue:accept"))scope=scope.or((root,query,cb)->cb.and(
+        cb.equal(root.get("organizationId"),actor.organizationId()),cb.equal(root.get("status"),QueueItem.QueueStatus.WAITING),cb.isNull(root.get("assignedSubject"))));
+    return queues.findAll(scope.and((root,query,cb)->root.get("status").in(List.of(QueueItem.QueueStatus.WAITING,QueueItem.QueueStatus.PROCESSING))),
+        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt"));
   }
 
   @PostMapping("/{code}/accept")
@@ -55,6 +58,7 @@ public class QueueController {
             QueueItem.ItemType.CALL))
       throw new ResponseStatusException(CONFLICT, "진행 중인 통화 또는 후처리 기록을 저장·완료한 뒤 새 통화를 수락해 주세요.");
     q.acceptBy(actor.subject(), actor.name());
+    q.assignOwner(actor);
     return queues.save(q);
   }
 

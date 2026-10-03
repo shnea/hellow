@@ -27,14 +27,14 @@ export function MemberManagement({organizationId,members,invitations,reload}:Pro
   return <section className="admin-section"><h2>직원과 관리자</h2><p>관리자를 바꾸려면 새 관리자를 먼저 지정한 뒤 기존 관리자 권한을 해제하세요.</p>
     <div className="admin-table-scroll"><table><thead><tr><th>직원</th><th>권한</th><th>상태</th><th>변경</th></tr></thead><tbody>
       {members.map(member=><tr key={member.id}><td>{member.displayName||'이름 미등록'}<small>{member.subject}</small></td>
-        <td>{member.permissions.includes('organization:admin')?'조직 관리자':'직원'}</td><td>{member.active?'활성':'접근 회수'}</td>
+        <td>{member.effectiveScopes?.['organization:admin']||member.permissions.includes('organization:admin')?'조직 관리자':'직원'}</td><td>{member.active?'활성':'접근 회수'}</td>
         <td><button disabled={busy} onClick={()=>choose(member)} aria-label={`${member.displayName||member.subject} 권한 편집`}>편집</button></td></tr>)}
     </tbody></table></div>
     <form className="admin-form" onSubmit={e=>{e.preventDefault();void save();}}>
       <h3>{edit?'직원 권한 변경':'계정 ID로 직원 등록'}</h3><div className="admin-form-grid">
         <label>플랫폼 계정 ID<input required value={subject} disabled={busy||Boolean(edit)} maxLength={255} onChange={e=>setSubject(e.target.value)}/></label>
         <label>표시 이름<input value={name} disabled={busy} maxLength={100} onChange={e=>setName(e.target.value)}/></label>
-      </div><PermissionsField value={permissions} onChange={setPermissions} disabled={busy}/>
+      </div><p>직접 부여한 기능 권한입니다. 역할과 접근 범위는 팀·역할 화면에서 함께 변경할 수 있습니다.</p><PermissionsField value={permissions} onChange={setPermissions} disabled={busy}/>
       {edit&&<label className="admin-check"><input type="checkbox" checked={active} disabled={busy} onChange={e=>setActive(e.target.checked)}/>조직 접근 허용</label>}
       <div className="admin-actions"><button className="admin-primary" disabled={busy||!subject.trim()}>{busy?'처리 중…':'직원 저장'}</button><button type="button" disabled={busy} onClick={()=>choose(null)}>새 직원 등록</button></div>
     </form>

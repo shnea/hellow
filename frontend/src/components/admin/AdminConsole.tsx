@@ -2,9 +2,10 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiJson, jsonBody } from '@/lib/api';
-import { actionLabels, adminJson, type AdminOrganization, type AdminMember, type AdminInvitation, type AdminEvent, type SettingsView } from '@/lib/admin';
+import { actionLabels, adminJson, type AdminOrganization, type AdminMember, type AdminInvitation, type AdminEvent, type SettingsView, type AdminTeam, type AdminRole } from '@/lib/admin';
 import { MemberManagement } from './MemberManagement';
 import { SettingsManagement } from './SettingsManagement';
+import { StructureManagement } from './StructureManagement';
 import './admin.css';
 
 interface Identity {subject:string;name:string;platformAdmin:boolean;}
@@ -12,7 +13,8 @@ interface Impact {organizationId:string;name:string;inherited:string[];}
 export function AdminConsole({platform=false}:{platform?:boolean}) {
   const [identity,setIdentity]=useState<Identity|null>(null);const [organizations,setOrganizations]=useState<AdminOrganization[]>([]);
   const [organizationId,setOrganizationId]=useState('');const selected=useRef('');
-  const [tab,setTab]=useState<'members'|'settings'|'audit'>(platform?'settings':'members');
+  const [tab,setTab]=useState<'members'|'structure'|'settings'|'audit'>(platform?'settings':'members');
+  const [teams,setTeams]=useState<AdminTeam[]>([]);const [roles,setRoles]=useState<AdminRole[]>([]);
   const [members,setMembers]=useState<AdminMember[]>([]);const [invites,setInvites]=useState<AdminInvitation[]>([]);
   const [events,setEvents]=useState<AdminEvent[]>([]);const [settings,setSettings]=useState<SettingsView|null>(null);const [impact,setImpact]=useState<Impact[]>([]);
   const [error,setError]=useState('');const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);
@@ -31,15 +33,18 @@ export function AdminConsole({platform=false}:{platform?:boolean}) {
     if(!identity || platform&&!identity.platformAdmin || !platform&&!organizationId)return;
     const id=organizationId;
     try{
-      const [config,rows,people,invitations,affected]=await Promise.all([
+      const [config,rows,people,invitations,affected,teamRows,roleRows]=await Promise.all([
         adminJson<SettingsView>(`/api/admin/settings/${platform?'common':'organization'}`,id,{signal}),
         adminJson<AdminEvent[]>(platform?'/api/admin/audit/common':'/api/admin/audit',id,{signal}),
         platform?Promise.resolve([]):adminJson<AdminMember[]>('/api/admin/memberships',id,{signal}),
         platform?Promise.resolve([]):adminJson<AdminInvitation[]>('/api/admin/invitations',id,{signal}),
         platform?apiJson<Impact[]>('/api/admin/settings/impact/common',{signal}):Promise.resolve([]),
+        platform?Promise.resolve([]):adminJson<AdminTeam[]>('/api/admin/teams',id,{signal}),
+        platform?Promise.resolve([]):adminJson<AdminRole[]>('/api/admin/roles',id,{signal}),
       ]);
       if(signal?.aborted || (!platform&&id!==selected.current))return;
       setSettings(config);setEvents(rows);setMembers(people);setInvites(invitations);setImpact(affected);setError('');
+      setTeams(teamRows);setRoles(roleRows);
     }catch(e){if(!signal?.aborted&&(platform||id===selected.current))setError((e as Error).message);throw e;}
     finally{if(!signal?.aborted&&(platform||id===selected.current))setLoading(false);}
   },[identity,organizationId,platform]);
@@ -67,11 +72,12 @@ export function AdminConsole({platform=false}:{platform?:boolean}) {
         {org&&<a href={`/support?org=${encodeURIComponent(org.publicCode)}`} target="_blank" rel="noopener noreferrer">고객 접수 화면 열기</a>}
       </section>}
       {(!platform&&!organizations.length)?<p className="admin-section">관리 가능한 조직이 없습니다. 조직 관리자에게 관리 권한을 요청해 주세요.</p>:<>
-        <nav className="admin-tabs" aria-label="관리 항목">{(!platform?['members','settings','audit']:['settings','audit']).map(value=><button key={value} aria-current={tab===value?'page':undefined}
-          onClick={()=>setTab(value as typeof tab)}>{value==='members'?'직원·초대':value==='settings'?'고객 접수 설정':'로그인·변경 이력'}</button>)}
+        <nav className="admin-tabs" aria-label="관리 항목">{(!platform?['members','structure','settings','audit']:['settings','audit']).map(value=><button key={value} aria-current={tab===value?'page':undefined}
+          onClick={()=>setTab(value as typeof tab)}>{value==='members'?'직원·초대':value==='structure'?'팀·역할':value==='settings'?'고객 접수 설정':'로그인·변경 이력'}</button>)}
           <button disabled={loading} onClick={()=>{setError('');void reload().catch(()=>{});}}>다시 조회</button></nav>
         {error&&<p role="alert" className="admin-error">{error}</p>}{loading&&<p role="status" className="admin-section">관리 정보를 불러오고 있습니다.</p>}
         {settings&&tab==='members'&&<MemberManagement key={organizationId} organizationId={organizationId} members={members} invitations={invites} reload={reload}/>}
+        {settings&&tab==='structure'&&<StructureManagement key={organizationId} organizationId={organizationId} members={members} teams={teams} roles={roles} reload={reload}/>}
         {tab==='settings'&&settings&&<><SettingsManagement key={`${platform}:${organizationId}`} scope={platform?'common':'organization'} organizationId={organizationId} initial={settings} onSaved={setSettings}/>
           {platform&&<section className="admin-section"><h3>공통 설정의 적용 범위</h3><p>아래 조직에서 상속하는 항목에만 공통 변경이 적용됩니다.</p><ul>{impact.map(o=><li key={o.organizationId}>{o.name} · {o.inherited.length}개 항목 상속</li>)}</ul></section>}
           {!platform&&org&&<section className="admin-section"><h3>홈페이지 상담 버튼 연결</h3><p>홈페이지 버튼의 연결 주소에 아래 URL을 지정하세요.</p><code className="admin-link">{typeof window!=='undefined'?`${window.location.origin}/support?org=${encodeURIComponent(org.publicCode)}`:''}</code></section>}

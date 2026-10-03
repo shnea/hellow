@@ -46,7 +46,7 @@ public class EditorAttachmentController {
       throws java.io.IOException {
     var actor = access.require("consultation:write");
     if(queueCode.startsWith("record-")) {
-      var c = record(actor.organizationId(),queueCode);
+      var c = record(actor,queueCode);
       if(c.getQueueCode()!=null) {
         var q=queues.findByOrganizationIdAndCode(actor.organizationId(),c.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
         if(q.getStatus()==QueueItem.QueueStatus.PROCESSING || q.getStatus()==QueueItem.QueueStatus.WAITING)
@@ -86,6 +86,7 @@ public class EditorAttachmentController {
             kind,
             result.size(),
             result.sha256());
+    attachment.assignOwner(actor);
     files.save(attachment);
     return response(attachment, scope);
   }
@@ -97,8 +98,8 @@ public class EditorAttachmentController {
         files
             .findByOrganizationIdAndFileId(actor.organizationId(), fileId)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    if(file.getQueueCode().startsWith("record-")) record(actor.organizationId(),file.getQueueCode());
-    else queues.findByOrganizationIdAndCode(actor.organizationId(),file.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
+    if(file.getQueueCode().startsWith("record-")) record(actor,file.getQueueCode());
+    else actor.requireRow(queues.findByOrganizationIdAndCode(actor.organizationId(),file.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND)));
     return ResponseEntity.ok()
         .cacheControl(CacheControl.noStore())
         .body(platform.getViewTicket(fileId));
@@ -117,8 +118,8 @@ public class EditorAttachmentController {
         "size",
         file.getSize());
   }
-  private kr.shnea.hellow.consultation.Consultation record(String org,String context) {
-    try { return consultations.findByOrganizationIdAndId(org,Long.parseLong(context.substring(7))).orElseThrow(()->new ResponseStatusException(NOT_FOUND)); }
+  private kr.shnea.hellow.consultation.Consultation record(WorkspaceAccess.Actor actor,String context) {
+    try { var c=consultations.findByOrganizationIdAndId(actor.organizationId(),Long.parseLong(context.substring(7))).orElseThrow(()->new ResponseStatusException(NOT_FOUND));actor.requireRow(c);return c; }
     catch(NumberFormatException e){throw new ResponseStatusException(BAD_REQUEST);}
   }
 }

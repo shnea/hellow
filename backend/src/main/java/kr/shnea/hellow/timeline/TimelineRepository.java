@@ -3,7 +3,7 @@ package kr.shnea.hellow.timeline;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface TimelineRepository extends JpaRepository<TimelineItem, Long> {
+public interface TimelineRepository extends JpaRepository<TimelineItem, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<TimelineItem> {
   List<TimelineItem> findByCustomerCodeOrderByCreatedAtDesc(String customerCode);
 
   List<TimelineItem> findByOrganizationIdAndCustomerCodeOrderByCreatedAtDesc(

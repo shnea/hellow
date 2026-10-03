@@ -48,6 +48,7 @@ public class FollowUpController {
     var action = new FollowUpAction(q.getCustomerCode(), r.actionType(), r.title(), r.details());
     action.setOrganizationId(actor.organizationId());
     action.setQueueCode(q.getCode());
+    action.copyOwner(q);
     followups.save(action);
     var item =
         new TimelineItem(
@@ -61,6 +62,7 @@ public class FollowUpController {
             "후속조치,PENDING");
     item.setOrganizationId(actor.organizationId());
     item.setQueueCode(q.getCode());
+    item.copyOwner(q);
     timelines.save(item);
     return action;
   }

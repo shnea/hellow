@@ -27,7 +27,7 @@ public class CustomerController {
 
   @GetMapping
   public List<Customer> all() {
-    return customers.findByOrganizationId(access.require("customer:read").organizationId());
+    return customers.findAll(BusinessScope.customers(access.require("customer:read")));
   }
 
   @GetMapping("/{code}")
@@ -75,6 +75,7 @@ public class CustomerController {
             r.customerNotes(),
             r.complainant());
     c.setOrganizationId(actor.organizationId());
+    c.assignOwner(actor);
     customers.save(c);
     q.linkCustomer(c);
     queues.save(q);
@@ -120,7 +121,7 @@ public class CustomerController {
 
   private Customer owned(WorkspaceAccess.Actor actor, String code) {
     return customers
-        .findByOrganizationIdAndCode(actor.organizationId(), code)
+        .findOne(BusinessScope.customers(actor).and(BusinessScope.equal("code",code)))
         .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
   }
 }

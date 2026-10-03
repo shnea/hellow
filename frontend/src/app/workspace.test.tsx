@@ -36,6 +36,16 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('keeps permitted queues usable when customer and record permissions are absent',async()=>{
+    const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>path==='/api/me'
+      ?response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions:['queue:read','queue:accept']}]})
+      :original(path,options));
+    render(<Workspace/>);await flush();
+    expect(screen.getByText('queue-1')).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([path])=>path==='/api/customers'||path.startsWith('/api/timeline/'))).toBe(false);
+    expect(screen.queryByText('작업 실패 · 입력 보존')).toBeNull();
+  });
   it('explains the waiting editor and enables writing from the accepted server response',async()=>{
     items=[{...queue(),status:'WAITING',assignedSubject:''}];
     const original=fetchMock.getMockImplementation()!;

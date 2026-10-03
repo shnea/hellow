@@ -27,7 +27,6 @@ public class IdentityController {
         memberships
             .findByIssuerAndSubjectAndActiveTrue(jwt.getIssuer().toString(), jwt.getSubject())
             .stream()
-            .filter(m -> "ORGANIZATION".equals(m.getDataScope()))
             .flatMap(
                 m ->
                     organizations
@@ -43,7 +42,9 @@ public class IdentityController {
                                     o.getName(),
                                     "publicCode", o.getPublicCode(),
                                     "permissions",
-                                    m.getPermissions())))
+                                    access.authority().grants(m).keySet(),
+                                    "scopes", access.authority().grants(m),
+                                    "teamId", Optional.ofNullable(m.getTeamId()).orElse(""))))
             .toList();
     return Map.of(
         "subject",
