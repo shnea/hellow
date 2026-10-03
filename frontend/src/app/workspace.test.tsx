@@ -43,6 +43,15 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('blocks receiving and organization switching during followup work even without queue permissions',async()=>{
+    items=[];const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>{
+      if(path==='/api/me')return response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions:['followup:read','followup:write']},{id:'org-b',name:'B',permissions:['followup:read','followup:write']}]});
+      if(path==='/api/followup/active')return response({processing:true,id:7});
+      return original(path,o);
+    });render(<Workspace/>);await flush();expect(screen.getByRole('button',{name:'처리 중인 예약으로 돌아가기'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();expect((screen.getByLabelText('현재 작업 조직') as HTMLSelectElement).disabled).toBe(true);expect(screen.getByText(/예약 업무를 종료한 뒤/)).toBeTruthy();
+  });
   it('keeps unsaved text and adopts the server draft version after linking a customer',async()=>{
     items=[{...queue(),customerCode:null as unknown as string,registered:false}];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>{

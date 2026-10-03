@@ -77,6 +77,26 @@ class FollowUpIntegrationTest {
     body.put("requestId","short");command(post("/api/followup"),"alice","a",body).andExpect(status().isBadRequest());
     assertThat(queues.findByCode("source").orElseThrow().getSummary()).isEqualTo("원래 상담 요청");
   }
+  @Test void readonlyRequestRecoveryIsBoundToRequesterOrganizationAndCurrentReadScope()throws Exception{
+    var body=request("source");String key=body.get("requestId").toString();
+    mvc.perform(actor(get("/api/followup/request/"+key),"alice","a")).andExpect(status().isOk()).andExpect(content().string(""));
+    var created=ok(command(post("/api/followup"),"alice","a",body));
+    var recovered=ok(mvc.perform(actor(get("/api/followup/request/"+key),"alice","a")));
+    assertThat(recovered.path("id")).isEqualTo(created.path("id"));assertThat(recovered.path("canWrite").asBoolean()).isTrue();assertThat(recovered.path("canAssign").asBoolean()).isTrue();assertThat(recovered.path("canProcess").asBoolean()).isTrue();
+    assertThat(recovered.path("contactName").asText()).isEqualTo("접수 고객");assertThat(recovered.path("phoneNumber").asText()).isEqualTo("01000000000");assertThat(recovered.has("summary")).isFalse();
+    mvc.perform(actor(get("/api/followup/request/"+key),"alice","b")).andExpect(status().isOk()).andExpect(content().string(""));
+    mvc.perform(actor(get("/api/followup/request/"+key),"bob","a")).andExpect(status().isOk()).andExpect(content().string(""));
+    mvc.perform(actor(get("/api/followup/request/zzzzzzzz-1234-4123-8123-abcdefabcdef"),"alice","a")).andExpect(status().isBadRequest());
+    assertThat(history.count()).isEqualTo(1);assertThat(tasks.count()).isEqualTo(1);
+  }
+  @Test void ownActiveWorkIsVisibleWithoutQueuePermissionAndOtherOrganizationContentStaysHidden()throws Exception{
+    var task=create("alice","a","source");task=ok(schedule("alice","a",task,"alice",now.plusSeconds(10)));now=now.plusSeconds(10);task=ok(transition("alice","a",task,"IN_PROGRESS"));
+    var member=members.findById(member("alice","a")).orElseThrow();member.update("alice",Set.of("followup:read","followup:write"),true);members.save(member);
+    var active=ok(mvc.perform(actor(get("/api/followup/active"),"alice","a")));assertThat(active.path("processing").asBoolean()).isTrue();assertThat(active.path("id")).isEqualTo(task.path("id"));
+    var other=ok(mvc.perform(actor(get("/api/followup/active"),"alice","b")));assertThat(other.path("processing").asBoolean()).isTrue();assertThat(other.path("id").isNull()).isTrue();
+    var caps=ok(mvc.perform(actor(get("/api/followup/"+task.path("id").asLong()),"alice","a")));assertThat(caps.path("canAssign").asBoolean()).isFalse();assertThat(caps.path("canProcess").asBoolean()).isTrue();
+    task=ok(transition("alice","a",task,"COMPLETED"));assertThat(ok(mvc.perform(actor(get("/api/followup/active"),"alice","a"))).path("processing").asBoolean()).isFalse();
+  }
   @Test void concurrentDuplicateCreateHasOnePersistentRequest()throws Exception{
     var body=request("source");var pool=Executors.newFixedThreadPool(2);var gate=new CountDownLatch(1);
     try{var work=new ArrayList<Future<Integer>>();for(int i=0;i<2;i++)work.add(pool.submit(()->{gate.await();return command(post("/api/followup"),"alice","a",body).andReturn().getResponse().getStatus();}));gate.countDown();
@@ -179,6 +199,7 @@ class FollowUpIntegrationTest {
     var reader=new Membership("a",ISSUER,"reader",Set.of());reader.assignAccess("parent",Set.of("team-reader"),DataScope.SELF);members.save(reader);
     var alice=members.findById(member("alice","a")).orElseThrow();alice.assignAccess("child",Set.of(),DataScope.ORGANIZATION);members.save(alice);
     var task=create("alice","a","source");var list=ok(mvc.perform(actor(get("/api/followup"),"reader","a")));assertThat(list.path("items").size()).isEqualTo(1);
+    assertThat(list.path("items").get(0).path("canWrite").asBoolean()).isFalse();assertThat(list.path("items").get(0).path("canAssign").asBoolean()).isFalse();assertThat(list.path("items").get(0).path("canProcess").asBoolean()).isFalse();
     command(put("/api/followup/"+task.path("id").asLong()),"reader","a",Map.of("expectedVersion",0,"title","변경","details","메모","reason","수정")).andExpect(status().isForbidden());
     var role=roles.findById("team-reader").orElseThrow();role.update(role.getName(),Map.of("followup:read",DataScope.TEAM),false);roles.save(role);
     mvc.perform(actor(get("/api/followup/"+task.path("id").asLong()+"/history"),"reader","a")).andExpect(status().isForbidden());

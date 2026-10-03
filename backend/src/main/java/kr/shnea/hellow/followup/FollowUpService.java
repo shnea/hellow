@@ -42,22 +42,41 @@ public class FollowUpService {
     this.members=members;this.organizations=organizations;this.routingLock=routingLock;
     this.presence=presence;this.attempts=attempts;this.audits=audits;this.json=json;this.clock=clock;
   }
-  public record Page(List<FollowUpAction> items,int page,boolean hasMore){}
+  public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped FollowUpAction task,boolean canWrite,boolean canAssign,boolean canProcess,String contactName,String phoneNumber){}
+  public record Page(List<View> items,int page,boolean hasMore){}
   public record Assignee(Long memberId,String name,String teamId){}
+  public record Active(boolean processing,Long id){}
+
+  @Transactional(readOnly=true)
+  public Active active(){
+    var actor=access.require("followup:read");
+    var running=tasks.activeForIdentity(actor.issuer(),actor.subject());
+    Long id=running.stream().filter(task->actor.can("followup:read",task)).map(FollowUpAction::getId).findFirst().orElse(null);
+    return new Active(!running.isEmpty(),id);
+  }
+
+  @Transactional(readOnly=true)
+  public View requested(String requestId){
+    var actor=access.require("followup:read");
+    if(!requestId.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"))throw bad("유효한 요청 ID를 지정해 주세요.");
+    var task=tasks.findByRequestKey(requestKey(actor,requestId));
+    if(task.isEmpty())return null;
+    requireRead(actor,task.get());return view(task.get(),actor);
+  }
 
   @Transactional
-  public FollowUpAction create(FollowUpController.Request r){
+  public View create(FollowUpController.Request r){
     var actor=acquire();var now=clock.instant();
     String zone=r.timeZone()==null?null:zone(r.timeZone());
     if((r.proposedAt()==null)!=(zone==null))throw bad("희망 시각과 시간대를 함께 지정해 주세요.");
-    String key=r.requestId()==null?null:UUID.nameUUIDFromBytes((actor.organizationId()+"\n"+actor.issuer()+"\n"+actor.subject()+"\n"+r.requestId().toLowerCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8)).toString();
+    String key=r.requestId()==null?null:requestKey(actor,r.requestId());
     String fingerprint=hash(Arrays.asList(r.queueCode(),r.actionType(),r.title(),r.details(),r.proposedAt(),zone));
     if(key!=null){
       var existing=tasks.findByRequestKey(key);
       if(existing.isPresent()){
         var task=existing.get();actor.requireRow(task);requireRead(actor,task);
         if(!Objects.equals(task.fingerprint(),fingerprint))throw conflict("같은 요청 ID의 내용이 다릅니다. 원래 요청을 조회해 주세요.");
-        return task;
+        return view(task,actor);
       }
     }
     if(r.proposedAt()!=null)future(r.proposedAt(),now);
@@ -75,7 +94,7 @@ public class FollowUpService {
     if(timelineTitle.length()>200)timelineTitle=timelineTitle.substring(0,199)+"…";
     var item=new TimelineItem(q.getCustomerCode(),TimelineItem.ChannelType.TICKET,actor.name(),timelineTitle,r.details(),false,null,"후속조치,PENDING");
     item.setOrganizationId(actor.organizationId());item.setQueueCode(q.getCode());item.copyOwner(q);timeline.save(item);
-    record(task,actor,"CREATED","후속 요청 접수",null,now);return task;
+    record(task,actor,"CREATED","후속 요청 접수",null,now);return view(task,actor);
   }
 
   @Transactional(readOnly=true)
@@ -90,10 +109,10 @@ public class FollowUpService {
     if(from!=null)scope=scope.and((root,q,cb)->cb.greaterThanOrEqualTo(root.get("scheduledAt"),from));
     if(until!=null)scope=scope.and((root,q,cb)->cb.lessThan(root.get("scheduledAt"),until));
     var result=tasks.findAll(scope,PageRequest.of(page,50,Sort.by(Sort.Order.desc("createdAt"),Sort.Order.desc("id"))));
-    return new Page(result.getContent(),page,result.hasNext());
+    return new Page(result.getContent().stream().map(task->view(task,actor)).toList(),page,result.hasNext());
   }
   @Transactional(readOnly=true)
-  public FollowUpAction get(Long id){return visible(id,access.require("followup:read"));}
+  public View get(Long id){var actor=access.require("followup:read");return view(visible(id,actor),actor);}
   @Transactional(readOnly=true)
   public List<FollowUpEvent> history(Long id,int page){
     var actor=access.require("followup:read");visible(id,actor);
@@ -111,15 +130,15 @@ public class FollowUpService {
   }
 
   @Transactional
-  public FollowUpAction edit(Long id,FollowUpController.Edit r){
+  public View edit(Long id,FollowUpController.Edit r){
     var actor=acquire();var task=editable(id,actor,r.expectedVersion());
     mutable(task);
-    if(Objects.equals(task.getTitle(),r.title())&&Objects.equals(task.getDetails(),r.details()))return task;
+    if(Objects.equals(task.getTitle(),r.title())&&Objects.equals(task.getDetails(),r.details()))return view(task,actor);
     String before=snapshot(task);var now=clock.instant();
-    task.edit(r.title(),r.details(),now);tasks.flush();record(task,actor,"EDITED",r.reason(),before,now);return task;
+    task.edit(r.title(),r.details(),now);tasks.flush();record(task,actor,"EDITED",r.reason(),before,now);return view(task,actor);
   }
   @Transactional
-  public FollowUpAction schedule(Long id,FollowUpController.Schedule r){
+  public View schedule(Long id,FollowUpController.Schedule r){
     var actor=acquire();var task=editable(id,actor,r.expectedVersion());mutable(task);
     var now=clock.instant();future(r.scheduledAt(),now);String zone=zone(r.timeZone());
     var member=members.findById(r.assignedMemberId()).filter(m->m.isActive()&&actor.organizationId().equals(m.getOrganizationId()))
@@ -134,10 +153,10 @@ public class FollowUpService {
     if(tasks.overlaps(target.issuer(),target.subject(),id,r.scheduledAt(),end)>0)throw conflict("담당자의 다른 확정 일정과 겹칩니다. 시각이나 담당자를 변경해 주세요.");
     String before=snapshot(task);boolean reassigned=!owned(task,target);
     task.schedule(target,member.getId(),r.scheduledAt(),r.durationMinutes(),zone,now);tasks.flush();
-    record(task,actor,reassigned?"REASSIGNED":"SCHEDULED",r.reason(),before,now);return task;
+    record(task,actor,reassigned?"REASSIGNED":"SCHEDULED",r.reason(),before,now);return view(task,actor);
   }
   @Transactional
-  public FollowUpAction transition(Long id,FollowUpController.Transition r){
+  public View transition(Long id,FollowUpController.Transition r){
     var actor=acquire();var task=editable(id,actor,r.expectedVersion());var now=clock.instant();String state=task.getStatus();
     if("CANCELLED".equals(r.status())){
       if(Set.of("COMPLETED","CANCELLED").contains(state))throw conflict("이미 종료된 후속 업무입니다.");
@@ -160,7 +179,7 @@ public class FollowUpService {
       if("IN_PROGRESS".equals(task.getStatus()))p.beginFollowUp(task.getOrganizationId(),task.getId(),now);
       else p.observeFollowUp(null,now);
     });
-    record(task,actor,r.status(),r.reason(),before,now);return task;
+    record(task,actor,r.status(),r.reason(),before,now);return view(task,actor);
   }
 
   private WorkspaceAccess.Actor acquire(){
@@ -185,6 +204,14 @@ public class FollowUpService {
     if(!m.isActive())return null;var grants=access.authority().grants(m);
     if(!grants.containsKey("followup:read")||!grants.containsKey("followup:write"))return null;
     return new WorkspaceAccess.Actor(m.getOrganizationId(),m.getSubject(),name(m),m.getIssuer(),m.getTeamId(),grants.get("followup:write"),access.authority().teamScope(m),grants);
+  }
+  private View view(FollowUpAction task,WorkspaceAccess.Actor actor){
+    boolean write=actor.can("followup:read",task)&&actor.can("followup:write",task);
+    var source=task.getQueueCode()==null?null:queues.findByOrganizationIdAndCode(task.getOrganizationId(),task.getQueueCode()).orElse(null);
+    return new View(task,write,write&&actor.can("followup:assign",task),write&&owned(task,actor),source==null?null:source.getCustomerName(),source==null?null:source.getPhoneNumber());
+  }
+  private String requestKey(WorkspaceAccess.Actor actor,String requestId){
+    return UUID.nameUUIDFromBytes((actor.organizationId()+"\n"+actor.issuer()+"\n"+actor.subject()+"\n"+requestId.toLowerCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8)).toString();
   }
   private String name(Membership m){return m.getDisplayName()==null?m.getSubject():m.getDisplayName();}
   private boolean owned(OrganizationOwned task,WorkspaceAccess.Actor actor){return Objects.equals(task.getOwnerIssuer(),actor.issuer())&&Objects.equals(task.getOwnerSubject(),actor.subject());}

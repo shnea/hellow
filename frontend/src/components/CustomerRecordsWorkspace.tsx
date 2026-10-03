@@ -13,9 +13,9 @@ interface RecordData { categoryId?:string|null;categoryPath?:string|null;resultI
 interface Revision { id:number;actorName:string;changedAt:string;beforeDocument:string; }
 const draft=(r:RecordData):ConsultationDraft=>({...savedClassification(r),resultId:r.resultId??null,resultName:r.resultName||'',status:r.status.toLowerCase(),memo:r.editorDocument||r.memo||'',selectedTags:r.tags?.split(',').filter(Boolean)||[]});
 
-export function CustomerRecordsWorkspace({customers,organizationId,contentRefresh=0,accessKey,canRead,canWrite,canEditCustomer,onCustomerSaved,active,activeQueues}: {
-  customers:CustomerProfile[];organizationId:string;contentRefresh?:number;accessKey:string;canRead:boolean;canWrite:boolean;canEditCustomer:boolean;active:boolean;activeQueues:Record<string,string>;
-  onCustomerSaved:(customer:CustomerProfile)=>void;
+export function CustomerRecordsWorkspace({customers,organizationId,contentRefresh=0,recordRefresh=0,accessKey,canRead,canWrite,canEditCustomer,onCustomerSaved,active,activeQueues,canRequestFollowUp=false,onRequestFollowUp}: {
+  customers:CustomerProfile[];organizationId:string;contentRefresh?:number;recordRefresh?:number;accessKey:string;canRead:boolean;canWrite:boolean;canEditCustomer:boolean;active:boolean;activeQueues:Record<string,string>;
+  onCustomerSaved:(customer:CustomerProfile)=>void;canRequestFollowUp?:boolean;onRequestFollowUp?:(queueCode:string,name:string)=>void;
 }) {
   const [selectedCustomer,setSelectedCustomer]=useState('');
   const customer=customers.find(c=>c.id===selectedCustomer)||customers[0];
@@ -23,6 +23,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
   const [records,setRecords]=useState<RecordData[]>([]);
   const [selected,setSelected]=useState<number|null>(null);
   const [drafts,setDrafts]=useState<Record<number,ConsultationDraft>>({});
+  const [draftVersions,setDraftVersions]=useState<Record<number,number>>({});
   const [loading,setLoading]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -34,7 +35,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
   const requestId=useRef<string>('');
   const customerId=customer?.id;
   useEffect(()=>{
-    if(!customerId||!canRead) return;
+    if(!active||!customerId||!canRead) return;
     const abort=new AbortController();
     // A customer change clears the displayed list before the new customer's read completes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -43,26 +44,29 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
       if(abort.signal.aborted)return;
       setRecords(rows);setSelected(prior=>rows.some(r=>r.id===prior)?prior:rows[0]?.id??null);
       setDrafts(prev=>({...Object.fromEntries(rows.map(r=>[r.id,draft(r)])),...prev}));
+      setDraftVersions(prev=>({...Object.fromEntries(rows.map(r=>[r.id,r.version])),...prev}));
     }).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
-  },[customerId,organizationId,refresh,canRead,accessKey]);
+  },[active,customerId,organizationId,refresh,recordRefresh,canRead,accessKey]);
   const record=canRead?records.find(r=>r.id===selected):undefined;
   const ongoing=record?.queueCode ? activeQueues[record.queueCode] : undefined;
+  const stale=Boolean(record&&draftVersions[record.id]!==undefined&&draftVersions[record.id]!==record.version);
   const create=async()=>{
     if(!customer||busy)return;setBusy(true);setError('');setNotice('');
     if(!requestId.current)requestId.current=crypto.randomUUID();
     try {
       const r=await apiJson<RecordData>('/api/consultations',jsonBody({customerCode:customer.id,requestId:requestId.current}));
-      requestId.current='';setRecords(prev=>[r,...prev.filter(p=>p.id!==r.id)]);setDrafts(prev=>({...prev,[r.id]:draft(r)}));setSelected(r.id);setMobilePanel('editor');
+      requestId.current='';setRecords(prev=>[r,...prev.filter(p=>p.id!==r.id)]);setDrafts(prev=>({...prev,[r.id]:draft(r)}));setDraftVersions(prev=>({...prev,[r.id]:r.version}));setSelected(r.id);setMobilePanel('editor');
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   };
   const save=async(data:ConsultationDraft&{isComplete:boolean})=>{
     if(!record||busy)throw new Error('저장할 기록을 선택해 주세요.');setBusy(true);setError('');setNotice('');
     try {
+      if(stale)throw new Error('최신 기록과 내 입력을 확인한 뒤 다시 적용해 주세요.');
       const r=await apiJson<RecordData>(`/api/consultations/${record.id}`,jsonBody({categoryMain:data.categoryMain,categorySub:data.categorySub,categoryId:data.categoryId??null,resultId:data.resultId??null,
-        expectedVersion:record.version,memo:documentText(data.memo),editorDocument:readDocument(data.memo),tags:data.selectedTags.join(','),callDurationSeconds:0,complete:data.isComplete},'PUT'));
+        expectedVersion:draftVersions[record.id]??record.version,memo:documentText(data.memo),editorDocument:readDocument(data.memo),tags:data.selectedTags.join(','),callDurationSeconds:0,complete:data.isComplete},'PUT'));
       setRecords(prev=>prev.map(p=>p.id===r.id?r:p));setNotice('기록을 저장했습니다. 수정 전 내용은 변경 이력에 보존됩니다.');setRevisions(null);
-      const confirmed=draft(r);setDrafts(prev=>({...prev,[r.id]:confirmed}));return confirmed;
+      const confirmed=draft(r);setDrafts(prev=>({...prev,[r.id]:confirmed}));setDraftVersions(prev=>({...prev,[r.id]:r.version}));return confirmed;
     }catch(e){setError((e as Error).message);throw e;}finally{setBusy(false);}
   };
   const updateCustomer=async(data:Partial<CustomerProfile>)=>{
@@ -86,14 +90,16 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
     <div className={`records-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
       {error&&<p role="alert" className="p-3 text-amber-200">{error}<button className="ml-3 underline" onClick={()=>setRefresh(v=>v+1)}>최신 기록 다시 조회</button></p>}
       {notice&&<p role="status" className="p-3 text-emerald-200">{notice}</p>}
+      {record&&stale&&<div role="status" className="p-3 bg-slate-950 text-sm"><p>기록이 다른 작업에서 변경되었습니다. 내 입력은 편집기에 유지됩니다.</p><details><summary className="py-2 cursor-pointer">최신 서버 본문 확인</summary><p className="whitespace-pre-wrap">{documentText(record.editorDocument||record.memo)}</p></details>{canWrite&&record.editable!==false&&!ongoing&&<button disabled={busy||loading} className="underline py-2" onClick={()=>setDraftVersions(prev=>({...prev,[record.id]:record.version}))}>최신 버전에 내 입력 다시 적용 준비</button>}</div>}
       <div className="records-toolbar p-2 flex gap-2 items-center justify-between bg-slate-800 text-sm">
         <button className="records-mobile-tabs px-2 rounded bg-slate-700" onClick={()=>setMobilePanel('list')}>고객·기록 목록</button>
         <span className="truncate">{customer?.name}{record?ongoing?' · 처리 중':!canWrite||record.editable===false?' · 기록 읽기 전용':' · 기록 편집':''}</span>
         {customer?.isRegistered&&canRead&&canWrite&&canEditCustomer&&customer.canEdit!==false&&<button className="underline p-1 shrink-0" onClick={()=>setLinking(true)}>이전 이력 연결</button>}
+        {record?.queueCode&&record.status==='COMPLETED'&&canRead&&canRequestFollowUp&&onRequestFollowUp&&<button disabled={busy||loading} className="underline p-1 shrink-0" onClick={()=>onRequestFollowUp(record.queueCode!,customer?.name||'상담 고객')}>콜백·방문 요청</button>}
         {record&&<button className="underline p-1 shrink-0" onClick={()=>void loadRevisions()}>변경 이력</button>}</div>
       {canRead&&revisions&&<div className="p-3 bg-slate-950 max-h-64 overflow-auto text-sm"><button className="underline mb-2" onClick={()=>setRevisions(null)}>변경 이력 닫기</button>{!revisions.length&&<p>변경 이력이 없습니다.</p>}{revisions.map(r=><details key={r.id} className="py-2"><summary>{new Date(r.changedAt).toLocaleString('ko-KR')} · {r.actorName}</summary><p className="whitespace-pre-wrap mt-2">{JSON.parse(r.beforeDocument).memo}</p></details>)}</div>}
       {record&&customer?<ActiveWorkspace key={`${organizationId}:${record.id}`} customer={customer} queueCode={`record-${record.id}`} organizationId={organizationId} contentRefresh={contentRefresh} initialDraft={drafts[record.id]} onDraftChange={d=>setDrafts(prev=>({...prev,[record.id]:d}))}
-        readOnly={!canWrite||record.editable===false||Boolean(ongoing)} customerReadOnly={!canEditCustomer||customer.canEdit===false} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}
+        readOnly={!canWrite||record.editable===false||Boolean(ongoing)||stale} customerReadOnly={!canEditCustomer||customer.canEdit===false} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}
         onSaveConsultation={save} onRegisterCustomer={async()=>{throw new Error('고객 목록에서 등록된 고객을 선택해 주세요.');}} onUpdateCustomer={updateCustomer}/>
         :<div className="flex-1 grid place-content-center gap-3 p-6 text-slate-300" role="status"><p>{loading?'상담 기록을 불러오고 있습니다.':customer?`${customer.name} 고객의 기록을 선택하거나 새 기록을 작성해 주세요.`:'등록된 고객이 없습니다.'}</p>{customer&&<button className="px-4 py-3 bg-indigo-700 rounded text-white disabled:opacity-50" disabled={!canWrite||busy||loading} onClick={()=>void create()}>새 상담 기록 작성</button>}</div>}
     </div>

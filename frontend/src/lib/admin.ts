@@ -11,15 +11,17 @@ export interface SettingsView { version: number; overrides: Record<string,string
 export const permissionLabels: Record<string,string> = {
   'organization:admin':'조직 관리', 'customer:read':'고객 조회', 'customer:write':'고객 등록·수정',
   'queue:read':'대기열 조회', 'queue:accept':'상담 수락', 'consultation:read':'상담 기록 조회',
-  'consultation:write':'상담 기록 작성', 'followup:write':'후속 요청 작성','template:personal':'내 템플릿 관리',
+  'consultation:write':'상담 기록 작성', 'followup:read':'후속 업무 조회','followup:write':'후속 업무 작성·처리','followup:assign':'후속 업무 재배정','template:personal':'내 템플릿 관리',
 };
-export const agentPermissions = Object.keys(permissionLabels).filter(key=>key!=='organization:admin');
+export const agentPermissions = Object.keys(permissionLabels).filter(key=>key!=='organization:admin'&&key!=='followup:assign');
 export function adminJson<T>(path:string, organizationId:string, options:RequestInit={}) {
   const headers=new Headers(options.headers);
   if(organizationId) headers.set('X-Organization-ID',organizationId);
   return apiJson<T>(path,{...options,headers});
 }
 export const actionLabels:Record<string,string> = {
+  'followup.created':'후속 요청 접수','followup.edited':'후속 내용 수정','followup.scheduled':'후속 일정 확정·변경','followup.reassigned':'후속 담당 재배정',
+  'followup.in_progress':'후속 처리 시작','followup.completed':'후속 처리 완료','followup.failed':'후속 실패 기록','followup.cancelled':'후속 취소',
   'agent.state.change':'상담사 수신 상태 변경','queue.routing.restart':'상담 배정 다시 시작',
   'customer.register':'고객 신규 등록','customer.queue.link':'상담에 기존 고객 연결',
   'customer.history.link':'등록 전 이력 연결','customer.history.undo':'등록 전 이력 연결 취소',

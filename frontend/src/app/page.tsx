@@ -15,6 +15,8 @@ import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { AgentStatusControl } from '@/components/AgentStatusControl';
 import { AssignmentHistory } from '@/components/AssignmentHistory';
+import {FollowUpWorkspace} from '@/components/followup/FollowUpWorkspace';
+import {followUpJson,type FollowUp,type ActiveFollowUp} from '@/lib/followup';
 import {agentStateLabels,type AgentView,type Availability,type AgentState} from '@/lib/agent-state';
 import './workspace.css';
 import './routing.css';
@@ -37,6 +39,12 @@ export default function ConsultationWorkspacePage() {
   const [customers, setCustomers] = useState<Record<string, CustomerProfile>>({});
   const [selected, setSelected] = useState('');
   const [currentTab,setCurrentTab]=useState('workspace');
+  const [followUpFocus,setFollowUpFocus]=useState<{id:number;revision:number}|null>(null);
+  const [followUpSource,setFollowUpSource]=useState<{code:string;name:string}|null>(null);
+  const followUpRevision=useRef(0);
+  const [activeFollowUp,setActiveFollowUp]=useState<ActiveFollowUp|null>(null);
+  const activeFollowUpRef=useRef<ActiveFollowUp|null>(null);
+  const [followUpStateError,setFollowUpStateError]=useState('');
   const [mobilePanel,setMobilePanel]=useState<'queue'|'editor'|'history'>('editor');
   const [dismissedOffers,setDismissedOffers]=useState<string[]>([]);
   const receivedOffer=useRef<string|null>(null);
@@ -78,6 +86,8 @@ export default function ConsultationWorkspacePage() {
       const prior = sessionStorage.getItem('hellow_organization_id');
       const org = me.organizations.find(o => o.id === prior) || me.organizations[0];
       if(org?.id!==organizationRef.current){
+        setFollowUpFocus(null);setFollowUpSource(null);
+        setActiveFollowUp(null);activeFollowUpRef.current=null;setFollowUpStateError('');
         setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);setSelected('');
         setDrafts({});versions.current={};setDraftReady({});storeAgent(null);receivedOffer.current=null;setDismissedOffers([]);
       }
@@ -105,6 +115,10 @@ export default function ConsultationWorkspacePage() {
         const org=me.organizations.find(o=>o.id===organizationId);
         if(!org)throw new ApiError(403,'이 조직의 접근 권한이 회수되었습니다.');
         const permitted=(permission:string)=>org.permissions.includes(permission);
+        let followUpState:ActiveFollowUp|null=null;let followUpError='';
+        if(permitted('followup:read'))try{
+          followUpState=await followUpJson<ActiveFollowUp>('/api/followup/active',organizationId,{signal:abort.signal});
+        }catch(error){followUpError=(error as Error).message;}
         let state:AgentView|null=null;let stateError='';
         if(permitted('queue:read')&&permitted('queue:accept'))try{
           state=await apiJson<AgentView>('/api/agents/me/heartbeat',{...jsonBody({receivedAttemptId:receivedOffer.current}),signal:abort.signal});
@@ -119,6 +133,8 @@ export default function ConsultationWorkspacePage() {
         ]);
         if (abort.signal.aborted || generation.current !== current) return;
         setIdentity(me);
+        setFollowUpStateError(followUpError);
+        if(!followUpError){setActiveFollowUp(followUpState);activeFollowUpRef.current=followUpState;}
         storeAgent(state);setAgentError(stateError);
         if(state?.attemptId!==receivedOffer.current)receivedOffer.current=null;
         const mapped = items.map(queueItem);
@@ -153,11 +169,12 @@ export default function ConsultationWorkspacePage() {
   const canReadConsultation=can('consultation:read');
   const unfinishedCall=queue.find(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
   const unfinishedInteraction=queue.find(q=>q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
-  const receivingBlocked=unfinishedInteraction ? unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 상담을 수락할 수 있습니다.' : '상담 중입니다. 현재 상담과 후처리를 완료해 주세요.' : '';
-  const effectiveAgentState:AgentState|undefined=unfinishedInteraction?(unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded?'AFTER_CALL':'CALLING'):agentView?.state;
+  const receivingBlocked=unfinishedInteraction ? unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 상담을 수락할 수 있습니다.' : '상담 중입니다. 현재 상담과 후처리를 완료해 주세요.' : activeFollowUp?.processing||agentView?.state==='FOLLOW_UP'?'후속 업무 처리 중입니다. 예약 업무를 종료한 뒤 새 상담을 수락할 수 있습니다.':followUpStateError?'후속 업무 상태를 확인하지 못했습니다. 다시 조회한 뒤 수신·조직 변경이 가능합니다.':'';
+  const effectiveAgentState:AgentState|undefined=unfinishedInteraction?(unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded?'AFTER_CALL':'CALLING'):activeFollowUp?.processing?'FOLLOW_UP':agentView?.state;
   const sidebarStatus:AgentStatus=effectiveAgentState==='AWAY'?'away':effectiveAgentState==='OFFLINE'||!effectiveAgentState?'offline':effectiveAgentState==='AVAILABLE'?'online':'busy';
   const incoming=!receivingBlocked&&!agentError?queue.find(q=>q.status==='WAITING'&&q.canAccept===true&&q.offer&&q.offer.subject===identity?.subject&&!dismissedOffers.includes(q.offer.id)):undefined;
-  const showRecords=currentTab==='customers'||currentTab==='tickets'||!item;
+  const showFollowUps=currentTab==='followups';
+  const showRecords=!showFollowUps&&(currentTab==='customers'||currentTab==='tickets'||!item);
   const selectQueue=(code:string)=>{setSelected(code);setCurrentTab('workspace');setMobilePanel('editor');};
   const linkCustomer = (code: string) => { if(code) void run(async () => {
     if(!item) return;
@@ -205,6 +222,7 @@ export default function ConsultationWorkspacePage() {
     try{await run(async()=>{
       const unfinished=queueRef.current.some(q=>q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
       if(unfinished)throw new Error('현재 상담과 후처리를 완료한 뒤 조직을 변경해 주세요.');
+      if(activeFollowUpRef.current?.processing||agentRef.current?.state==='FOLLOW_UP'||followUpStateError)throw new Error('후속 업무 상태를 확인하고 처리 중인 업무를 종료한 뒤 조직을 변경해 주세요.');
       const me=await apiJson<Identity>('/api/me');
       const org=me.organizations.find(o=>o.id===id);
       if(!org)throw new Error('이 조직의 활성 권한이 없습니다. 조직 권한을 다시 확인해 주세요.');
@@ -219,6 +237,8 @@ export default function ConsultationWorkspacePage() {
       const saved=organizationDrafts.current[id];
       // Invalidate old reads before changing the header used by all workspace requests.
       generation.current++;setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);receivedOffer.current=null;setDismissedOffers([]);
+      setFollowUpFocus(null);setFollowUpSource(null);
+      setActiveFollowUp(null);activeFollowUpRef.current=null;setFollowUpStateError('');
       setDrafts(saved?.drafts||{});versions.current=saved?.versions||{};setDraftReady(saved?.ready||{});setSelected(saved?.selected||'');
       organizationRef.current=id;sessionStorage.setItem('hellow_organization_id',id);setIdentity(me);setOrganizationId(id);setAuthError('');
       setTimelineRefresh(value=>value+1);setAgentError('');
@@ -277,12 +297,9 @@ export default function ConsultationWorkspacePage() {
     setCustomers(prev => ({ ...prev, [result.code]: customerProfile(result) }));
     setQueue(prev => prev.map(q => q.id === item.id ? { ...q, customerCode: result.code } : q)); notify('success', '고객 정보 저장', '고객 ID와 상담 연결을 확인했습니다.');
   });
-  const followup = (type: string, details: string) => { void run(async () => {
-    const actionType = type.includes('방문') ? 'VISIT' : type.includes('콜백') ? 'CALLBACK' : null;
-    if (!actionType) throw new Error('호전환·메시지 발송은 아직 연결되지 않았습니다.');
-    await apiJson('/api/followup', jsonBody({ queueCode: selected, actionType, title: type, details }));
-    setTimelineRefresh(value => value + 1); notify('success', '후속 요청 접수', '요청을 저장했습니다. 일정·담당자 배정은 아직 확정되지 않았습니다.');
-  }).catch(() => {}); };
+  const followUpChanged=(task?:FollowUp)=>{if(task?.canProcess){const state={processing:task.status==='IN_PROGRESS',id:task.status==='IN_PROGRESS'?task.id:null};setActiveFollowUp(state);activeFollowUpRef.current=state;}setRefresh(v=>v+1);setTimelineRefresh(v=>v+1);};
+  const openFollowUp=(id:number)=>{setFollowUpFocus({id,revision:++followUpRevision.current});setCurrentTab('followups');};
+  const followUpCreated=(task:FollowUp)=>{setFollowUpSource(null);openFollowUp(task.id);followUpChanged();};
   if (!identity || authError || !organizationId) return <main className="min-h-screen bg-slate-950 text-slate-200 grid place-content-center gap-4 p-6">
     <h1 className="text-xl font-semibold">상담 워크스페이스</h1><p role="status" className="max-w-xl">{authError || '서버에서 로그인·조직 권한을 확인하고 있습니다.'}</p>
     {authError && <a href="/login" className="text-indigo-300 underline">로그인으로 돌아가기</a>}
@@ -292,31 +309,38 @@ export default function ConsultationWorkspacePage() {
   return <>{currentTab==='settings'&&<WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
     blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}}/>}
   <div className={`crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100 ${currentTab==='settings'?'workspace-settings-hidden':''}`}>
-    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings
+    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showFollowups={can('followup:read')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
     <div className="flex flex-1 flex-col min-w-0">
       <div className="workspace-heading px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
-        <span>{busy ? '서버 처리 중' : activeCall ? `통화 진행 중 · ${call.status === 'connected' ? '음성 연결됨' : call.status === 'error' ? '음성 연결 실패' : '연결 확인 중'}` : unfinishedCall?.callEnded ? '후처리 중 · 새 통화 수신 차단' : '진행 중인 통화 없음'}</span>
+        <span>{busy ? '서버 처리 중' : activeCall ? `통화 진행 중 · ${call.status === 'connected' ? '음성 연결됨' : call.status === 'error' ? '음성 연결 실패' : '연결 확인 중'}` : unfinishedCall?.callEnded ? '후처리 중 · 새 통화 수신 차단' : effectiveAgentState==='FOLLOW_UP'?'후속 업무 처리 중 · 새 상담 수신 차단':'진행 중인 통화 없음'}</span>
+        {(activeFollowUp?.id||agentView?.followUpId)&&can('followup:read')&&<button className="text-indigo-300 underline" onClick={()=>openFollowUp((activeFollowUp?.id||agentView?.followUpId)!)}>처리 중인 예약으로 돌아가기</button>}
         {unfinishedCall && (showRecords || unfinishedCall.id !== selected) && <button className="text-indigo-300 underline" onClick={() => selectQueue(unfinishedCall.id)}>현재 상담으로 돌아가기</button>}</div>
       {can('queue:read')&&can('queue:accept')&&<AgentStatusControl view={agentView} state={effectiveAgentState} organizationId={organizationId} busy={busy} error={agentError} onChange={changeAgent} onRetry={()=>setRefresh(v=>v+1)}/>}
       {call.error&&<p role="alert" className="p-3 text-amber-200">{call.error}</p>}
+      {followUpStateError&&<p role="alert" className="p-3 text-amber-200">{followUpStateError}<button className="ml-2 underline" onClick={()=>setRefresh(v=>v+1)}>후속 업무 상태 다시 조회</button></p>}
       <nav className="workspace-mobile-tabs flex gap-2 p-2 border-b border-slate-800" aria-label="상담 화면 전환">
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('queue');}}>대기열 {queue.length}</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('editor');}}>편집기</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('history');}}>이력·후속 요청</button>
         <button onClick={()=>setCurrentTab('customers')}>고객·기록</button>
+        {can('followup:read')&&<button onClick={()=>setCurrentTab('followups')}>예약</button>}
         <button onClick={()=>setCurrentTab('settings')}>설정</button>
       </nav>
       {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
-      <div className="workspace-layout flex flex-1 min-h-0">
+      <FollowUpWorkspace key={`${organizationId}:${identity.subject}`} active={showFollowUps} organizationId={organizationId} identityKey={identity.subject} accessKey={accessKey}
+        canRead={can('followup:read')} canWrite={can('followup:write')} focus={followUpFocus} source={followUpSource} onCreated={followUpCreated}
+        onChanged={followUpChanged} onSourceClosed={()=>setFollowUpSource(null)}/>
+      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps?'workspace-main-hidden':''}`}>
         <div className={`queue-pane ${mobilePanel==='queue'&&!showRecords?'mobile-visible':''} ${showRecords?'records-active':''}`}>
           <QueuePanel queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
             onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}
             assignmentHistory={item&&can('queue:read')?<AssignmentHistory key={item.id} item={item} busy={busy} canRestart={can('queue:accept')&&!queueError&&!agentError} onRestart={()=>restartRouting(item)}/>:undefined}/>
         </div>
-        <CustomerRecordsWorkspace key={organizationId} active={showRecords} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
+        <CustomerRecordsWorkspace key={organizationId} active={showRecords} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} recordRefresh={timelineRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
+          canRequestFollowUp={can('followup:read')&&can('followup:write')} onRequestFollowUp={(code,name)=>{setFollowUpSource({code,name});setCurrentTab('followups');}}
           activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>
         {customer && item && !showRecords ? <div className="interaction-workspace flex flex-1 min-w-0 min-h-0"><div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
           {writable && !item.customerCode && can('customer:write') && <label className="p-2 text-sm text-slate-300">기존 고객 연결 (직원 확인)
@@ -343,8 +367,8 @@ export default function ConsultationWorkspacePage() {
             onSaveConsultation={save} onRegisterCustomer={data => changeCustomer(data, true)} onUpdateCustomer={data => changeCustomer(data, false)} quotedText={quotedText} onClearQuotedText={() => setQuotedText('')} />}
         </div><div className={`interaction-history flex flex-col w-96 shrink-0 min-h-0 ${mobilePanel==='history'?'mobile-visible':''}`}>
           {timelineError && <p role="alert" className="p-2 text-amber-300">{timelineError}<button className="ml-2 underline" onClick={() => setTimelineRefresh(v=>v+1)}>이력 다시 조회</button></p>}
-          <ContextActionPanel key={item.id} timeline={timeline} customerName={customer.name} customerPhone={customer.phoneNumber} readOnly={!writable || !can('followup:write') || busy || Boolean(queueError)}
-            onQuoteTimeline={setQuotedText} onAddFollowUpAction={followup} activeFollowUpTab={followupTab} />
+          <ContextActionPanel key={item.id} organizationId={organizationId} identityKey={identity.subject} queueCode={item.id} onFollowUpCreated={followUpCreated} onOpenFollowUps={()=>setCurrentTab('followups')} timeline={timeline} customerName={customer.name} customerPhone={customer.phoneNumber} readOnly={!writable || !can('followup:read') || !can('followup:write') || busy || Boolean(queueError)}
+            onQuoteTimeline={setQuotedText} onAddFollowUpAction={()=>notify('info','준비 중','통화 이관·메시지 발송은 후속 작업입니다.')} activeFollowUpTab={followupTab} />
         </div></div> : null}
         {loading&&<p className="sr-only" role="status">업무 데이터를 불러오고 있습니다.</p>}
       </div>

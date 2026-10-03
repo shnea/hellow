@@ -24,16 +24,18 @@ public class FollowUpController {
   public record Transition(@NotNull @Min(0) Long expectedVersion,
       @NotBlank @Pattern(regexp="IN_PROGRESS|COMPLETED|FAILED|CANCELLED") String status,
       @NotBlank @Size(max=2000) String reason){}
-  @PostMapping public FollowUpAction create(@Valid @RequestBody Request r){return service.create(r);}
+  @PostMapping public FollowUpService.View create(@Valid @RequestBody Request r){return service.create(r);}
   @GetMapping public FollowUpService.Page list(@RequestParam(required=false) @Size(max=64) String queueCode,
       @RequestParam(required=false) @Size(max=64) String customerCode,@RequestParam(required=false) @Pattern(regexp="VISIT|CALLBACK") String actionType,
       @RequestParam(required=false) @Pattern(regexp="PENDING|SCHEDULED|IN_PROGRESS|COMPLETED|FAILED|CANCELLED") String status,
       @RequestParam(required=false) Instant from,@RequestParam(required=false) Instant until,
       @RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.list(queueCode,customerCode,actionType,status,from,until,page);}
-  @GetMapping("/{id}") public FollowUpAction get(@PathVariable Long id){return service.get(id);}
+  @GetMapping("/{id}") public FollowUpService.View get(@PathVariable Long id){return service.get(id);}
   @GetMapping("/{id}/history") public List<FollowUpEvent> history(@PathVariable Long id,@RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.history(id,page);}
   @GetMapping("/assignees") public List<FollowUpService.Assignee> assignees(){return service.assignees();}
-  @PutMapping("/{id}") public FollowUpAction edit(@PathVariable Long id,@Valid @RequestBody Edit r){return service.edit(id,r);}
-  @PostMapping("/{id}/schedule") public FollowUpAction schedule(@PathVariable Long id,@Valid @RequestBody Schedule r){return service.schedule(id,r);}
-  @PostMapping("/{id}/status") public FollowUpAction transition(@PathVariable Long id,@Valid @RequestBody Transition r){return service.transition(id,r);}
+  @GetMapping("/active") public FollowUpService.Active active(){return service.active();}
+  @GetMapping("/request/{requestId}") public FollowUpService.View requested(@PathVariable String requestId){return service.requested(requestId);}
+  @PutMapping("/{id}") public FollowUpService.View edit(@PathVariable Long id,@Valid @RequestBody Edit r){return service.edit(id,r);}
+  @PostMapping("/{id}/schedule") public FollowUpService.View schedule(@PathVariable Long id,@Valid @RequestBody Schedule r){return service.schedule(id,r);}
+  @PostMapping("/{id}/status") public FollowUpService.View transition(@PathVariable Long id,@Valid @RequestBody Transition r){return service.transition(id,r);}
 }

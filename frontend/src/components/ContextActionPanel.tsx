@@ -9,18 +9,20 @@ import {
   Ticket,
   Quote,
   Send,
-  CalendarPlus,
   Play,
-  Clock,
   ArrowRight,
   X,
   Maximize2,
 } from 'lucide-react';
 import { TimelineItem, TimelineChannel } from '../types';
 import { transferAgents } from '../data/mockData';
+import {FollowUpRequestForm} from './followup/FollowUpRequestForm';
+import type {FollowUp} from '@/lib/followup';
 
 interface ContextActionPanelProps {
   timeline: TimelineItem[];
+  organizationId:string;identityKey:string;queueCode:string;
+  onFollowUpCreated:(task:FollowUp)=>void;onOpenFollowUps:()=>void;
   readOnly?: boolean;
   customerName: string;
   customerPhone: string;
@@ -30,7 +32,7 @@ interface ContextActionPanelProps {
 }
 
 export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
-  timeline, readOnly=false,
+  timeline, readOnly=false,organizationId,identityKey,queueCode,onFollowUpCreated,onOpenFollowUps,
   customerName,
   customerPhone,
   onQuoteTimeline,
@@ -68,17 +70,6 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSubTab(activeFollowUpTab);
   },[activeFollowUpTab]);
-  // Form states for Visit Reservation
-  const [visitType, setVisitType] = useState('기술 컨설팅 및 아키텍처 실사');
-  const [visitDate, setVisitDate] = useState('');
-  const [visitTime, setVisitTime] = useState('14:00');
-  const [assignedEngineer, setAssignedEngineer] = useState('박성현 수석 (인프라팀)');
-
-  // Form states for Callback Schedule
-  const [callbackDate, setCallbackDate] = useState('');
-  const [callbackTime, setCallbackTime] = useState('16:00');
-  const [callbackReason, setCallbackReason] = useState('대표이사 최종 견적서 검토 후 콜백 통화');
-
   // Notification template state
   const [notificationTpl, setNotificationTpl] = useState('상담 요약 및 견적서 열람 링크');
 
@@ -99,22 +90,6 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
       case 'ticket':
         return <Ticket className="w-3.5 h-3.5 text-indigo-400" />;
     }
-  };
-
-  const handleVisitSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAddFollowUpAction(
-      '엔지니어 방문 예약',
-      `일시: ${visitDate} ${visitTime} / 엔지니어: ${assignedEngineer} / 목적: ${visitType}`
-    );
-  };
-
-  const handleCallbackSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAddFollowUpAction(
-      '콜백 일정 등록',
-      `일시: ${callbackDate} ${callbackTime} / 사유: ${callbackReason}`
-    );
   };
 
   const handleTransfer = (agentName: string, dept: string) => {
@@ -249,7 +224,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
       </div>
 
       {/* 2. 하단: 연계 후속 조치 패널 (핵심 차별화 영역) */}
-      <div className="border-t border-slate-800 bg-slate-950/90 flex flex-col">
+      <div className="followup-context-actions border-t border-slate-800 bg-slate-950/90 flex flex-col">
         {/* Follow-up Sub Tabs */}
         <div className="grid grid-cols-4 border-b border-slate-800 text-[11px] font-medium">
           <button
@@ -294,123 +269,11 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
           </button>
         </div>
 
-        {/* Tab Content 1: 방문/서비스 예약 */}
-        {subTab === 'visit' && (
-          <fieldset disabled={readOnly}><form onSubmit={handleVisitSubmit} className="p-3 space-y-2.5 text-xs">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                방문 유형
-              </label>
-              <select
-                value={visitType}
-                onChange={(e) => setVisitType(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-              >
-                <option value="기술 컨설팅 및 아키텍처 실사">기술 컨설팅 및 아키텍처 실사</option>
-                <option value="현장 시스템 세팅 및 포트 설정">현장 시스템 세팅 및 포트 설정</option>
-                <option value="대표이사 최종 라이선스 계약 미팅">대표이사 최종 라이선스 계약 미팅</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  희망 일자
-                </label>
-                <input
-                  type="date" required min={new Date().toLocaleDateString("en-CA")}
-                  value={visitDate}
-                  onChange={(e) => setVisitDate(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  희망 시간
-                </label>
-                <input
-                  type="time"
-                  value={visitTime}
-                  onChange={(e) => setVisitTime(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                배정 엔지니어
-              </label>
-              <select
-                value={assignedEngineer}
-                onChange={(e) => setAssignedEngineer(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-              >
-                <option value="박성현 수석 (인프라팀)">박성현 수석 (인프라팀 - 가용 상태 미연동)</option>
-                <option value="정재원 수석 (네트워크팀)">정재원 수석 (네트워크팀)</option>
-                <option value="한도윤 매니저 (기술영업)">한도윤 매니저 (기술영업)</option>
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-950 transition-all mt-1"
-            >
-              <CalendarPlus className="w-3.5 h-3.5" />
-              <span>방문 요청 접수 (일정 미확정)</span>
-            </button>
-          </form></fieldset>
-        )}
-
-        {/* Tab Content 2: 콜백 일정 등록 */}
-        {subTab === 'callback' && (
-          <fieldset disabled={readOnly}><form onSubmit={handleCallbackSubmit} className="p-3 space-y-2.5 text-xs">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  재통화 일자
-                </label>
-                <input
-                  type="date" required min={new Date().toLocaleDateString("en-CA")}
-                  value={callbackDate}
-                  onChange={(e) => setCallbackDate(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  재통화 시간
-                </label>
-                <input
-                  type="time"
-                  value={callbackTime}
-                  onChange={(e) => setCallbackTime(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                콜백 사유 및 안건
-              </label>
-              <input
-                type="text"
-                value={callbackReason}
-                onChange={(e) => setCallbackReason(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm shadow-amber-950 transition-all mt-1"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>대기열 콜백 큐 등록</span>
-            </button>
-          </form></fieldset>
-        )}
+        {(subTab==='visit'||subTab==='callback')&&<FollowUpRequestForm
+          key={`${organizationId}:${identityKey}:${queueCode}:${subTab}`}
+          organizationId={organizationId} identityKey={identityKey} queueCode={queueCode}
+          actionType={subTab==='visit'?'VISIT':'CALLBACK'} disabled={readOnly}
+          onCreated={onFollowUpCreated} onOpenList={onOpenFollowUps}/>}
 
         {/* Tab Content 3: 호전환 / 타 부서 이관 */}
         {subTab === 'transfer' && (
