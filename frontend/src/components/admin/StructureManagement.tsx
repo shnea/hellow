@@ -17,7 +17,7 @@ export function StructureManagement({organizationId,teams,roles,members,reload}:
   const run=async(action:()=>Promise<void>)=>{if(busy)return false;setBusy(true);setError('');setMessage('');try{await action();await reload();return true;}catch(e){setError((e as Error).message);return false;}finally{setBusy(false);}};
   const moveMember=(person:AdminMember,teamId:string|null)=>run(async()=>{
     await adminJson(`/api/admin/memberships/${person.id}/access`,organizationId,jsonBody({expectedVersion:person.version,teamId,roleIds:person.roleIds,dataScope:person.dataScope,permissions:person.permissions},'PUT'));
-    setMessage(`${person.displayName||person.subject} 직원을 ${teams.find(t=>t.id===teamId)?.name||'팀 미지정'}으로 이동했습니다. 역할과 직접 권한은 유지됩니다.`);
+    setMessage(`${person.displayName||person.loginId||'이름 미확인 직원'} 직원을 ${teams.find(t=>t.id===teamId)?.name||'팀 미지정'}으로 이동했습니다. 역할과 직접 권한은 유지됩니다.`);
   });
   const saveTeam=()=>run(async()=>{
     const saved=await adminJson<AdminTeam>(`/api/admin/teams${team?`/${team.id}`:''}`,organizationId,jsonBody({name:teamName,parentId:parentId||null,active:teamActive,expectedVersion:team?.version},team?'PUT':'POST'));
@@ -55,10 +55,10 @@ export function StructureManagement({organizationId,teams,roles,members,reload}:
       </form>
     </section>
     <section id="structure-members"><h3>직원 배치와 권한 연결</h3><p>팀 이동은 이후 담당 기록에 적용됩니다. 이전 기록의 팀은 유지되며 본인이 담당한 기록은 계속 조회할 수 있습니다.</p>
-      <div className="admin-table-scroll"><table><thead><tr><th>직원</th><th>소속 팀</th><th>역할·직접 권한</th><th>변경</th></tr></thead><tbody>{members.map(m=><tr key={m.id}><td>{m.displayName||m.subject}<small>{m.active?'활성':'접근 회수'}</small></td>
+      <div className="admin-table-scroll"><table><thead><tr><th>직원</th><th>소속 팀</th><th>역할·직접 권한</th><th>변경</th></tr></thead><tbody>{members.map(m=><tr key={m.id}><td>{m.displayName||m.loginId||'이름 미확인 직원'}<small>{m.active?'활성':'접근 회수'}</small></td>
         <td>{teams.find(t=>t.id===m.teamId)?.name||'미지정'}</td><td>{m.roleIds.map(id=>roles.find(r=>r.id===id)?.name||'미확인 역할').join(', ')||'연결된 역할 없음'}<small>직접 권한 {m.permissions.length}개 · {scopeLabels[m.dataScope]}</small></td>
-        <td><button disabled={busy} aria-label={`${m.displayName||m.subject} 팀·역할 편집`} onClick={()=>chooseMember(m)}>편집</button></td></tr>)}</tbody></table></div>
-      {member?<form className="admin-form" onSubmit={e=>{e.preventDefault();void saveMember();}}><h4>{member.displayName||member.subject} 접근 설정</h4><label>소속 팀<select aria-label="소속 팀" disabled={busy} value={memberTeam} onChange={e=>setMemberTeam(e.target.value)}><option value="">소속 팀 없음</option>{teams.filter(t=>t.active).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+        <td><button disabled={busy} aria-label={`${m.displayName||m.loginId||'이름 미확인 직원'} 팀·역할 편집`} onClick={()=>chooseMember(m)}>편집</button></td></tr>)}</tbody></table></div>
+      {member?<form className="admin-form" onSubmit={e=>{e.preventDefault();void saveMember();}}><h4>{member.displayName||member.loginId||'이름 미확인 직원'} 접근 설정</h4><label>소속 팀<select aria-label="소속 팀" disabled={busy} value={memberTeam} onChange={e=>setMemberTeam(e.target.value)}><option value="">소속 팀 없음</option>{teams.filter(t=>t.active).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         <fieldset disabled={busy}><legend>연결할 역할</legend><div className="admin-permissions">{roles.filter(r=>r.active).map(r=><label key={r.id}><input type="checkbox" checked={roleIds.includes(r.id)} onChange={e=>setRoleIds(prior=>e.target.checked?[...prior,r.id]:prior.filter(id=>id!==r.id))}/>{r.name}</label>)}</div>{!roles.some(r=>r.active)&&<p>활성 역할을 먼저 만드세요. 직접 권한만 지정할 수도 있습니다.</p>}</fieldset>
         <details><summary>직접 권한 {direct.length}개 · {scopeLabels[scope]}</summary><p>역할로만 권한을 관리하려면 직접 권한을 모두 해제하세요. 직접 조직 전체 권한은 역할의 본인·팀 범위보다 넓게 적용됩니다.</p>
           <PermissionsField value={direct} onChange={setDirect} disabled={busy}/><label>직접 권한의 접근 범위<select aria-label="직접 권한의 접근 범위" disabled={busy} value={scope} onChange={e=>setScope(e.target.value as DataScope)}>{Object.entries(scopeLabels).map(([value,text])=><option key={value} value={value}>{text}</option>)}</select></label>

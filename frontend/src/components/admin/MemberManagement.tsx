@@ -1,16 +1,19 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { adminJson, agentPermissions, type AdminMember, type AdminInvitation } from '@/lib/admin';
 import { jsonBody } from '@/lib/api';
 import { PermissionsField } from './PermissionsField';
 interface Props { organizationId:string; members:AdminMember[]; invitations:AdminInvitation[]; reload:()=>Promise<void>; }
 export function MemberManagement({organizationId,members,invitations,reload}:Props) {
   const [edit,setEdit]=useState<AdminMember|null>(null);
+  const [deleting,setDeleting]=useState<AdminMember|null>(null);
+  const deleteDialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{const dialog=deleteDialog.current;if(deleting){if(!dialog?.open)dialog?.showModal();}else dialog?.close();},[deleting]);
   const [subject,setSubject]=useState(''); const [name,setName]=useState('');
   const [permissions,setPermissions]=useState<string[]>(agentPermissions); const [active,setActive]=useState(true);
   const [email,setEmail]=useState(''); const [link,setLink]=useState('');
   const [busy,setBusy]=useState(false); const [message,setMessage]=useState(''); const [error,setError]=useState('');
-  const choose=(member:AdminMember|null)=>{setEdit(member);setSubject(member?.subject||'');setName(member?.displayName||'');setPermissions(member?.permissions||agentPermissions);setActive(member?.active??true);setError('');setMessage('');};
+  const choose=(member:AdminMember|null)=>{setEdit(member);setSubject(member?.loginId||'');setName(member?.displayName||'');setPermissions(member?.permissions||agentPermissions);setActive(member?.active??true);setError('');setMessage('');};
   const run=async(action:()=>Promise<void>)=>{
     if(busy)return;setBusy(true);setError('');setMessage('');
     try{await action();await reload();}catch(e){setError((e as Error).message);}finally{setBusy(false);}
@@ -26,17 +29,18 @@ export function MemberManagement({organizationId,members,invitations,reload}:Pro
   });
   return <section className="admin-section"><h2>직원과 관리자</h2><p>관리자를 바꾸려면 새 관리자를 먼저 지정한 뒤 기존 관리자 권한을 해제하세요.</p>
     <div className="admin-member-layout"><div className="admin-table-scroll"><table><thead><tr><th>직원</th><th>권한</th><th>상태</th><th>변경</th></tr></thead><tbody>
-      {members.map(member=><tr key={member.id}><td>{member.displayName||'이름 미등록'}<small>{member.subject}</small></td>
+      {members.map(member=><tr key={member.id}><td>{member.displayName||'이름 미등록'}<small>{member.loginId||'로그인 아이디 미확인'}</small></td>
         <td>{member.effectiveScopes?.['organization:admin']||member.permissions.includes('organization:admin')?'조직 관리자':'직원'}</td><td>{member.active?'활성':'접근 회수'}</td>
-        <td><button disabled={busy} onClick={()=>choose(member)} aria-label={`${member.displayName||member.subject} 권한 편집`}>편집</button></td></tr>)}
+        <td><button disabled={busy} onClick={()=>choose(member)} aria-label={`${member.displayName||member.loginId||'이름 미확인 직원'} 권한 편집`}>편집</button><button disabled={busy} onClick={()=>setDeleting(member)} aria-label={`${member.displayName||member.loginId||'직원'} 삭제`}>삭제</button></td></tr>)}
     </tbody></table></div>
+    <dialog ref={deleteDialog} className="admin-delete-dialog" aria-labelledby="delete-staff-title" onCancel={e=>{e.preventDefault();if(!busy)setDeleting(null);}} onClose={()=>setDeleting(null)}><h3 id="delete-staff-title">{deleting?.displayName} 직원을 삭제하시겠습니까?</h3><p>조직 접근과 직원 목록에서 제외됩니다. 기존 상담·녹음·변경 이력은 보존됩니다.</p>{error&&<p role="alert" className="admin-error">{error}</p>}<div className="admin-actions"><button autoFocus disabled={busy} onClick={()=>setDeleting(null)}>취소</button><button disabled={busy||!deleting} onClick={()=>void run(async()=>{if(!deleting)return;await adminJson(`/api/admin/memberships/${deleting.id}?expectedVersion=${deleting.version}`,organizationId,{method:'DELETE'});if(edit?.id===deleting.id)choose(null);setDeleting(null);setMessage('직원을 삭제했습니다. 기존 업무 기록은 보존됩니다.');})}>직원 삭제</button></div></dialog>
     <form className="admin-form" onSubmit={e=>{e.preventDefault();void save();}}>
       <h3>{edit?'직원 권한 변경':'계정 ID로 직원 등록'}</h3><div className="admin-form-grid">
         <label>플랫폼 로그인 아이디 또는 고유 사용자 ID<input required value={subject} disabled={busy||Boolean(edit)} maxLength={255} onChange={e=>setSubject(e.target.value)}/><small>로그인 아이디로 등록하면 해당 직원의 첫 로그인에서 계정이 연결됩니다.</small></label>
         <label>표시 이름<input value={name} disabled={busy} maxLength={100} onChange={e=>setName(e.target.value)}/></label>
       </div><p>직접 부여한 기능 권한입니다. 역할과 접근 범위는 팀·역할 화면에서 함께 변경할 수 있습니다.</p><PermissionsField value={permissions} onChange={setPermissions} disabled={busy}/>
       {edit&&<label className="admin-check"><input type="checkbox" checked={active} disabled={busy} onChange={e=>setActive(e.target.checked)}/>조직 접근 허용</label>}
-      <div className="admin-actions"><button className="admin-primary" disabled={busy||!subject.trim()}>{busy?'처리 중…':'직원 저장'}</button><button type="button" disabled={busy} onClick={()=>choose(null)}>새 직원 등록</button></div>
+      <div className="admin-actions"><button className="admin-primary" disabled={busy||(!edit&&!subject.trim())}>{busy?'처리 중…':'직원 저장'}</button><button type="button" disabled={busy} onClick={()=>choose(null)}>새 직원 등록</button></div>
     </form>
     </div>
     <form className="admin-form admin-invitation-form" onSubmit={e=>{e.preventDefault();void invite();}}><h3>이메일로 직원 초대</h3>

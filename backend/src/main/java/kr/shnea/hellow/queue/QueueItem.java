@@ -88,6 +88,27 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
 
   private String assignedSubject;
   private boolean callEnded;
+  private java.time.Instant mediaRequestedAt;
+  private java.time.Instant callStartedAt;
+  private java.time.Instant callEndedAt;
+  private java.time.Instant mediaMissingSince;
+  public java.time.Instant getCallStartedAt(){return callStartedAt;}
+  public java.time.Instant getCallEndedAt(){return callEndedAt;}
+  public void requestMedia(java.time.Instant now){if(mediaRequestedAt==null)mediaRequestedAt=now;}
+  /** Both actual media participants, rather than token issuance, start the shared clock. */
+  public boolean observeMedia(java.time.Instant now,boolean bothConnected){
+    if(callEnded)return false;
+    if(bothConnected){
+      boolean changed=callStartedAt==null||mediaMissingSince!=null;
+      if(callStartedAt==null)callStartedAt=now;
+      mediaMissingSince=null;return changed;
+    }
+    if(mediaRequestedAt==null)return false;
+    if(callStartedAt==null){if(!now.isBefore(mediaRequestedAt.plusSeconds(60))){endCall(now);return true;}return false;}
+    if(mediaMissingSince==null){mediaMissingSince=now;return true;}
+    if(!now.isBefore(mediaMissingSince.plusSeconds(15))){endCall(now);return true;}
+    return false;
+  }
   private java.time.Instant mediaCleanupUntil;
   @Column(length=255) private String mediaAgentIdentity;
   public String getMediaAgentIdentity(){return mediaAgentIdentity==null?"agent-"+assignedSubject:mediaAgentIdentity;}
@@ -149,7 +170,10 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   }
 
   public void endCall() {
-    if (!this.callEnded) this.mediaCleanupUntil = java.time.Instant.now().plusSeconds(180);
+    endCall(java.time.Instant.now());
+  }
+  public void endCall(java.time.Instant now) {
+    if (!this.callEnded) {this.mediaCleanupUntil = now.plusSeconds(180);this.callEndedAt=now;}
     this.callEnded = true;
   }
 

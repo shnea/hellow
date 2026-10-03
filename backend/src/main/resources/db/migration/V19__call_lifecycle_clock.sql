@@ -1,0 +1,4 @@
+ALTER TABLE queue_items ADD COLUMN media_requested_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE queue_items ADD COLUMN call_started_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE queue_items ADD COLUMN call_ended_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE queue_items ADD COLUMN media_missing_since TIMESTAMP WITH TIME ZONE;

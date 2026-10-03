@@ -129,7 +129,9 @@ public class ConsultationController {
         r.memo(),
         r.editorDocument().toString(),
         r.tags(),
-        r.callDurationSeconds());
+        q.getType()==QueueItem.ItemType.CALL&&q.getCallStartedAt()!=null
+            ?(int)Math.max(0,java.time.Duration.between(q.getCallStartedAt(),q.getCallEndedAt()==null?java.time.Instant.now():q.getCallEndedAt()).getSeconds())
+            :r.callDurationSeconds());
     c.classify(classification);
     consultations.saveAndFlush(c);
     if (r.complete()&&!historical) {

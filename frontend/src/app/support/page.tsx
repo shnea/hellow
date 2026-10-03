@@ -6,6 +6,8 @@ import {Headphones, PhoneCall, PhoneOff, Mic, MicOff, CheckCircle2, AlertCircle,
 import {LiveKitCallSession} from '@/lib/livekit';
 import {useSupportSession} from '@/hooks/use-support-session';
 import {supportJson} from '@/lib/support-session';
+import {useCallClock} from '@/hooks/use-call-clock';
+import {endCallOnPageExit} from '@/lib/call-exit';
 import './support.css';
 
 const defaultBranding = {title:'상담 문의를 접수해 주세요',description:'문의 내용을 남겨주시면 담당 상담사가 확인합니다.',buttonLabel:'상담 연결 요청하기',primaryColor:'#4f46e5',logoUrl:''};
@@ -31,7 +33,7 @@ export default function CustomerSupportPage() {
   const mutePreference=useRef({sessionId:'',muted:false});
   const [isMuted,setIsMuted]=useState(false);
   const [muting,setMuting]=useState(false);
-  const [callDuration,setCallDuration]=useState(0);
+  const callDuration=useCallClock(session?.callStartedAt,session?.callEndedAt);
   const livekitRef=useRef<LiveKitCallSession|null>(null);
   const isVoice=step==='PROCESSING' && session?.channel==='CALL';
   const sessionId=session?.sessionId;
@@ -70,6 +72,9 @@ export default function CustomerSupportPage() {
       onError:()=>{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결에 실패했습니다. 마이크 권한과 네트워크를 확인한 뒤 다시 연결해 주세요.');}},
     });
     livekitRef.current=manager;
+    let connected=false;
+    const leave=()=>{if(connected)endCallOnPageExit(`/api/support/session/${sessionId}/end-call`);};
+    window.addEventListener('pagehide',leave);
     void Promise.resolve().then(async()=>{
       if(abort.signal.aborted)return;
       setMediaStatus('connecting');setMediaError('');setAudioBlocked(false);setAudioError('');
@@ -77,17 +82,11 @@ export default function CustomerSupportPage() {
       setIsMuted(mutePreference.current.muted);
       try{
         const data=await supportJson<{url:string;token:string}>(`/api/support/session/${sessionId}/token`,{method:'POST',signal:abort.signal});
-        if(!abort.signal.aborted)await manager.connect(data.url,data.token,mutePreference.current.muted);
+        if(!abort.signal.aborted){await manager.connect(data.url,data.token,mutePreference.current.muted);if(!abort.signal.aborted)connected=true;}
       }catch{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결을 확인하지 못했습니다. 마이크 권한과 네트워크를 확인한 뒤 다시 연결해 주세요.');}}
     });
-    return()=>{abort.abort();manager.disconnect();if(livekitRef.current===manager)livekitRef.current=null;};
+    return()=>{window.removeEventListener('pagehide',leave);abort.abort();manager.disconnect();if(livekitRef.current===manager)livekitRef.current=null;};
   },[isVoice,sessionId,mediaRetry]);
-
-  useEffect(()=>{
-    if(!isVoice || mediaStatus!=='connected')return;
-    const timer=setInterval(()=>setCallDuration(value=>value+1),1000);
-    return()=>clearInterval(timer);
-  },[isVoice,mediaStatus]);
 
   const handleToggleMute=async()=>{
     if(!livekitRef.current || mediaStatus!=='connected' || muting)return;
@@ -102,7 +101,7 @@ export default function CustomerSupportPage() {
     try{await manager.startAudio();if(livekitRef.current===manager)setAudioError('');}
     catch{if(livekitRef.current===manager)setAudioError('소리를 재생하지 못했습니다. 브라우저의 소리 권한을 확인한 뒤 다시 눌러 주세요.');}
   };
-  const newRequest=()=>{flow.newRequest();setMessage('');setCallDuration(0);setMediaError('');};
+  const newRequest=()=>{flow.newRequest();setMessage('');setMediaError('');};
   const buttonClass='min-h-12 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-50';
   const panelClass='bg-slate-950/80 border border-slate-800 rounded-2xl p-6 sm:p-8 text-center';
   return <div className="support-shell h-dvh overflow-y-auto overscroll-y-contain bg-slate-900 text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
@@ -142,7 +141,7 @@ export default function CustomerSupportPage() {
                       }`}
                     >
                       <User className="w-4 h-4" />
-                      개인 고객 (소비자)
+                      개인 고객
                     </button>
                     <button
                       type="button"
@@ -154,7 +153,7 @@ export default function CustomerSupportPage() {
                       }`}
                     >
                       <Building2 className="w-4 h-4" />
-                      기업 / 단체 고객
+                      기업 고객
                     </button>
                   </div>
                 </div>

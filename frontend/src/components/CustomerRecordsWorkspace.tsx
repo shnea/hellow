@@ -12,13 +12,13 @@ import {sameConsultationDraft} from '@/lib/work-transfer';
 import {RecordingPlayer} from './RecordingPlayer';
 import type {TransferSource} from './transfer/WorkTransferRequestDialog';
 
-interface RecordData { customerName?:string;phoneNumber?:string;companyName?:string;customerType?:string;customerRegistered?:boolean;contactVersion?:number;contactEditable?:boolean; categoryId?:string|null;categoryPath?:string|null;resultId?:string|null;resultName?:string; id:number;version:number;customerCode:string|null;queueCode:string|null;categoryMain:string;categorySub:string;
+interface RecordData { canRequestFollowUp?:boolean; customerName?:string;phoneNumber?:string;companyName?:string;customerType?:string;customerRegistered?:boolean;contactVersion?:number;contactEditable?:boolean; categoryId?:string|null;categoryPath?:string|null;resultId?:string|null;resultName?:string; id:number;version:number;customerCode:string|null;queueCode:string|null;categoryMain:string;categorySub:string;
   status:string;memo:string;editorDocument:string|null;tags:string;agentName:string;createdAt:string;editable?:boolean;processing?:boolean;currentAssigneeName?:string|null; }
 interface Revision { id:number;actorName:string;changedAt:string;beforeDocument:string; }
 const draft=(r:RecordData):ConsultationDraft=>({...savedClassification(r),resultId:r.resultId??null,resultName:r.resultName||'',status:r.status.toLowerCase(),memo:r.editorDocument||r.memo||'',selectedTags:r.tags?.split(',').filter(Boolean)||[]});
 
-export function CustomerRecordsWorkspace({customers,organizationId,draftStorageKey,contentRefresh=0,recordRefresh=0,accessKey,canRead,canWrite,canEditCustomer,onCustomerSaved,active,activeQueues,canRequestFollowUp=false,onRequestFollowUp,focus,canTransfer=false,onRequestTransfer,historyMode=false,embedded=false,onReturn,onRecordSaved,returnLabel='현재 상담으로 돌아가기'}: {
-  historyMode?:boolean;embedded?:boolean;onReturn?:()=>void;onRecordSaved?:()=>void;returnLabel?:string;
+export function CustomerRecordsWorkspace({customers,organizationId,draftStorageKey,contentRefresh=0,recordRefresh=0,accessKey,canRead,canWrite,canEditCustomer,onCustomerSaved,active,activeQueues,canRequestFollowUp=false,onRequestFollowUp,focus,canTransfer=false,onRequestTransfer,historyMode=false,embedded=false,onReturn,onRecordSaved,readOnly=false,returnLabel='현재 상담으로 돌아가기'}: {
+  readOnly?:boolean;historyMode?:boolean;embedded?:boolean;onReturn?:()=>void;onRecordSaved?:()=>void;returnLabel?:string;
   customers:CustomerProfile[];organizationId:string;contentRefresh?:number;recordRefresh?:number;accessKey:string;canRead:boolean;canWrite:boolean;canEditCustomer:boolean;active:boolean;activeQueues:Record<string,string>;
   onCustomerSaved:(customer:CustomerProfile)=>void;canRequestFollowUp?:boolean;onRequestFollowUp?:(queueCode:string,name:string)=>void;
   focus?:{id:number;revision:number}|null;canTransfer?:boolean;onRequestTransfer?:(source:TransferSource)=>void;
@@ -108,7 +108,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   };
   const save=async(data:ConsultationDraft&{isComplete:boolean})=>{
-    if(!record||busy)throw new Error('저장할 기록을 선택해 주세요.');setBusy(true);setError('');setNotice('');
+    if(readOnly||!record||busy)throw new Error('저장할 기록을 선택해 주세요.');setBusy(true);setError('');setNotice('');
     try {
       if(stale)throw new Error('최신 기록과 내 입력을 확인한 뒤 다시 적용해 주세요.');
       const r=await apiJson<RecordData>(record.id<0?`/api/consultations/queue/${record.queueCode}`:`/api/consultations/${record.id}`,jsonBody({categoryMain:data.categoryMain,categorySub:data.categorySub,categoryId:data.categoryId??null,resultId:data.resultId??null,
@@ -122,7 +122,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
     }finally{setBusy(false);}
   };
   const updateCustomer=async(data:Partial<CustomerProfile>)=>{
-    if(!customer||!canEditCustomer)throw new Error('고객 정보 수정 권한이 없습니다.');
+    if(readOnly||!customer||!canEditCustomer)throw new Error('고객 정보 수정 권한이 없습니다.');
     const merged={...customer,...data};
     if(!customer.isRegistered){
       if(!record?.queueCode)throw new Error('연락처를 변경할 접수를 찾지 못했습니다.');
@@ -135,7 +135,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
   };
   const loadRevisions=async()=>{if(!record)return;if(record.id<0){setRevisions([]);return;}try{setRevisions(await apiJson<Revision[]>(`/api/consultations/${record.id}/revisions`));}catch(e){setError((e as Error).message);}};
   const requestTransfer=()=>{
-    if(!record||!onRequestTransfer||!canTransfer||!canWrite||record.editable===false||ongoing||busy||loading)return;
+    if(!record||!onRequestTransfer||!canTransfer||readOnly||!canWrite||record.editable===false||ongoing||busy||loading)return;
     if(stale){setError('최신 기록을 확인한 뒤 업무 이관을 요청해 주세요. 내 입력은 유지됩니다.');return;}
     if(!sameConsultationDraft(drafts[record.id]||draft(record),draft(record))){setError('변경한 내용을 먼저 저장한 뒤 업무 이관을 요청해 주세요.');return;}
     onRequestTransfer({id:record.id,version:record.version,name:customer?.name||'상담 기록',liveWork:false});
@@ -157,22 +157,22 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
       {error&&<p role="alert" className="p-3 text-amber-200">{error}<button className="ml-3 underline" onClick={()=>setRefresh(v=>v+1)}>최신 기록 다시 조회</button></p>}
       {notice&&<p role="status" className="p-3 text-emerald-200">{notice}</p>}
       {!loading&&Object.entries(dirtyRecords).filter(([id,dirty])=>dirty&&(!canRead||!records.some(r=>r.id===Number(id)))).map(([id])=><details key={id} className="p-3 text-sm bg-slate-900"><summary className="py-2">화면에 없는 기록 #{id} · 미저장 입력 보관</summary><label>내 입력 · 읽고 복사할 수 있습니다<textarea readOnly rows={5} value={documentText(drafts[Number(id)]?.memo||'')} className="w-full p-2 bg-slate-800"/></label></details>)}
-      {record&&stale&&<div role="status" className="p-3 bg-slate-950 text-sm"><p>기록이 다른 작업에서 변경되었습니다. 내 입력은 편집기에 유지됩니다.</p><details><summary className="py-2 cursor-pointer">최신 서버 본문 확인</summary><p className="whitespace-pre-wrap">{documentText(record.editorDocument||record.memo)}</p></details>{canWrite&&record.editable!==false&&!ongoing&&<button disabled={busy||loading} className="underline py-2" onClick={()=>setDraftVersions(prev=>({...prev,[record.id]:record.version}))}>최신 버전에 내 입력 다시 적용 준비</button>}</div>}
+      {record&&stale&&<div role="status" className="p-3 bg-slate-950 text-sm"><p>기록이 다른 작업에서 변경되었습니다. 내 입력은 편집기에 유지됩니다.</p><details><summary className="py-2 cursor-pointer">최신 서버 본문 확인</summary><p className="whitespace-pre-wrap">{documentText(record.editorDocument||record.memo)}</p></details>{!readOnly&&canWrite&&record.editable!==false&&!ongoing&&<button disabled={busy||loading} className="underline py-2" onClick={()=>setDraftVersions(prev=>({...prev,[record.id]:record.version}))}>최신 버전에 내 입력 다시 적용 준비</button>}</div>}
       <div className="records-toolbar p-2 flex gap-2 items-center justify-between bg-slate-800 text-sm">
         {embedded?<button className="px-3 py-2 underline" onClick={onReturn}>{returnLabel}</button>:<button className="records-mobile-tabs px-2 rounded bg-slate-700" onClick={()=>setMobilePanel('list')}>고객·기록 목록</button>}
-        <span className="truncate">{embedded&&record?`${new Date(record.createdAt).toLocaleString('ko-KR')} · 이전 상담 · `:''}{customer?.name}{record?ongoing?' · 처리 중':!canWrite||record.editable===false?' · 기록 읽기 전용':' · 기록 편집':''}</span>
+        <span className="truncate">{embedded&&record?`${new Date(record.createdAt).toLocaleString('ko-KR')} · 이전 상담 · `:''}{customer?.name}{record?ongoing?' · 처리 중':readOnly||!canWrite||record.editable===false?' · 기록 읽기 전용':' · 기록 편집':''}</span>
         {record?.currentAssigneeName&&<span>현재 담당 · {record.currentAssigneeName}</span>}
-        {customer?.isRegistered&&canRead&&canWrite&&canEditCustomer&&customer.canEdit!==false&&<button className="underline p-1 shrink-0" onClick={()=>setLinking(true)}>이전 이력 연결</button>}
-        {record?.queueCode&&record.status==='COMPLETED'&&canRead&&canRequestFollowUp&&onRequestFollowUp&&<button disabled={busy||loading} className="underline p-1 shrink-0" onClick={()=>onRequestFollowUp(record.queueCode!,customer?.name||'상담 고객')}>콜백·방문 요청</button>}
-        {record&&canTransfer&&canWrite&&record.editable!==false&&!ongoing&&onRequestTransfer&&<button disabled={busy||loading||stale} className="underline p-1 shrink-0" onClick={requestTransfer}>업무 이관 요청</button>}
+        {customer?.isRegistered&&canRead&&!readOnly&&canWrite&&canEditCustomer&&customer.canEdit!==false&&<button className="underline p-1 shrink-0" onClick={()=>setLinking(true)}>이전 이력 연결</button>}
+        {!readOnly&&record?.queueCode&&record.status==='COMPLETED'&&record.canRequestFollowUp===true&&canRead&&canRequestFollowUp&&onRequestFollowUp&&<button disabled={busy||loading} className="underline p-1 shrink-0" onClick={()=>onRequestFollowUp(record.queueCode!,customer?.name||'상담 고객')}>콜백·방문 요청</button>}
+        {record&&canTransfer&&!readOnly&&canWrite&&record.editable!==false&&!ongoing&&onRequestTransfer&&<button disabled={busy||loading||stale} className="underline p-1 shrink-0" onClick={requestTransfer}>업무 이관 요청</button>}
         {record&&<button className="underline p-1 shrink-0" onClick={()=>void loadRevisions()}>변경 이력</button>}</div>
       {record?.queueCode&&<RecordingPlayer key={record.queueCode} queueCode={record.queueCode} active={active&&canRead} accessKey={accessKey}/>}
       {canRead&&revisions&&<div className="p-3 bg-slate-950 max-h-64 overflow-auto text-sm"><button className="underline mb-2" onClick={()=>setRevisions(null)}>변경 이력 닫기</button>{!revisions.length&&<p>변경 이력이 없습니다.</p>}{revisions.map(r=><details key={r.id} className="py-2"><summary>{new Date(r.changedAt).toLocaleString('ko-KR')} · {r.actorName}</summary><p className="whitespace-pre-wrap mt-2">{JSON.parse(r.beforeDocument).memo}</p></details>)}</div>}
       {record&&customer?<ActiveWorkspace key={`${organizationId}:${record.id}`} customer={customer} queueCode={record.id<0?record.queueCode!: `record-${record.id}`} organizationId={organizationId} contentRefresh={contentRefresh} initialDraft={drafts[record.id]} onDraftChange={d=>{setDrafts(prev=>({...prev,[record.id]:d}));setDirtyRecords(prev=>({...prev,[record.id]:!sameConsultationDraft(d,draft(record))}));}}
-        readOnly={!canWrite||record.editable===false||Boolean(ongoing)||stale} customerReadOnly={!canEditCustomer||customer.canEdit===false} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}
+        readOnly={readOnly||!canWrite||record.editable===false||Boolean(ongoing)||stale} customerReadOnly={readOnly||!canEditCustomer||customer.canEdit===false} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}
         onSaveConsultation={save} onRegisterCustomer={async()=>{throw new Error('고객 목록에서 등록된 고객을 선택해 주세요.');}} onUpdateCustomer={updateCustomer}/>
         :<div className="flex-1 grid place-content-center gap-3 p-6 text-slate-300" role="status"><p>{loading?'상담 기록을 불러오고 있습니다.':customer?`${customer.name} 고객의 기록을 선택하거나 새 기록을 작성해 주세요.`:'상담 기록을 선택해 주세요.'}</p>{customer&&!historyMode&&!embedded&&<button className="px-4 py-3 bg-indigo-700 rounded text-white disabled:opacity-50" disabled={!canWrite||busy||loading} onClick={()=>void create()}>새 상담 기록 작성</button>}</div>}
     </div>
-    {linking&&active&&customer&&canRead&&canWrite&&canEditCustomer&&customer.canEdit!==false&&<CustomerHistoryLinker key={customer.id} customer={customer} onClose={()=>setLinking(false)} onChanged={()=>{setRefresh(v=>v+1);setRevisions(null);}}/>}
+    {linking&&active&&customer&&canRead&&!readOnly&&canWrite&&canEditCustomer&&customer.canEdit!==false&&<CustomerHistoryLinker key={customer.id} customer={customer} onClose={()=>setLinking(false)} onChanged={()=>{setRefresh(v=>v+1);setRevisions(null);}}/>}
   </section>;
 }

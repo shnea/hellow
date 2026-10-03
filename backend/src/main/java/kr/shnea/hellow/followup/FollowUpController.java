@@ -31,7 +31,7 @@ public class FollowUpController {
       @RequestParam(required=false) Instant from,@RequestParam(required=false) Instant until,
       @RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.list(queueCode,customerCode,actionType,status,from,until,page);}
   @GetMapping("/{id}") public FollowUpService.View get(@PathVariable Long id){return service.get(id);}
-  @GetMapping("/{id}/history") public List<FollowUpEvent> history(@PathVariable Long id,@RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.history(id,page);}
+  @GetMapping("/{id}/history") public List<FollowUpService.EventView> history(@PathVariable Long id,@RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.history(id,page);}
   @GetMapping("/assignees") public List<FollowUpService.Assignee> assignees(){return service.assignees();}
   @GetMapping("/active") public FollowUpService.Active active(){return service.active();}
   @GetMapping("/request/{requestId}") public FollowUpService.View requested(@PathVariable String requestId){return service.requested(requestId);}

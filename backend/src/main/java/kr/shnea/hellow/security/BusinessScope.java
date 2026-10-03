@@ -14,6 +14,14 @@ public final class BusinessScope {
     if(actor.dataScope()!=DataScope.ORGANIZATION) {
       owned=cb.and(cb.equal(row.get("ownerIssuer"),actor.issuer()),cb.equal(row.get("ownerSubject"),actor.subject()));
       if(actor.dataScope()==DataScope.TEAM&&!actor.teamIds().isEmpty())owned=cb.or(owned,row.get("teamId").in(actor.teamIds()));
+      if(actor.participationReadable()){
+        Class<?> type=row.getJavaType();
+        if(Consultation.class.isAssignableFrom(type)&&!actor.participatedRecords().isEmpty())owned=cb.or(owned,row.get("id").in(actor.participatedRecords()));
+        if(!actor.participatedQueues().isEmpty()){
+          if(QueueItem.class.isAssignableFrom(type))owned=cb.or(owned,row.get("code").in(actor.participatedQueues()));
+          if(kr.shnea.hellow.timeline.TimelineItem.class.isAssignableFrom(type)||kr.shnea.hellow.recording.CallRecording.class.isAssignableFrom(type))owned=cb.or(owned,row.get("queueCode").in(actor.participatedQueues()));
+        }
+      }
     }
     return cb.and(cb.equal(row.get("organizationId"),actor.organizationId()),owned);
   }

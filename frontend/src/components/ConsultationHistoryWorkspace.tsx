@@ -1,6 +1,8 @@
 'use client';
 import {useEffect,useRef,useState,type ComponentProps} from 'react';
 import {apiJson} from '@/lib/api';
+import {ConsultationDetailDialog} from './ConsultationDetailDialog';
+import {RecordingIcon} from './RecordingIcon';
 import {CustomerRecordsWorkspace} from './CustomerRecordsWorkspace';
 import './consultation-history.css';
 
@@ -14,7 +16,7 @@ export function ConsultationHistoryWorkspace(props:Props){
   const [page,setPage]=useState(0);const [rows,setRows]=useState<Row[]>([]);const [more,setMore]=useState(false);
   const [loading,setLoading]=useState(false);const [error,setError]=useState('');const [refresh,setRefresh]=useState(0);
   const [selected,setSelected]=useState<{id:number;revision:number}|null>(null);const [open,setOpen]=useState(false);
-  const dialog=useRef<HTMLDialogElement>(null);const serial=useRef(0);const list=useRef<HTMLDivElement>(null);const savedScroll=useRef(0);
+  const serial=useRef(0);const list=useRef<HTMLDivElement>(null);const savedScroll=useRef(0);
   useEffect(()=>{
     if(!props.active||!props.canRead)return;
     const abort=new AbortController();
@@ -31,11 +33,7 @@ export function ConsultationHistoryWorkspace(props:Props){
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(props.focus);setOpen(true);
   },[props.focus]);
-  useEffect(()=>{if(open&&props.active){if(!dialog.current?.open)dialog.current?.showModal();}else {
-    const wasOpen=dialog.current?.open;dialog.current?.close();
-    // Native dialog focus restoration may scroll the opener into view. Restore the user's list position afterward.
-    if(wasOpen)requestAnimationFrame(()=>{if(list.current)list.current.scrollTop=savedScroll.current;});
-  }},[open,props.active]);
+  const close=()=>{setOpen(false);requestAnimationFrame(()=>{if(list.current)list.current.scrollTop=savedScroll.current;});};
   const show=(id:number)=>{savedScroll.current=list.current?.scrollTop||0;setSelected({id,revision:++serial.current});setOpen(true);};
   const title=props.scope==='mine'?'My 상담 이력':'전체 상담 이력';
   return <section hidden={!props.active} className={`history-workspace ${props.active?'':'!hidden'}`} aria-label={title}>
@@ -56,14 +54,11 @@ export function ConsultationHistoryWorkspace(props:Props){
         <tbody>{rows.map(r=><tr key={r.id} onDoubleClick={e=>{if(!(e.target as HTMLElement).closest('button'))show(r.id);}}>
           <td className="history-time">{new Date(r.receivedAt||r.createdAt).toLocaleString('ko-KR')}</td><td><strong>{r.customerName||'이름 미확인'}</strong>{!r.customerRegistered&&<span className="history-unidentified">미등록</span>}<span className="history-phone">{r.phoneNumber||'번호 미확인'}</span></td>
           <td>{r.type==='CALL'?'음성통화':r.type==='TICKET'?'문의':'상담 기록'}</td><td>{r.currentAssigneeName||r.agentName||'미배정'}</td><td><span className={`history-status status-${r.processingStatus||r.status}`}>{statuses[r.processingStatus||r.status]||r.status}</span></td><td><span className="history-summary">{r.memo||'작성된 내용 없음'}</span></td>
-          <td>{r.recordingStatus==='READY'?'녹음 있음':r.recordingStatus==='FAILED'?'저장 확인 필요':r.recordingStatus==='NO_AUDIO'?'녹음 없음':r.recordingStatus?'저장 중':'—'}</td><td><button onClick={()=>show(r.id)} aria-label={`${r.customerName||'상담'} 상세 보기`}>상세 보기</button></td>
+          <td><RecordingIcon status={r.recordingStatus}/></td><td><button onClick={()=>show(r.id)} aria-label={`${r.customerName||'상담'} 상세 보기`}>상세 보기</button></td>
         </tr>)}</tbody></table>}
       {props.canRead&&(loading||!rows.length)&&<p role="status" className="history-empty">{loading?'상담 이력을 불러오고 있습니다.':'조회 조건에 맞는 상담 이력이 없습니다.'}</p>}
     </div>
     <footer className="history-pagination"><button disabled={page===0||loading} onClick={()=>setPage(v=>v-1)}>이전</button><span>{page+1} 페이지</span><button disabled={!more||loading} onClick={()=>setPage(v=>v+1)}>다음</button></footer>
-    <dialog ref={dialog} className="history-dialog" aria-label="상담 상세·수정" onCancel={e=>{e.preventDefault();setOpen(false);}} onClose={()=>setOpen(false)}>
-      <header><h2>상담 상세·수정</h2><button autoFocus onClick={()=>setOpen(false)}>닫기</button></header>
-      {selected&&<CustomerRecordsWorkspace {...props} focus={selected} active={open&&props.active} embedded historyMode returnLabel="목록으로 돌아가기" onReturn={()=>setOpen(false)} onRecordSaved={()=>{setRefresh(v=>v+1);props.onRecordSaved?.();}}/>}
-    </dialog>
+    <ConsultationDetailDialog {...props} focus={selected} open={open} onClose={close} onRecordSaved={()=>{setRefresh(v=>v+1);props.onRecordSaved?.();}}/>
   </section>;
 }

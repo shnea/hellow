@@ -1,14 +1,24 @@
 import React from 'react';
 import {act,cleanup,fireEvent,render,screen} from '@testing-library/react';
-import {afterEach,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {WorkTransferWorkspace} from './WorkTransferWorkspace';
 import type {WorkTransfer} from '@/lib/work-transfer';
 const offered={id:'t1',version:1,organizationId:'org',consultationId:7,queueCode:null,recordVersion:1,liveWork:false,
   fromMemberId:1,fromName:'이전 담당',toMemberId:2,toName:'받는 직원',requesterName:'요청 직원',fromIssuer:'issuer',fromSubject:'one',toIssuer:'issuer',toSubject:'two',requesterIssuer:'issuer',requesterSubject:'one',
   status:'OFFERED',reason:'담당 업무 변경',memo:'전달 내용',requestedAt:'2026-10-03T01:00:00Z',expiresAt:'2026-10-03T01:10:00Z',finishedAt:null,outcome:null,canAccept:true,canReject:true,canCancel:false,canReadRecord:false} as WorkTransfer;
-const props={active:true,organizationId:'org',accessKey:'read-write',canRead:true,focus:null,onChanged:vi.fn(),onOpenRecord:vi.fn()};
+const props={active:true,organizationId:'org',accessKey:'read-write',canRead:true,focus:{id:"t1",revision:1},onChanged:vi.fn(),onOpenRecord:vi.fn()};
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();});};
+beforeEach(()=>{HTMLDialogElement.prototype.showModal=function(){this.setAttribute("open","");};HTMLDialogElement.prototype.close=function(){this.removeAttribute("open");};});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it('keeps the full list open and opens detail only on double click or the detail button',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async(path:string)=>Response.json(path.startsWith('/api/transfers?')?{items:[offered],page:0,hasMore:false}:offered)));
+  render(<WorkTransferWorkspace {...props} focus={null}/>);await flush();
+  const row=screen.getByRole('button',{name:/담당 업무 변경 상세 보기/}).closest('tr')!;
+  expect(screen.queryByRole('dialog')).toBeNull();fireEvent.click(row);expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.doubleClick(row);await flush();expect(screen.getByRole('dialog',{name:'상담 이관 상세'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'닫기'}));expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:/담당 업무 변경 상세 보기/}));await flush();expect(screen.getByRole('dialog')).toBeTruthy();
+});
 it('preserves a conflicted reason and baseline until explicitly adopting the new server version',async()=>{
   let task=offered;const commands:unknown[]=[];
   vi.stubGlobal('fetch',vi.fn(async(path:string,o?:RequestInit)=>{

@@ -116,7 +116,7 @@ class WorkTransferIntegrationTest {
   @Test void callAcceptanceReservesTargetAndKeepsResponsibilityUntilMediaConfirmation()throws Exception{
     var c=source("call",QueueItem.ItemType.CALL,false);var t=callOffer(c);
     connection(t,"bob","media-token").andExpect(status().isConflict());connection(t,"alice","media-token").andExpect(status().isForbidden());
-    var connecting=ok(command(t,"bob","accept"));assertThat(connecting.path("status").asText()).isEqualTo("CONNECTING");assertThat(connecting.path("canReadRecord").asBoolean()).isFalse();
+    var connecting=ok(command(t,"bob","accept"));assertThat(connecting.path("status").asText()).isEqualTo("CONNECTING");assertThat(connecting.path("canReadRecord").asBoolean()).isTrue();
     assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");assertThat(queues.findByCode("call").orElseThrow().getAssignedSubject()).isEqualTo("alice");preserved(c,saved(c));
     assertThat(current("bob","a").path("state").asText()).isEqualTo("TRANSFER_PENDING");assertThat(requests.reservations(ISSUER,"bob")).hasSize(1);
     send(put("/api/agents/me/status"),"bob","a",Map.of("state","AVAILABLE","expectedVersion",current("bob","a").path("version").asLong())).andExpect(status().isConflict());
@@ -142,7 +142,7 @@ class WorkTransferIntegrationTest {
     var accepted=ok(connection(connecting,"bob","confirm-media"));assertThat(accepted.path("status").asText()).isEqualTo("ACCEPTED");assertThat(accepted.path("confirmedParticipantSid").asText()).isEqualTo("PA-confirmed");assertThat(accepted.path("mediaConfirmedAt").isNull()).isFalse();
     assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");preserved(c,saved(c));var q=queues.findByCode("call").orElseThrow();assertThat(q.getAssignedSubject()).isEqualTo("bob");assertThat(q.getMediaAgentIdentity()).isEqualTo(connecting.path("targetMediaIdentity").asText());
     mvc.perform(actor(post("/api/queue/call/token"),"alice","a")).andExpect(status().isConflict());mvc.perform(actor(post("/api/queue/call/token"),"bob","a")).andExpect(status().isOk());verify(media).createToken(eq("a-call"),eq(q.getMediaAgentIdentity()),eq("bob"),eq(false));
-    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isNotFound());mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk());
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false));mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk());
     ok(connection(connecting,"bob","confirm-media"));ok(command(connecting,"bob","accept"));assertThat(events.count()).isEqualTo(3);verify(media,never()).removeParticipant(anyString(),anyString());
   }
   @Test void disconnectedOriginalOrCustomerCannotBeReplacedByConnectedTarget()throws Exception{
@@ -193,7 +193,7 @@ class WorkTransferIntegrationTest {
   @Test void standaloneAcceptMovesResponsibilityOnlyAndRequestNeverGrantsBody()throws Exception{
     var c=source(null,QueueItem.ItemType.TICKET,true);var t=offer(c);
     assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");assertThat(t.has("editorDocument")).isFalse();assertThat(t.has("requestKey")).isFalse();assertThat(t.has("requestFingerprint")).isFalse();
-    var before=ok(mvc.perform(actor(get("/api/transfers/"+t.path("id").asText()),"bob","a")));assertThat(before.path("canAccept").asBoolean()).isTrue();assertThat(before.path("canReadRecord").asBoolean()).isFalse();
+    var before=ok(mvc.perform(actor(get("/api/transfers/"+t.path("id").asText()),"bob","a")));assertThat(before.path("canAccept").asBoolean()).isTrue();assertThat(before.path("canReadRecord").asBoolean()).isTrue();
     command(t,"alice","accept").andExpect(status().isForbidden());command(t,"carol","accept").andExpect(status().isNotFound());
     var accepted=ok(command(t,"bob","accept"));assertThat(accepted.path("status").asText()).isEqualTo("ACCEPTED");assertThat(accepted.path("canReadRecord").asBoolean()).isTrue();
     assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");assertThat(saved(c).getCurrentAssigneeName()).isEqualTo("bob");preserved(c,saved(c));
@@ -201,12 +201,12 @@ class WorkTransferIntegrationTest {
   }
   @Test void standaloneRecordReadFollowsCurrentOwnerAndAuthorityWithoutCustomerGrant()throws Exception{
     var c=source(null,QueueItem.ItemType.TICKET,true);var t=offer(c);
-    mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isNotFound());
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false));
     mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","b")).andExpect(status().isNotFound());
     ok(command(t,"bob","accept"));
     var bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("consultation:read","consultation:write","transfer:read"),true);members.save(bob);
     mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.memo").value("원문 메모")).andExpect(jsonPath("$.editable").value(true));
-    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isNotFound());
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false));
     bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("consultation:read","transfer:read"),true);members.save(bob);
     mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false));
     bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("transfer:read"),true);members.save(bob);
@@ -237,7 +237,7 @@ class WorkTransferIntegrationTest {
     var c=source("done",QueueItem.ItemType.TICKET,true);var file=new Attachment("a","done","file-one","request-one","test.png","image",1L,"sha");file.assignOwner(owner("alice","a"));attachments.save(file);
     mvc.perform(actor(get("/api/editor/files/file-one/views"),"bob","a")).andExpect(status().isNotFound());
     var t=offer(c);ok(command(t,"bob","accept"));assertThat(queues.findByCode("done").orElseThrow().getOwnerSubject()).isEqualTo("alice");
-    mvc.perform(actor(get("/api/consultations/queue/done"),"alice","a")).andExpect(status().isNotFound());
+    mvc.perform(actor(get("/api/consultations/queue/done"),"alice","a")).andExpect(status().isOk());
     mvc.perform(actor(get("/api/consultations/queue/done"),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.ownerSubject").value("bob"));
     mvc.perform(actor(get("/api/editor/files/file-one/views"),"bob","a")).andExpect(status().isOk());
     var b=members.findById(member("bob","a")).orElseThrow();b.update("bob",Set.of("transfer:read"),true);members.save(b);
@@ -317,11 +317,11 @@ class WorkTransferIntegrationTest {
       assertThat(events.count()).isEqualTo(2);var result=requests.findById(t.path("id").asText()).orElseThrow();assertThat(saved(c).getOwnerSubject()).isEqualTo(result.getStatus()==WorkTransfer.Status.ACCEPTED?"bob":"alice");preserved(c,saved(c));
     }finally{pool.shutdownNow();}
   }
-  @Test void targetUsesCurrentRecordWritePermissionAndFormerOwnerCannotReadNewBody()throws Exception{
+  @Test void targetWritesAndBothParticipantsReadNewBody()throws Exception{
     var c=source("done",QueueItem.ItemType.TICKET,true);var t=offer(c);ok(command(t,"bob","accept"));
     var body=new HashMap<String,Object>();body.put("categoryMain",c.getCategoryMain());body.put("categorySub",c.getCategorySub());body.put("expectedVersion",saved(c).getVersion());body.put("memo","새 담당자가 작성한 내용");body.put("editorDocument",json.readTree(c.getEditorDocument()));body.put("tags",c.getTags());body.put("callDurationSeconds",0);body.put("complete",true);
     send(put("/api/consultations/"+c.getId()),"alice","a",body).andExpect(status().isNotFound());ok(send(put("/api/consultations/"+c.getId()),"bob","a",body));
-    mvc.perform(actor(get("/api/consultations/queue/done"),"alice","a")).andExpect(status().isNotFound());
+    mvc.perform(actor(get("/api/consultations/queue/done"),"alice","a")).andExpect(status().isOk());
     mvc.perform(actor(get("/api/consultations/queue/done"),"bob","a")).andExpect(jsonPath("$.memo").value("새 담당자가 작성한 내용"));
     send(put("/api/consultations/queue/done"),"alice","a",body).andExpect(status().isNotFound());assertThat(revisions.count()).isEqualTo(1);assertThat(saved(c).getAgentName()).isEqualTo("원래 작성자");assertThat(saved(c).getCallDurationSeconds()).isEqualTo(42);
   }

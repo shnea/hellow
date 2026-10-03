@@ -64,6 +64,18 @@ public class MediaCleanupWorker {
         } catch (org.springframework.dao.OptimisticLockingFailureException changed) {
           // Recheck the new owner and grants on the next pass after a concurrent handoff.
         }
+      } else {
+        try {
+          String room=q.getOrganizationId()+"-"+q.getCode();
+          var agent=media.participantConnection(room,q.getMediaAgentIdentity());
+          var customer=media.participantConnection(room,"customer-"+q.getCode());
+          if(q.observeMedia(clock.instant(),agent.active()&&agent.microphonePublished()&&customer.active()&&customer.microphonePublished()))queues.save(q);
+        } catch(org.springframework.dao.OptimisticLockingFailureException changed) {
+          // A handoff/end changed the owner or room while media evidence was collected.
+        } catch(Exception unavailable) {
+          // Provider errors are not evidence that either participant left.
+          LoggerFactory.getLogger(getClass()).warn("Media lifecycle check pending for queue {}",q.getCode());
+        }
       }
     }
     // Self-hosted revocation support depends on LiveKit version. Retry removals

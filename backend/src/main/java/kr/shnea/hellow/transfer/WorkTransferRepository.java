@@ -2,6 +2,8 @@ package kr.shnea.hellow.transfer;
 import java.util.*;
 import org.springframework.data.jpa.repository.*;
 public interface WorkTransferRepository extends JpaRepository<WorkTransfer,String>,JpaSpecificationExecutor<WorkTransfer> {
+  @Query("select t from WorkTransfer t where t.organizationId=:org and ((t.status=kr.shnea.hellow.transfer.WorkTransfer$Status.ACCEPTED and ((t.fromIssuer=:issuer and t.fromSubject=:subject) or (t.toIssuer=:issuer and t.toSubject=:subject))) or (t.status in (kr.shnea.hellow.transfer.WorkTransfer$Status.OFFERED,kr.shnea.hellow.transfer.WorkTransfer$Status.CONNECTING) and t.toIssuer=:issuer and t.toSubject=:subject))")
+  List<WorkTransfer> readableParticipation(String org,String issuer,String subject);
   Optional<WorkTransfer> findByRequestKey(String key);
   List<WorkTransfer> findByOrganizationIdAndStatus(String org,WorkTransfer.Status status);
   boolean existsByOrganizationIdAndConsultationIdAndStatus(String org,Long id,WorkTransfer.Status status);

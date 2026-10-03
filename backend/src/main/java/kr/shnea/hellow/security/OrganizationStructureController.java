@@ -61,7 +61,7 @@ public class OrganizationStructureController {
   public record AccessRequest(@NotNull Long expectedVersion,String teamId,@NotNull @Size(max=50) Set<String> roleIds,@NotNull DataScope dataScope,@NotNull Set<String> permissions){}
   @PutMapping("/memberships/{id}/access") @Transactional
   public Membership assign(@PathVariable Long id,@Valid @RequestBody AccessRequest r) {
-    String org=admin.lockOrganization();var member=members.findById(id).filter(m->org.equals(m.getOrganizationId())).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
+    String org=admin.lockOrganization();var member=members.findById(id).filter(m->org.equals(m.getOrganizationId())&&!m.isDeleted()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
     version(member.getVersion(),r.expectedVersion());
     if(r.teamId()!=null&&!team(org,r.teamId()).isActive())throw new ResponseStatusException(BAD_REQUEST,"활성 팀을 선택해 주세요.");
     boolean teamRequired=r.dataScope()==DataScope.TEAM;

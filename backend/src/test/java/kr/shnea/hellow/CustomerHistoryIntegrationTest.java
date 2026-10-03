@@ -31,16 +31,34 @@ class CustomerHistoryIntegrationTest {
   @Autowired QueueItemRepository queues;@Autowired ConsultationRepository records;@Autowired TimelineRepository timelines;
   @Autowired FollowUpRepository followups;@Autowired CustomerHistoryLinkRepository links;
   @Autowired OrganizationRepository organizations;@Autowired MembershipRepository members;@Autowired AuditEventRepository audits;
+  @Autowired kr.shnea.hellow.transfer.WorkTransferRepository transfers;
+  @Autowired kr.shnea.hellow.transfer.WorkTransferEventRepository transferEvents;
   @MockitoBean JwtDecoder decoder;
   WorkspaceAccess.Actor owner(String who,String org){return new WorkspaceAccess.Actor(org,who,who,ISSUER,null,DataScope.ORGANIZATION,Set.of(),Map.of());}
   @BeforeEach void setup(){
-    links.deleteAll();followups.deleteAll();timelines.deleteAll();records.deleteAll();queues.deleteAll();customers.deleteAll();audits.deleteAll();members.deleteAll();organizations.deleteAll();
+    transferEvents.deleteAll();transfers.deleteAll();links.deleteAll();followups.deleteAll();timelines.deleteAll();records.deleteAll();queues.deleteAll();customers.deleteAll();audits.deleteAll();members.deleteAll();organizations.deleteAll();
     organizations.save(new Organization("a","A","a-public"));organizations.save(new Organization("b","B","b-public"));
     members.save(new Membership("a",ISSUER,"alice",OrganizationAdminController.PERMISSIONS));members.save(new Membership("b",ISSUER,"eve",OrganizationAdminController.PERMISSIONS));
     var bob=new Membership("a",ISSUER,"bob",OrganizationAdminController.PERMISSIONS);bob.assignAccess(null,Set.of(),DataScope.SELF);members.save(bob);
     var c=new Customer("customer",Customer.CustomerType.INDIVIDUAL,true,"등록 고객",null,null,null,"Standard","010-1234-5678",null,"alice",null,false);c.setOrganizationId("a");c.assignOwner(owner("bob","a"));customers.save(c);
   }
   MockHttpServletRequestBuilder actor(MockHttpServletRequestBuilder r,String who,String org){return r.with(jwt().jwt(j->j.subject(who).issuer(ISSUER))).header("X-Organization-ID",org);}
+  @Test void transferParticipantsBothReadHistoryButOnlyCurrentOwnerEditsWithinSelfScope()throws Exception{
+    fixture("shared","alice","a",true);var record=records.findByOrganizationIdAndQueueCode("a","shared").orElseThrow();
+    var bob=members.findByOrganizationIdAndIssuerAndSubject("a",ISSUER,"bob").orElseThrow();
+    var alice=members.findByOrganizationIdAndIssuerAndSubject("a",ISSUER,"alice").orElseThrow();alice.assignAccess(null,Set.of(),DataScope.SELF);members.saveAndFlush(alice);
+    var other=new Membership("a",ISSUER,"charlie",OrganizationAdminController.PERMISSIONS);other.assignAccess(null,Set.of(),DataScope.SELF);members.saveAndFlush(other);
+    var proposal=ok(mvc.perform(actor(post("/api/transfers/work"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("consultationId",record.getId(),"expectedRecordVersion",record.getVersion(),"toMemberId",bob.getId(),"reason","후속 담당 변경","memo","인계 내용","requestId",UUID.randomUUID().toString())))));
+    mvc.perform(actor(get("/api/consultations/"+record.getId()),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false));
+    ok(mvc.perform(actor(post("/api/transfers/"+proposal.path("id").asText()+"/accept"),"bob","a").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("expectedVersion",proposal.path("version").asLong(),"reason","인계 확인")))));
+    for(String who:List.of("alice","bob")){
+      mvc.perform(actor(get("/api/consultations").param("scope","mine"),who,"a")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].queueCode").value("shared"));
+      mvc.perform(actor(get("/api/queue/history").param("status","ALL"),who,"a")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].code").value("shared"));
+      mvc.perform(actor(get("/api/consultations/"+record.getId()),who,"a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(who.equals("bob")));
+    }
+    mvc.perform(actor(get("/api/consultations/"+record.getId()),"charlie","a")).andExpect(status().isNotFound());
+    mvc.perform(actor(get("/api/consultations/"+record.getId()),"eve","b")).andExpect(status().isNotFound());
+  }
   String body(Object value)throws Exception{return json.writeValueAsString(value);}
   JsonNode ok(ResultActions result)throws Exception{return json.readTree(result.andExpect(status().isOk()).andReturn().getResponse().getContentAsString());}
   QueueItem fixture(String code,String who,String org,boolean complete){
@@ -68,7 +86,8 @@ class CustomerHistoryIntegrationTest {
     assertThat(all.path("items").size()).isEqualTo(2);
     assertThat(all.path("items").get(0).path("customerName").asText()).isEqualTo("접수 당시 이름");
     assertThat(all.path("items").get(0).path("customerRegistered").asBoolean()).isFalse();
-    var own=ok(mvc.perform(actor(get("/api/consultations").param("search","접수 당시"),"bob","a")));
+    mvc.perform(actor(get("/api/consultations").param("scope","all"),"bob","a")).andExpect(status().isForbidden());
+    var own=ok(mvc.perform(actor(get("/api/consultations").param("scope","mine").param("search","접수 당시"),"bob","a")));
     assertThat(own.path("items").size()).isEqualTo(1);assertThat(own.path("items").get(0).path("queueCode").asText()).isEqualTo("bob-history");
     mvc.perform(actor(get("/api/consultations").param("page","-1"),"alice","a")).andExpect(status().isBadRequest());
   }
@@ -80,6 +99,37 @@ class CustomerHistoryIntegrationTest {
     assertThat(filtered.path("items").size()).isEqualTo(1);
     assertThat(ok(mvc.perform(actor(get("/api/consultations").param("from","2099-01-01T00:00:00Z"),"alice","a"))).path("items").size()).isZero();
     mvc.perform(actor(get("/api/consultations").param("scope","other"),"alice","a")).andExpect(status().isBadRequest());
+  }
+  @Test void quotationUsesSourceReadScopeAndCurrentTargetWriteAuthority()throws Exception{
+    fixture("alice-current","alice","a",false);fixture("bob-source","bob","a",true);fixture("bob-current","bob","a",false);fixture("foreign","eve","b",true);
+    long bobSource=timelines.findByOrganizationIdAndQueueCodeOrderByCreatedAtDesc("a","bob-source").getFirst().getId();
+    var quoted=ok(mvc.perform(actor(post("/api/timeline/"+bobSource+"/quote"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("targetQueueCode","alice-current")))));
+    assertThat(quoted.path("text").asText()).contains("bob-source","원래 본문");
+    long aliceSource=timelines.findByOrganizationIdAndQueueCodeOrderByCreatedAtDesc("a","alice-current").getFirst().getId();
+    mvc.perform(actor(post("/api/timeline/"+aliceSource+"/quote"),"bob","a").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("targetQueueCode","bob-current")))).andExpect(status().isNotFound());
+    mvc.perform(actor(post("/api/timeline/"+bobSource+"/quote"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("targetQueueCode","bob-current")))).andExpect(status().isForbidden());
+    mvc.perform(actor(post("/api/timeline/"+bobSource+"/quote"),"eve","b").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("targetQueueCode","foreign")))).andExpect(status().isNotFound());
+    var alice=members.findByOrganizationIdAndIssuerAndSubject("a",ISSUER,"alice").orElseThrow();alice.update("Alice",Set.of("consultation:read"),true);members.saveAndFlush(alice);
+    mvc.perform(actor(post("/api/timeline/"+bobSource+"/quote"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(body(Map.of("targetQueueCode","alice-current")))).andExpect(status().isForbidden());
+  }
+  @Test void staffDeletionPreservesHistoryAndDeniesAccessAndLastAdministratorDeletion()throws Exception{
+    fixture("bob-past","bob","a",true);var bob=members.findByOrganizationIdAndIssuerAndSubject("a",ISSUER,"bob").orElseThrow();
+    mvc.perform(actor(delete("/api/admin/memberships/"+bob.getId()).param("expectedVersion",String.valueOf(bob.getVersion()+1)),"alice","a")).andExpect(status().isConflict());
+    mvc.perform(actor(delete("/api/admin/memberships/"+bob.getId()).param("expectedVersion",String.valueOf(bob.getVersion())),"eve","b")).andExpect(status().isNotFound());
+    mvc.perform(actor(delete("/api/admin/memberships/"+bob.getId()).param("expectedVersion",String.valueOf(bob.getVersion())),"alice","a")).andExpect(status().isOk());
+    assertThat(members.findById(bob.getId()).orElseThrow().isDeleted()).isTrue();assertThat(records.findByOrganizationIdAndQueueCode("a","bob-past")).isPresent();
+    mvc.perform(actor(get("/api/queue"),"bob","a")).andExpect(status().isForbidden());
+    assertThat(ok(mvc.perform(actor(get("/api/admin/memberships"),"alice","a"))).size()).isEqualTo(1);
+    var alice=members.findByOrganizationIdAndIssuerAndSubject("a",ISSUER,"alice").orElseThrow();
+    mvc.perform(actor(delete("/api/admin/memberships/"+alice.getId()).param("expectedVersion",String.valueOf(alice.getVersion())),"alice","a")).andExpect(status().isConflict());
+    assertThat(members.findById(alice.getId()).orElseThrow().isActive()).isTrue();
+  }
+  @Test void verifiedNicknameAndLoginAreStoredWithoutShowingPlatformSubject()throws Exception{
+    String subject="aa1ebd8d-7c6a-469c-be55-109a82555529";
+    var m=members.saveAndFlush(new Membership("a",ISSUER,subject,Set.of("queue:read")));
+    mvc.perform(get("/api/me").with(jwt().jwt(j->j.issuer(ISSUER).subject(subject).claim("preferred_username","login-id").claim("nickname","저장된 닉네임"))))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("저장된 닉네임"));
+    var updated=members.findById(m.getId()).orElseThrow();assertThat(updated.getLoginId()).isEqualTo("login-id");assertThat(updated.getDisplayName()).isEqualTo("저장된 닉네임");
   }
   @Test void administratorEnteredLoginBindsVerifiedIdentityOnceWithoutChangingGrants()throws Exception{
     var m=members.saveAndFlush(new Membership("a",ISSUER,"login-name",Set.of("queue:read","consultation:read")));

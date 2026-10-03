@@ -81,15 +81,14 @@ public class QueueController {
   public void restart(@PathVariable String code,@RequestBody @jakarta.validation.Valid RestartRequest request){routing.restart(access.require("queue:accept"),code,request.expectedVersion());}
 
   @PostMapping("/{code}/token")
+  @Transactional
   public LiveKitService.LiveKitTokenResponse token(@PathVariable String code) {
     var actor = access.require("queue:accept");
-    var q =
-        queues
-            .findByOrganizationIdAndCode(actor.organizationId(), code)
-            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
+    var q = lock(actor,code);
     requireOwner(q,actor);
     if (q.isCallEnded() || q.getType() != QueueItem.ItemType.CALL)
       throw new ResponseStatusException(CONFLICT, "활성 음성 통화가 아닙니다.");
+    q.requestMedia(java.time.Instant.now());
     return media.createToken(
         actor.organizationId() + "-" + q.getCode(),
         q.getMediaAgentIdentity(),

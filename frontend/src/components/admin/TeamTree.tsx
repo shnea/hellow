@@ -22,8 +22,8 @@ export function TeamTree({teams,members,busy,selectedId,onEdit,onMove}:{teams:Ad
     if(!rows.length)return <p className="admin-team-members">이 팀에 소속된 직원이 없습니다.</p>;
     return <ul className="admin-team-members" aria-label={`${teams.find(t=>t.id===teamId)?.name||'팀 미지정'} 소속 직원`}>{rows.map(person=><li key={person.id}>
       <span draggable={!busy&&person.active} onDragStart={e=>{setDragged(person.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-hellow-member',String(person.id));}}
-        onDragEnd={()=>{setDragged(null);setDropTarget(null);}} title="다른 팀으로 드래그하여 이동"><strong>{person.displayName||person.subject}</strong><small>{person.active?'다른 팀으로 드래그하여 이동':'접근 회수'}</small></span>
-      <button type="button" disabled={busy||!person.active} aria-label={`${person.displayName||person.subject} 이동할 팀 선택`} onClick={()=>{setMoving(person);setTarget(person.teamId||'');}}>이동</button>
+        onDragEnd={()=>{setDragged(null);setDropTarget(null);}} title="다른 팀으로 드래그하여 이동"><strong>{person.displayName||person.loginId||'이름 미확인 직원'}</strong><small>{person.active?'다른 팀으로 드래그하여 이동':'접근 회수'}</small></span>
+      <button type="button" disabled={busy||!person.active} aria-label={`${person.displayName||person.loginId||'이름 미확인 직원'} 이동할 팀 선택`} onClick={()=>{setMoving(person);setTarget(person.teamId||'');}}>이동</button>
     </li>)}</ul>;
   };
   const branch=(team:AdminTeam,visited:Set<string>):React.ReactNode=>{
@@ -41,7 +41,7 @@ export function TeamTree({teams,members,busy,selectedId,onEdit,onMove}:{teams:Ad
   return <><div className="admin-actions"><button type="button" onClick={()=>setCollapsed(new Set())}>전체 펼치기</button><button type="button" onClick={()=>setCollapsed(new Set(teams.map(t=>t.id)))}>전체 접기</button></div>
     <div className="admin-team-tree"><ul aria-label="조직 팀 트리">{(children.get('')||[]).map(t=>branch(t,new Set()))}</ul></div>
     {members.some(m=>!m.teamId)&&<details open><summary>팀 미지정 직원 {members.filter(m=>m.active&&!m.teamId).length}명</summary>{people(null)}</details>}
-    {moving&&<form className="admin-form" onSubmit={e=>{e.preventDefault();void move(moving,target||null);}}><h4>{moving.displayName||moving.subject} 팀 이동</h4>
+    {moving&&<form className="admin-form" onSubmit={e=>{e.preventDefault();void move(moving,target||null);}}><h4>{moving.displayName||moving.loginId||'이름 미확인 직원'} 팀 이동</h4>
       <label>이동할 팀<select aria-label="이동할 팀" disabled={busy} value={target} onChange={e=>setTarget(e.target.value)}><option value="">팀 미지정</option>{teams.filter(t=>t.active).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
       <p>역할과 직접 권한을 유지하며 소속 팀만 바꿉니다. 이전 상담 기록의 작성 당시 팀은 유지됩니다.</p>
       <div className="admin-actions"><button disabled={busy||(moving.teamId||'')===target} className="admin-primary">선택한 팀으로 이동</button><button type="button" disabled={busy} onClick={()=>setMoving(null)}>이동 취소</button></div>

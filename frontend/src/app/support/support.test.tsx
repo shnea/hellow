@@ -16,6 +16,14 @@ const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status}
 beforeEach(()=>{sessionStorage.clear();window.history.replaceState(null,'','/support?org=org-a');media.created.mockClear();media.connect.mockReset();media.disconnect.mockClear();media.muted.mockReset();});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
+it('keeps the customer microphone session when a handoff changes the assigned agent',async()=>{
+ storeSupportRequest({...request,channel:'CALL'});let assigned='상담사 A';
+ const fetcher=vi.fn(async(url:string)=>json(url.includes('/organization/')?{name:'검수 조직',branding}:url.endsWith('/token')?{url:'wss://media',token:'synthetic'}:{...session,channel:'CALL',assignedAgent:assigned,callStartedAt:new Date(Date.now()-90000).toISOString()}));vi.stubGlobal('fetch',fetcher);
+ render(<Page/>);await waitFor(()=>expect(media.connect).toHaveBeenCalledTimes(1));const initialDisconnects=media.disconnect.mock.calls.length;
+ assigned='상담사 B';await waitFor(()=>expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/session/session-one')).length).toBeGreaterThan(1),{timeout:3500});
+ expect(media.connect).toHaveBeenCalledTimes(1);expect(media.disconnect).toHaveBeenCalledTimes(initialDisconnects);expect(fetcher.mock.calls.filter(([url])=>url.endsWith('/token'))).toHaveLength(1);
+});
+
 it('accepted online ticket shows the actual agent without voice token, microphone or media connection',async()=>{
   storeSupportRequest(request);
   const fetcher=vi.fn(async(url:string)=>json(url.includes('/organization/')?{name:'검수 조직',branding}:session));vi.stubGlobal('fetch',fetcher);

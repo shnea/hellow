@@ -26,9 +26,14 @@ public class Membership {
 
   @Column(nullable = false)
   private String dataScope;
+  @Column(nullable=false) private boolean deleted;
+  public boolean isDeleted(){return deleted;}
+  public void delete(){active=false;deleted=true;}
 
   @Version private Long version;
   @Column(length = 100) private String displayName;
+  @Column(length = 255) private String loginId;
+  @Column(length = 255) private String identityName;
   @Column(length = 64) private String teamId;
   @ElementCollection(fetch = FetchType.EAGER)
   @CollectionTable(name="membership_roles", joinColumns=@JoinColumn(name="membership_id"))
@@ -61,7 +66,9 @@ public class Membership {
     return subject;
   }
 
-  public void bindIdentity(String subject) { this.subject=subject; }
+  public void bindIdentity(String subject) { if(!this.subject.equals(subject))this.loginId=this.subject;this.subject=subject; }
+  public String getLoginId(){return loginId;}
+  public void profile(String login,String name){if(login!=null&&!login.isBlank()&&login.length()<=255&&!login.equals(subject))loginId=login;if(name!=null&&!name.isBlank()&&name.length()<=255)identityName=name;}
 
   public String getIssuer() {
     return issuer;
@@ -84,7 +91,7 @@ public class Membership {
   }
 
   public Long getVersion() { return version; }
-  public String getDisplayName() { return displayName; }
+  public String getDisplayName() { return StaffNames.label(displayName,identityName,loginId,subject); }
   public String getTeamId() { return teamId; }
   public Set<String> getRoleIds() { return roleIds; }
   public void assignAccess(String teamId, Set<String> roles, DataScope directScope) {

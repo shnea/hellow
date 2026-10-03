@@ -344,7 +344,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               <button
                 disabled={readOnly||busy||!canTransfer}
                 onClick={onOpenTransfer}
-                title="저장한 상담을 이관할 직원을 선택합니다."
+                title="작성 내용을 임시 저장하고 통화를 넘길 직원을 선택합니다. 통화는 유지됩니다."
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
               >
                 <PhoneForwarded className="w-4 h-4 text-indigo-400" />
@@ -765,10 +765,10 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
               <FileText className="w-3.5 h-3.5 text-indigo-400" />
-              상담 기록 작성
+              {recordMode&&readOnly?'상담 기록 내용':'상담 기록 작성'}
             </span>
           </div>
-          <TemplatePicker templates={content.templates} disabled={readOnly||busy||content.loading} onInsert={insertTemplate}/>
+          {!readOnly&&<TemplatePicker templates={content.templates} disabled={busy||content.loading} onInsert={insertTemplate}/>}
         </div>
         {content.error&&<p role="alert" className="p-2 text-amber-200 text-sm">분류·템플릿 조회 실패: {content.error}<button className="ml-2 underline" disabled={content.loading} onClick={content.reload}>목록 다시 조회</button></p>}
         {content.loading&&!content.catalog&&<p role="status" className="p-2 text-sm">분류·템플릿 조회 중…</p>}
@@ -789,12 +789,11 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       <div className="p-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-xs">
         <div className="flex items-center space-x-2 text-slate-400 text-[11px]">
           <Clock className="w-3.5 h-3.5" />
-          <span>마지막 저장: {lastSavedTime}</span>
-          <span className="text-slate-600">|</span>
+          {!(recordMode&&readOnly)&&<><span>마지막 저장: {lastSavedTime}</span><span className="text-slate-600">|</span></>}
           <span className="text-slate-400">입력 글자 수: {documentText(memoText).length}자</span>
         </div>
 
-        <div className="flex items-center space-x-2">
+        {!readOnly&&<div className="flex items-center space-x-2">
           {/* Temporary Save */}
           <button
                 disabled={idle || readOnly || busy}
@@ -831,7 +830,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             <CheckCircle2 className="w-4 h-4" />
             <span>상담 기록 완료</span>
           </button>
-        </div>
+        </div>}
       </div>
     </main>
   );

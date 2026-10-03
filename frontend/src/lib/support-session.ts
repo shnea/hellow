@@ -17,6 +17,7 @@ export interface SupportSession {
   channel: 'CALL' | 'CHAT';
   assignedAgent: string;
   waitingCount: number;
+  callStartedAt?:string|null;callEndedAt?:string|null;
   expiresAt: string;
 }
 

@@ -16,7 +16,7 @@ interface SidebarGNBProps {
   showFollowups?:boolean;
   showTransfers?:boolean;
   supportLink?: string;
-  showHistory?:boolean;
+  showHistory?:boolean;showAllHistory?:boolean;
 }
 
 export const SidebarGNB: React.FC<SidebarGNBProps> = ({
@@ -29,7 +29,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   showFollowups=false,
   showTransfers=false,
   supportLink,
-  showHistory=true,
+  showHistory=true,showAllHistory=false,
 }) => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
@@ -62,7 +62,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
       {/* Main Navigation Tabs */}
       <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
-        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(!['customers','tickets'].includes(item.id)||showHistory)).map((item) => {
+        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(item.id!=='customers'||showAllHistory)&&(item.id!=='tickets'||showHistory)).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (

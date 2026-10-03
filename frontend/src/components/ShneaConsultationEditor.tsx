@@ -135,7 +135,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
   }
 
   return (
-    <div className="shnea-consultation-editor flex-1 h-full min-h-0 flex flex-col relative select-text">
+    <div className={`shnea-consultation-editor flex-1 h-full min-h-0 flex flex-col relative select-text${readOnly?' editor-readonly':''}`}>
       {/* SHNEA 에디터 다크 테마 및 높이 전역 스타일 */}
       <style jsx global>{`
         .shnea-consultation-editor {

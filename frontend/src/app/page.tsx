@@ -1,5 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {ConsultationDetailDialog} from '@/components/ConsultationDetailDialog';
+import {RecordingPlayer} from '@/components/RecordingPlayer';
+import {FollowUpRequestDialog} from '@/components/followup/FollowUpRequestDialog';
 import { SidebarGNB } from '@/components/SidebarGNB';
 import { QueuePanel } from '@/components/QueuePanel';
 import { ActiveWorkspace } from '@/components/ActiveWorkspace';
@@ -53,6 +56,7 @@ export default function ConsultationWorkspacePage() {
   const [currentTab,setCurrentTab]=useState('workspace');
   const [transferSource,setTransferSource]=useState<TransferSource|null>(null);
   const [transferFocus,setTransferFocus]=useState<{id:string;revision:number;direction?:TransferDirection}|null>(null);
+  const [transferRecordFocus,setTransferRecordFocus]=useState<{id:number;revision:number}|null>(null);
   const [recordFocus,setRecordFocus]=useState<{id:number;revision:number}|null>(null);
   const transferRevision=useRef(0);
   const [receivedTransfers,setReceivedTransfers]=useState<WorkTransfer[]>([]);
@@ -99,7 +103,8 @@ export default function ConsultationWorkspacePage() {
   const mediaCode=activeCall||callTransfer?.queueCode||null;
   const mediaIdentity=queue.find(q=>q.id===activeCall)?.mediaAgentIdentity
     ||(mediaCode===callTransfer?.queueCode?callTransfer?.targetMediaIdentity:null)||(activeCall?`agent-${identity?.subject}`:null);
-  const call = useCall(mediaCode,{organizationId,mediaIdentity,transfer:callTransfer,onTransferChanged:updateCallTransfer});
+  const callQueue=queue.find(q=>q.id===mediaCode);
+  const call = useCall(mediaCode,{organizationId,mediaIdentity,callStartedAt:callQueue?.callStartedAt,callEndedAt:callQueue?.callEndedAt,transfer:callTransfer,onTransferChanged:updateCallTransfer});
   const durations=useRef<Record<string,number>>({});
   useEffect(()=>{if(activeCall&&call.duration>0)durations.current[activeCall]=call.duration;},[activeCall,call.duration]);
   const [busy, setBusy] = useState(false);
@@ -108,6 +113,8 @@ export default function ConsultationWorkspacePage() {
   const agentRef=useRef<AgentView|null>(null);
   const [agentError,setAgentError]=useState('');
   const storeAgent=useCallback((view:AgentView|null)=>{agentRef.current=view;setAgentView(view);},[]);
+  const [timelineDetail,setTimelineDetail]=useState<TimelineItem|null>(null);
+  const [quoteBusy,setQuoteBusy]=useState(false);const [quoteError,setQuoteError]=useState('');
   const [quotedText, setQuotedText] = useState('');
   const [followupTab] = useState<'visit' | 'callback' | 'transfer' | 'notification'>('visit');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -251,6 +258,10 @@ export default function ConsultationWorkspacePage() {
   const currentOrganization=identity?.organizations.find(o=>o.id===organizationId);
   const accessKey=JSON.stringify([currentOrganization?.teamId,Object.entries(currentOrganization?.scopes||{}).sort(),currentOrganization?.permissions.slice().sort()]);
   const canReadConsultation=can('consultation:read');
+  const canReadAllHistory=canReadConsultation&&['TEAM','ORGANIZATION'].includes(currentOrganization?.scopes?.['consultation:read']||'');
+  // Synchronize navigation after a server permission refresh.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(()=>{if(currentTab==='customers'&&!canReadAllHistory)setCurrentTab(canReadConsultation?'tickets':'workspace');},[currentTab,canReadAllHistory,canReadConsultation]);
   const unfinishedCall=queue.find(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
   const unfinishedInteraction=queue.find(q=>q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
   const receivingBlocked=unfinishedInteraction ? unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 상담을 수락할 수 있습니다.' : '상담 중입니다. 현재 상담과 후처리를 완료해 주세요.' : agentView?.state==='TRANSFER_PENDING'?'상담 이관 응답 대기 중입니다. 요청을 처리한 뒤 새 상담 수신·조직 변경이 가능합니다.':activeFollowUp?.processing||agentView?.state==='FOLLOW_UP'?'후속 업무 처리 중입니다. 예약 업무를 종료한 뒤 새 상담을 수락할 수 있습니다.':followUpStateError?'후속 업무 상태를 확인하지 못했습니다. 다시 조회한 뒤 수신·조직 변경이 가능합니다.':'';
@@ -382,8 +393,7 @@ export default function ConsultationWorkspacePage() {
     setActiveCall(null);
     notify('info', '통화 종료', '상담 기록은 후처리 후 별도로 완료해 주세요.');
   }).catch(() => {}); };
-  const save = async (data: ConsultationDraft & { isComplete: boolean }) => run(async () => {
-    const code = selected;
+  const persistDraft = async (data: ConsultationDraft & { isComplete: boolean },code=selected) => {
     if(draftConflicts[code])throw new Error('최신 서버 본문과 내 입력을 확인한 뒤 다시 적용해 주세요.');
     const saved = await apiJson<SavedConsultation>(`/api/consultations/queue/${code}`, jsonBody({ categoryMain: data.categoryMain,
       categorySub: data.categorySub,categoryId:data.categoryId??null,resultId:data.resultId??null, expectedVersion: versions.current[code] || 0, memo: documentText(data.memo), editorDocument: readDocument(data.memo),
@@ -405,8 +415,9 @@ export default function ConsultationWorkspacePage() {
     }
     notify('success', data.isComplete ? '상담 저장·완료' : '초안 저장', '서버 저장이 확인됐습니다.');
     const confirmed={...data,...savedClassification(saved),resultId:saved.resultId??null,resultName:saved.resultName||'',status:saved.status?.toLowerCase()||data.status};setDrafts(prev=>({...prev,[code]:confirmed}));
-    setHandoffBaselines(prev=>prev[code]?{...prev,[code]:{...prev[code],draft:confirmed}}:prev);return confirmed;
-  });
+    setHandoffBaselines(prev=>prev[code]?{...prev,[code]:{...prev[code],draft:confirmed}}:prev);return {saved,confirmed};
+  };
+  const save = async (data: ConsultationDraft & { isComplete: boolean }) => run(async () => (await persistDraft(data)).confirmed);
   const changeCustomer = async (data: Partial<CustomerProfile>, register: boolean) => run(async () => {
     if (!customer || !item) return;
     const merged = { ...customer, ...data };
@@ -423,25 +434,34 @@ export default function ConsultationWorkspacePage() {
   });
   const followUpChanged=(task?:FollowUp)=>{if(task?.canProcess){const state={processing:task.status==='IN_PROGRESS',id:task.status==='IN_PROGRESS'?task.id:null};setActiveFollowUp(state);activeFollowUpRef.current=state;}setRefresh(v=>v+1);setTimelineRefresh(v=>v+1);};
   const openFollowUp=(id:number)=>{setFollowUpFocus({id,revision:++followUpRevision.current});setCurrentTab('followups');};
-  const followUpCreated=(task:FollowUp)=>{setFollowUpSource(null);openFollowUp(task.id);followUpChanged();};
-  const openTransfer=(id:string,direction?:TransferDirection)=>{setTransferFocus({id,revision:++transferRevision.current,direction});setDismissedTransfers(prev=>[...prev,id]);setCurrentTab('transfers');};
+  const followUpCreated=(task:FollowUp)=>{setFollowUpSource(null);followUpChanged(task);};
+  const openTransfer=(id:string,direction?:TransferDirection)=>{setTransferFocus({id,revision:++transferRevision.current,direction});setDismissedTransfers(prev=>[...prev,id]);};
   const transferChanged=(task:WorkTransfer)=>{updateCallTransfer(task);setRefresh(v=>v+1);setTimelineRefresh(v=>v+1);setReceivedTransfers(prev=>prev.filter(t=>t.id!==task.id||task.status==='OFFERED'));};
   const transferCreated=(task:WorkTransfer)=>{setTransferSource(null);openTransfer(task.id,'SENT');transferChanged(task);notify(task.status==='OFFERED'?'success':'info','이관 접수 확인',transferLabels[task.status]);};
   const requestQueueTransfer=()=>{void run(async()=>{
     if(!item||!writable||!can('consultation:transfer')||!can('transfer:read'))throw new Error('본인 상담과 이관 권한을 확인해 주세요.');
-    const saved=await apiJson<SavedConsultation|null>(`/api/consultations/queue/${item.id}`);
-    if(!saved)throw new Error('상담 기록을 먼저 저장한 뒤 업무 이관을 요청해 주세요.');
-    if(saved.version!==versions.current[item.id]){setDraftConflicts(prev=>({...prev,[item.id]:saved}));throw new Error('저장된 기록이 변경되었습니다. 내 입력을 보존하고 최신 기록을 확인해 주세요.');}
-    if(drafts[item.id]&&!sameConsultationDraft(drafts[item.id],savedDraft(saved)))throw new Error('변경한 내용을 먼저 저장한 뒤 업무 이관을 요청해 주세요.');
+    let saved=await apiJson<SavedConsultation|null>(`/api/consultations/queue/${item.id}`);
+    if(saved&&saved.version!==versions.current[item.id]){setDraftConflicts(prev=>({...prev,[item.id]:saved!}));throw new Error('저장된 기록이 변경되었습니다. 내 입력을 보존하고 최신 기록을 확인해 주세요.');}
+    if(!saved||drafts[item.id]&&!sameConsultationDraft(drafts[item.id],savedDraft(saved))){
+      const draft=drafts[item.id];
+      if(!draft?.categoryMain||!draft.categorySub)throw new Error('상담 입력 준비 중입니다. 잠시 후 다시 호전환해 주세요.');
+      saved=(await persistDraft({...draft,isComplete:false},item.id)).saved;
+    }
     setHandoffBaselines(prev=>({...prev,[item.id]:{recordId:saved.id,name:customer?.name||'상담 기록',draft:savedDraft(saved)}}));
     setTransferSource({id:saved.id,version:saved.version,name:customer?.name||'상담 기록',liveWork:true,kind:item.type==='call'&&!item.callEnded?'CALL':'WORK'});
   }).catch(()=>{});};
   const openTransferRecord=(task:WorkTransfer)=>{void run(async()=>{
     const scoped=task.liveWork&&can('queue:read')?(await apiJson<ServerQueue[]>('/api/queue')).map(queueItem):queueRef.current;
     const live=task.queueCode?scoped.find(q=>q.id===task.queueCode&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject):undefined;
-    if(live){setQueue(scoped);queueRef.current=scoped;setDraftReady(prev=>({...prev,[live.id]:false}));selectQueue(live.id);}
-    else{setRecordFocus({id:task.consultationId,revision:++transferRevision.current});setCurrentTab('customers');}
+    if(live){setQueue(scoped);queueRef.current=scoped;setDraftReady(prev=>({...prev,[live.id]:false}));setTransferFocus(null);selectQueue(live.id);}
+    else setTransferRecordFocus({id:task.consultationId,revision:++transferRevision.current});
   }).catch(()=>{});};
+  const quoteTimeline=async(entry:TimelineItem)=>{
+    if(!item||!writable||!can('consultation:write')||quoteBusy)return;
+    setQuoteBusy(true);setQuoteError('');
+    try{const result=await apiJson<{text:string}>(`/api/timeline/${entry.id}/quote`,jsonBody({targetQueueCode:item.id}));setInlineRecordFocus(null);setQuotedText(result.text);setTimelineDetail(null);}
+    catch(e){setQuoteError((e as Error).message);notify('warning','인용할 수 없습니다',(e as Error).message);}finally{setQuoteBusy(false);}
+  };
   if (!identity || authError || !organizationId) return <main className="min-h-screen bg-slate-950 text-slate-200 grid place-content-center gap-4 p-6">
     <h1 className="text-xl font-semibold">상담 워크스페이스</h1><p role="status" className="max-w-xl">{authError || '서버에서 로그인·조직 권한을 확인하고 있습니다.'}</p>
     {authError && <a href="/login" className="text-indigo-300 underline">로그인으로 돌아가기</a>}
@@ -449,7 +469,7 @@ export default function ConsultationWorkspacePage() {
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
   return <><div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
-    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showHistory={canReadConsultation} showFollowups={can('followup:read')} showTransfers={can('transfer:read')}
+    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
@@ -469,7 +489,7 @@ export default function ConsultationWorkspacePage() {
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('queue');}}>대기열 {queue.length}</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('editor');}}>편집기</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('history');}}>이력·후속 요청</button>
-        {canReadConsultation&&<button onClick={()=>setCurrentTab('customers')}>전체 상담 이력</button>}
+        {canReadAllHistory&&<button onClick={()=>setCurrentTab('customers')}>전체 상담 이력</button>}
         {canReadConsultation&&<button onClick={()=>setCurrentTab('tickets')}>My 상담 이력</button>}
         {can('followup:read')&&<button onClick={()=>setCurrentTab('followups')}>예약</button>}
         {can('transfer:read')&&<button onClick={()=>setCurrentTab('transfers')}>상담 이관</button>}
@@ -478,26 +498,29 @@ export default function ConsultationWorkspacePage() {
       {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
       {customerError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>고객 목록: {customerError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
       {draftStorageError&&<div role="alert" className="p-3 text-amber-200 bg-amber-950">{draftStorageError}</div>}
+      <FollowUpRequestDialog key={`request:${organizationId}:${identity.subject}`} source={followUpSource} organizationId={organizationId} identityKey={identity.subject} allowed={can('followup:read')&&can('followup:write')} onClose={()=>setFollowUpSource(null)} onCreated={followUpCreated}/>
+      <ConsultationDetailDialog key={`timeline-detail:${organizationId}:${identity.subject}:${accessKey}`} open={Boolean(timelineDetail)} active={currentTab==='workspace'&&canReadConsultation} readOnly canRead={canReadConsultation} canWrite={false} canEditCustomer={false} customers={Object.values(customers)} organizationId={organizationId} accessKey={accessKey} activeQueues={{}} onCustomerSaved={()=>{}} focus={timelineDetail?.recordId?{id:timelineDetail.recordId,revision:Number(timelineDetail.id)}:null} onClose={()=>setTimelineDetail(null)} onQuote={writable&&can('consultation:write')?()=>{if(timelineDetail)void quoteTimeline(timelineDetail);}:undefined} quoteBusy={quoteBusy} quoteError={quoteError}/>
       <FollowUpWorkspace key={`followup:${organizationId}:${identity.issuer}:${identity.subject}`} active={showFollowUps} organizationId={organizationId} identityKey={identity.subject} accessKey={accessKey}
-        canRead={can('followup:read')} canWrite={can('followup:write')} focus={followUpFocus} source={followUpSource} onCreated={followUpCreated}
+        canRead={can('followup:read')} canWrite={can('followup:write')} focus={followUpFocus} source={null} onCreated={followUpCreated}
         onChanged={followUpChanged} onSourceClosed={()=>setFollowUpSource(null)}/>
-      <WorkTransferWorkspace key={`transfer:${organizationId}:${identity.issuer}:${identity.subject}`} active={showTransfers} organizationId={organizationId} accessKey={accessKey} canRead={can('transfer:read')} focus={transferFocus} onChanged={transferChanged} onOpenRecord={openTransferRecord}
+      <WorkTransferWorkspace key={`transfer:${organizationId}:${identity.issuer}:${identity.subject}`} active={showTransfers||Boolean(transferFocus)} popupOnly={!showTransfers} onCloseDetail={()=>setTransferFocus(null)} organizationId={organizationId} accessKey={accessKey} canRead={can('transfer:read')} focus={transferFocus} onChanged={transferChanged} onOpenRecord={openTransferRecord}
         localInputs={Object.entries(handoffBaselines).filter(([code,base])=>drafts[code]&&!sameConsultationDraft(drafts[code],base.draft)&&!queue.some(q=>q.id===code&&q.assignedSubject===identity.subject)).map(([code,base])=>({code,recordId:base.recordId,name:base.name,text:documentText(drafts[code].memo)}))}/>
       {currentTab==='settings'&&<div className="workspace-settings-pane"><WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
         blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}} embedded/></div>}
       <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers||currentTab==='settings'?'workspace-main-hidden':''}`}>
         {!showRecords&&<div className={`queue-pane ${mobilePanel==='queue'?'mobile-visible':''}`}>
-          <QueuePanel key={`queue:${organizationId}:${identity.issuer}:${identity.subject}`} organizationId={organizationId} historyRefresh={timelineRefresh} onOpenHistory={openHistory} queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
+          <QueuePanel key={`queue:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} canRead={can('queue:read')} organizationId={organizationId} historyRefresh={timelineRefresh} onOpenHistory={openHistory} queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
             onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}
             />
         </div>}
-        {(['all','mine'] as const).map(scope=><ConsultationHistoryWorkspace key={`records:${scope}:${organizationId}:${identity.issuer}:${identity.subject}`} scope={scope} draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:records:${scope}`} active={currentTab===(scope==='all'?'customers':'tickets')} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} recordRefresh={timelineRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')} canEditCustomer={can('customer:write')&&!customerError}
-          canRequestFollowUp={can('followup:read')&&can('followup:write')} onRequestFollowUp={(code,name)=>{setFollowUpSource({code,name});setCurrentTab('followups');}}
-          historyMode focus={scope==='all'?recordFocus:undefined} canTransfer={can('consultation:transfer')&&can('transfer:read')} onRequestTransfer={setTransferSource}
+        {(['all','mine'] as const).filter(scope=>scope==='mine'||canReadAllHistory).map(scope=><ConsultationHistoryWorkspace key={`records:${scope}:${organizationId}:${identity.issuer}:${identity.subject}`} scope={scope} draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:records:${scope}`} active={currentTab===(scope==='all'?'customers':'tickets')} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} recordRefresh={timelineRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')} canEditCustomer={can('customer:write')&&!customerError}
+          canRequestFollowUp={can('followup:read')&&can('followup:write')} onRequestFollowUp={(code,name)=>setFollowUpSource({code,name})}
+          historyMode focus={scope===(canReadAllHistory?'all':'mine')?recordFocus:undefined} canTransfer={can('consultation:transfer')&&can('transfer:read')} onRequestTransfer={setTransferSource}
           activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>)}
         {customer && item && !showRecords ? <div className="interaction-workspace flex flex-1 min-w-0 min-h-0"><div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
           <CustomerRecordsWorkspace key={`inline:${organizationId}:${identity.subject}`} embedded historyMode active={Boolean(inlineRecordFocus)} focus={inlineRecordFocus}
             draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:inline-records`} customers={Object.values(customers)} organizationId={organizationId} accessKey={accessKey}
+            canRequestFollowUp={can('followup:read')&&can('followup:write')} onRequestFollowUp={(code,name)=>setFollowUpSource({code,name})}
             canRead={canReadConsultation} canWrite={can('consultation:write')} canEditCustomer={can('customer:write')&&!customerError}
             activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}
             onReturn={()=>{setInlineRecordFocus(null);if(unfinishedInteraction)selectQueue(unfinishedInteraction.id);}} onRecordSaved={()=>setTimelineRefresh(v=>v+1)}/>
@@ -521,6 +544,7 @@ export default function ConsultationWorkspacePage() {
           {draftError && <p role="alert" className="p-3 text-amber-300">{draftError}<button className="ml-2 underline" onClick={() => {setDraftReady({});setRefresh(v=>v+1);}}>초안 다시 조회</button></p>}
           {draftConflicts[item.id]&&writable&&<div className="p-3 bg-slate-900 text-sm" role="status"><p>저장된 기록이 변경되었습니다. 내 입력은 유지됩니다.</p><details><summary className="py-2">최신 서버 본문 확인</summary><p className="whitespace-pre-wrap">{documentText(draftConflicts[item.id].editorDocument||draftConflicts[item.id].memo)}</p></details><button disabled={busy} className="underline py-2" onClick={()=>{versions.current[item.id]=draftConflicts[item.id].version;setDraftConflicts(prev=>{const copy={...prev};delete copy[item.id];return copy;});}}>최신 버전에 내 입력 다시 적용 준비</button></div>}
           {writable&&can('consultation:transfer')&&can('transfer:read')&&<div className="transfer-record-header"><button disabled={busy||!draftReady[item.id]||Boolean(queueError)} onClick={requestQueueTransfer}>{item.type==='call'&&!item.callEnded?'통화 이관 요청':'업무 이관 요청'}</button><span className="text-sm text-slate-300">{item.type==='call'&&!item.callEnded?'음성 연결 확인까지 현재 통화를 유지합니다.':'변경한 내용은 먼저 저장해 주세요.'}</span></div>}
+          {canReadConsultation&&<RecordingPlayer key={item.id} queueCode={item.id} active={!showRecords&&!inlineRecordFocus&&currentTab==='workspace'} accessKey={accessKey} hideEmpty/>}
           {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId} contentRefresh={identityRefresh}
             initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} customerReadOnly={!can('customer:write')||customer.canEdit===false||Boolean(queueError)} busy={busy}
             callDuration={activeCall === item.id ? call.duration : 0} isCallActive={activeCall === item.id} mediaStatus={call.status} isMuted={call.isMuted} onMute={call.setMuted} onEndCall={endCall}
@@ -530,7 +554,7 @@ export default function ConsultationWorkspacePage() {
         </div><div className={`interaction-history flex flex-col w-96 shrink-0 min-h-0 ${mobilePanel==='history'?'mobile-visible':''}`}>
           {timelineError && <p role="alert" className="p-2 text-amber-300">{timelineError}<button className="ml-2 underline" onClick={() => setTimelineRefresh(v=>v+1)}>이력 다시 조회</button></p>}
           <ContextActionPanel key={item.id} organizationId={organizationId} identityKey={identity.subject} queueCode={item.id} onFollowUpCreated={followUpCreated} onOpenFollowUps={()=>setCurrentTab('followups')} timeline={timeline} customerName={customer.name} customerPhone={customer.phoneNumber} readOnly={!writable || !can('followup:read') || !can('followup:write') || busy || Boolean(queueError)}
-            onQuoteTimeline={text=>{setInlineRecordFocus(null);setQuotedText(text);}} onAddFollowUpAction={()=>notify('info','준비 중','메시지 발송은 후속 작업입니다.')} activeFollowUpTab={followupTab}
+            canQuote={Boolean(writable)&&can('consultation:write')&&!busy} onOpenDetail={entry=>{setTimelineDetail(entry);setQuoteError('');}} onQuoteTimeline={entry=>void quoteTimeline(entry)} onAddFollowUpAction={()=>notify('info','준비 중','메시지 발송은 후속 작업입니다.')} activeFollowUpTab={followupTab}
             onRequestTransfer={requestQueueTransfer} transferDisabled={!writable||!can('consultation:transfer')||!can('transfer:read')||busy||Boolean(queueError)||!draftReady[item.id]} transferIsCall={item.type==='call'&&!item.callEnded}/>
         </div></div> : null}
         {!showRecords&&!item&&<div className="interaction-workspace flex flex-1 min-w-0 min-h-0">
@@ -546,6 +570,7 @@ export default function ConsultationWorkspacePage() {
     </div>
   </div><ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
     <WorkTransferRequestDialog key={`${organizationId}:${identity.issuer}:${identity.subject}`} source={transferSource} organizationId={organizationId} issuer={identity.issuer||''} subject={identity.subject} accessKey={accessKey} allowed={can('consultation:transfer')&&can('transfer:read')&&Boolean(identity.issuer)} onClose={()=>setTransferSource(null)} onCreated={transferCreated}/>
+    <ConsultationDetailDialog key={`transfer-record:${organizationId}:${identity.subject}:${accessKey}`} open={Boolean(transferRecordFocus)} active={Boolean(transferRecordFocus)} readOnly focus={transferRecordFocus||undefined} onClose={()=>setTransferRecordFocus(null)} customers={Object.values(customers)} organizationId={organizationId} accessKey={accessKey} canRead={canReadConsultation} canWrite={false} canEditCustomer={false} onCustomerSaved={()=>{}} activeQueues={{}}/>
     {incomingTransfer&&can('transfer:read')&&<IncomingWorkTransfer key={incomingTransfer.id} task={incomingTransfer} onOpen={()=>openTransfer(incomingTransfer.id,'RECEIVED')} onDismiss={()=>setDismissedTransfers(prev=>[...prev,incomingTransfer.id])}/>}
     {!transferSource&&incoming&&can('queue:accept')&&<IncomingRequestModal key={incoming.offer!.id} item={incoming} busy={busy} blocked={queueError||agentError||receivingBlocked} onAccept={()=>accept(incoming)} onReject={()=>reject(incoming)} onReceived={markReceived}
       onDismiss={()=>{setDismissedOffers(prev=>[...prev,incoming.offer!.id]);setCurrentTab('workspace');setMobilePanel('queue');}}/>}

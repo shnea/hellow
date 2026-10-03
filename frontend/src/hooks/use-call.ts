@@ -2,9 +2,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiJson,jsonBody } from '@/lib/api';
 import { LiveKitCallSession } from '@/lib/livekit';
+import {useCallClock} from './use-call-clock';
+import {endCallOnPageExit} from '@/lib/call-exit';
 import {confirmedTransfer,transferJson,type WorkTransfer} from '@/lib/work-transfer';
 
-interface CallOptions {organizationId?:string;mediaIdentity?:string|null;transfer?:WorkTransfer|null;onTransferChanged?:(task:WorkTransfer)=>void;}
+interface CallOptions {organizationId?:string;mediaIdentity?:string|null;callStartedAt?:string|null;callEndedAt?:string|null;transfer?:WorkTransfer|null;onTransferChanged?:(task:WorkTransfer)=>void;}
 interface MediaToken {url:string;token:string;identity?:string;roomName?:string;}
 
 export function useCall(queueCode: string | null,options:CallOptions={}) {
@@ -13,7 +15,7 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
   const session = useRef<LiveKitCallSession | null>(null);
   const lease = useRef<Promise<unknown> | null>(null);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
-  const [duration, setDuration] = useState(0);
+  const duration=useCallClock(options.callStartedAt,options.callEndedAt);
   const [error, setError] = useState('');
   const [restart,setRestart]=useState(0);
   const [audioBlocked,setAudioBlocked]=useState(false);
@@ -23,7 +25,6 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
   useEffect(() => {
     // Synchronize the independent media session lifecycle when its queue changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDuration(0);
     setError('');
     setAudioBlocked(false);setAudioError('');
     const muteKey=JSON.stringify([organizationId,queueCode]);
@@ -31,10 +32,13 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
     setIsMuted(mutePreference.current.muted);
     if (!queueCode) { setStatus('idle'); return; }
     let active = true;
+    let connected=false;
+    const leave=()=>{if(active&&connected)endCallOnPageExit(`/api/queue/${queueCode}/end-call`,organizationId);};
+    window.addEventListener('pagehide',leave);
     const call = new LiveKitCallSession({ onConnected: () => {if(active){setStatus('connected');setError('');}},
       onConnectionStateChanged: state=>{if(active&&state==='reconnecting')setStatus('connecting');},
       onAudioPlaybackChanged: allowed=>{if(active){setAudioBlocked(!allowed);if(allowed)setAudioError('');}},
-      onDisconnected: () => active && setStatus('idle'), onError: err => {if(active){setError(err.message);setStatus('error');}} });
+      onDisconnected: () => {connected=false;if(active)setStatus('idle');}, onError: err => {if(active){setError(err.message);setStatus('error');}} });
     session.current = call;
     setStatus('connecting');
     const abort = new AbortController();
@@ -57,6 +61,7 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
       if(!active)return;
       await call.connect(data.url,data.token,mutePreference.current.muted);
       if(!active)return;
+      connected=true;
       setStatus('connected');
       // Keep this exact room and its browser lease when CONNECTING becomes ACCEPTED.
       while(active&&preview?.status==='CONNECTING') {
@@ -89,13 +94,8 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
     })();
     lease.current=start;
     void start.catch(err => { if(active) { setError((err as Error).message); setStatus('error'); } });
-    return () => { active = false; abort.abort(); release?.(); call.disconnect(); session.current = null; };
+    return () => { window.removeEventListener('pagehide',leave);active = false; abort.abort(); release?.(); call.disconnect(); session.current = null; };
   }, [queueCode,mediaIdentity,organizationId,restart]);
-  useEffect(() => {
-    if (status !== 'connected') return;
-    const timer = setInterval(() => setDuration(value => value + 1), 1000);
-    return () => clearInterval(timer);
-  }, [status]);
   const setMuted=async(muted:boolean)=>{
     const call=session.current;if(!call)throw new Error('음성 연결을 먼저 확인해 주세요.');
     await call.setMuted(muted);

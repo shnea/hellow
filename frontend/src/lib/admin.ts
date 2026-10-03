@@ -4,9 +4,9 @@ export type DataScope = 'SELF'|'TEAM'|'ORGANIZATION';
 export const scopeLabels:Record<DataScope,string> = {SELF:'본인',TEAM:'소속 팀·하위 팀',ORGANIZATION:'조직 전체'};
 export interface AdminTeam {id:string;name:string;parentId:string|null;active:boolean;version:number;}
 export interface AdminRole {id:string;name:string;grants:Record<string,DataScope>;active:boolean;version:number;}
-export interface AdminMember { id: number; subject: string; displayName: string | null; permissions: string[]; active: boolean; version: number; teamId:string|null;roleIds:string[];dataScope:DataScope;effectiveScopes?:Record<string,DataScope>; }
+export interface AdminMember { id: number; subject: string; loginId?:string|null; displayName: string | null; permissions: string[]; active: boolean; version: number; teamId:string|null;roleIds:string[];dataScope:DataScope;effectiveScopes?:Record<string,DataScope>; }
 export interface AdminInvitation { id: string; recipientEmail: string; expiresAt: string; cancelled: boolean; acceptedSubject: string | null; }
-export interface AdminEvent { id: number; occurredAt: string; action: string; actorSubject: string; target: string | null; details: string | null; }
+export interface AdminEvent { id: number; occurredAt: string; action: string; actorName?: string;actorSubject?: string; target: string | null; details: string | null; }
 export interface SettingsView { version: number; overrides: Record<string,string>; effective: Record<string,string>; }
 export const permissionLabels: Record<string,string> = {
   'recording:read':'통화 녹음 재생·다운로드', 'recording:manage':'통화 녹음 저장 재시도',

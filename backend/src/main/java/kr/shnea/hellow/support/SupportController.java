@@ -24,11 +24,13 @@ public class SupportController {
   private final com.fasterxml.jackson.databind.ObjectMapper json;
   private final int pendingLimit;
   private final CustomerIdentityService customerIdentity;
+  private final StaffNames staffNames;
 
   public SupportController(
       QueueItemRepository queues, OrganizationRepository organizations, LiveKitService media,
       kr.shnea.hellow.settings.SupportSettingsService settings,java.time.Clock clock,com.fasterxml.jackson.databind.ObjectMapper json,
-      @org.springframework.beans.factory.annotation.Value("${hellow.public-pending-limit:100}") int pendingLimit,CustomerIdentityService customerIdentity) {
+      @org.springframework.beans.factory.annotation.Value("${hellow.public-pending-limit:100}") int pendingLimit,CustomerIdentityService customerIdentity,StaffNames staffNames) {
+    this.staffNames=staffNames;
     this.queues = queues;
     this.organizations = organizations;
     this.media = media;
@@ -143,6 +145,7 @@ public class SupportController {
         || q.isCallEnded()
         || q.getType() != QueueItem.ItemType.CALL)
       throw new ResponseStatusException(CONFLICT, "연결 가능한 통화가 아닙니다.");
+    q.requestMedia(clock.instant());
     return media.createToken(
         q.getOrganizationId() + "-" + q.getCode(),
         "customer-" + q.getCode(),
@@ -163,10 +166,11 @@ public class SupportController {
             ? "CALL_ENDED"
             : q.getStatus().name(),
         "assignedAgent",
-        q.getAssignedAgent() == null ? "" : q.getAssignedAgent(),
+        q.getAssignedSubject() == null ? "" : staffNames.resolve(q.getOrganizationId(),q.getOwnerIssuer(),q.getOwnerSubject(),q.getAssignedAgent()),
         "channel",q.getType()==QueueItem.ItemType.CALL?"CALL":"CHAT",
         "waitingCount",count));
     result.put("expiresAt",q.getSupportExpiresAt());
+    result.put("callStartedAt",q.getCallStartedAt());result.put("callEndedAt",q.getCallEndedAt());
     return result;
   }
 

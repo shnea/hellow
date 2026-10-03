@@ -6,7 +6,7 @@ import './followup.css';
 
 export function FollowUpRequestForm({organizationId,identityKey,queueCode,actionType,disabled,onCreated,onOpenList}:{
   organizationId:string;identityKey:string;queueCode:string;actionType:FollowUpType;disabled:boolean;
-  onCreated:(task:FollowUp)=>void;onOpenList:()=>void;
+  onCreated:(task:FollowUp)=>void;onOpenList?:()=>void;
 }){
   const key=`hellow_followup_pending:${organizationId}:${identityKey}:${queueCode}:${actionType}`;
   const [title,setTitle]=useState('');const [details,setDetails]=useState('');const [proposed,setProposed]=useState('');
@@ -56,7 +56,7 @@ export function FollowUpRequestForm({organizationId,identityKey,queueCode,action
       {pending&&<p role="status">응답을 확인하지 못한 요청을 보관하고 있습니다. 같은 내용으로 접수 결과를 다시 확인하세요.</p>}
       {error&&<p role="alert" className="followup-error">{error}</p>}{notice&&<p role="status">{notice}</p>}
       {pending&&canRevise&&<button type="button" disabled={busy} onClick={()=>{try{sessionStorage.removeItem(key);setPending(null);setCanRevise(false);setError('');}catch(e){setError((e as Error).message);}}}>접수되지 않은 요청의 입력 수정</button>}
-      <div className="followup-actions"><button className="followup-primary" disabled={disabled||busy||!ready||storageError}>{busy?'접수 확인 중…':pending?'동일 요청 접수 확인':'요청 접수'}</button><button type="button" onClick={onOpenList}>예약 목록 열기</button></div>
+      <div className="followup-actions"><button className="followup-primary" disabled={disabled||busy||!ready||storageError}>{busy?'접수 확인 중…':pending?'동일 요청 접수 확인':'요청 접수'}</button>{onOpenList&&<button type="button" onClick={onOpenList}>예약 목록 열기</button>}</div>
     </form>
   </section>;
 }

@@ -44,6 +44,8 @@ export class LiveKitCallSession {
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
+      // Keep one playback context while a handoff replaces remote agent tracks.
+      webAudioMix: true,
     });
     this.room = room;
 

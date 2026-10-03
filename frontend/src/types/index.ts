@@ -11,6 +11,7 @@ export interface QueueItem {
   assignedSubject?: string | null;
   assignedAgent?: string | null;
   callEnded?: boolean;
+  callStartedAt?:string|null;callEndedAt?:string|null;
   version?: number;
   offer?: {id:string;subject:string;name:string;expiresAt:string;received:boolean}|null;
   canAccept?:boolean;
@@ -51,6 +52,7 @@ export interface CustomerProfile {
 export type TimelineChannel = 'all' | 'call' | 'email' | 'chat' | 'ticket';
 
 export interface TimelineItem {
+  recordId?:number;recordingStatus?:string;
   queueCode?:string|null;
   id: string;
   date: string;

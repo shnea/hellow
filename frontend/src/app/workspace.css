@@ -19,8 +19,8 @@
   .interaction-history { display:none; }
   .interaction-history.mobile-visible { display:flex;width:100%; }
   .interaction-editor:has(+.interaction-history.mobile-visible) { display:none; }
-  .workspace-mobile-tabs { display:flex; }
-  .workspace-mobile-tabs button { min-height:44px;padding:8px; }
+  .workspace-mobile-tabs { display:flex;overflow-x:auto;flex-shrink:0; }
+  .workspace-mobile-tabs button { min-height:44px;padding:8px;white-space:nowrap;flex-shrink:0; }
 }
 @media (max-width:1023px) {
   .active-workspace .quick-tags,.active-workspace .template-controls,.active-workspace .record-status-controls { display:none; }

@@ -18,7 +18,7 @@ public class WorkTransferController {
   @GetMapping("/request/{requestId}") public WorkTransferService.View requested(@PathVariable String requestId){return service.requested(requestId);}
   @GetMapping("/assignees") public java.util.List<WorkTransferService.Assignee> assignees(@RequestParam Long consultationId){return service.assignees(consultationId);}
   @GetMapping("/{id}") public WorkTransferService.View get(@PathVariable String id){return service.get(id);}
-  @GetMapping("/{id}/history") public java.util.List<WorkTransferEvent> history(@PathVariable String id,@RequestParam(defaultValue="0") int page){return service.history(id,page);}
+  @GetMapping("/{id}/history") public java.util.List<WorkTransferService.EventView> history(@PathVariable String id,@RequestParam(defaultValue="0") int page){return service.history(id,page);}
   @PostMapping("/{id}/accept") public WorkTransferService.View accept(@PathVariable String id,@Valid @RequestBody Command c){return service.command(id,c,WorkTransfer.Status.ACCEPTED);}
   @PostMapping("/{id}/reject") public WorkTransferService.View reject(@PathVariable String id,@Valid @RequestBody Command c){return service.command(id,c,WorkTransfer.Status.REJECTED);}
   @PostMapping("/{id}/cancel") public WorkTransferService.View cancel(@PathVariable String id,@Valid @RequestBody Command c){return service.command(id,c,WorkTransfer.Status.CANCELLED);}

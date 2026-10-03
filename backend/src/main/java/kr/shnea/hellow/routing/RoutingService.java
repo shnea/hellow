@@ -40,7 +40,7 @@ public class RoutingService {
       String activeOrganizationId,Instant heartbeatExpiresAt,Instant availableSince,
       String queueCode,String attemptId,Instant offerExpiresAt,Long followUpId,String workTransferId){}
   public record OfferView(String id,String subject,String name,Instant expiresAt,boolean received){}
-  public record QueueView(@com.fasterxml.jackson.annotation.JsonUnwrapped QueueItem item,OfferView offer,boolean canAccept,boolean routingPaused,int attemptCount){}
+  public record QueueView(@com.fasterxml.jackson.annotation.JsonUnwrapped QueueItem item,OfferView offer,boolean canAccept,boolean routingPaused,int attemptCount,String assignedDisplayName){}
   public record AttemptView(String id,String agentSubject,String agentName,Instant offeredAt,
       Instant expiresAt,Instant receivedAt,Instant finishedAt,AssignmentAttempt.Outcome outcome,int routingCycle){}
 
@@ -257,11 +257,11 @@ public class RoutingService {
     var grants=actor.grants();
     return rows.stream().map(q->{
       var a=attempts.activeForQueue(actor.organizationId(),q.getCode());
-      var offer=a.map(row->new OfferView(row.getId(),row.getAgentSubject(),row.getAgentName(),row.getExpiresAt(),row.getReceivedAt()!=null)).orElse(null);
+      var offer=a.map(row->new OfferView(row.getId(),row.getAgentSubject(),new StaffNames(members).resolve(q.getOrganizationId(),row.getAgentIssuer(),row.getAgentSubject(),row.getAgentName()),row.getExpiresAt(),row.getReceivedAt()!=null)).orElse(null);
       var count=history(q).size();
       boolean can=grants.containsKey("queue:accept")&&ready&&q.getStatus()==QueueItem.QueueStatus.WAITING&&eligibleQueue(actor,q)&&
         (a.isPresent()?a.get().belongsTo(actor.issuer(),actor.subject())&&a.get().getExpiresAt().isAfter(now):ownOffer.isEmpty()&&count<MAX_ATTEMPTS);
-      return new QueueView(q,offer,can,a.isEmpty()&&count>=MAX_ATTEMPTS,count);
+      return new QueueView(q,offer,can,a.isEmpty()&&count>=MAX_ATTEMPTS,count,new StaffNames(members).resolve(q.getOrganizationId(),q.getOwnerIssuer(),q.getOwnerSubject(),q.getAssignedAgent()));
     }).toList();
   }
 
@@ -270,6 +270,6 @@ public class RoutingService {
     var q=queues.findByOrganizationIdAndCode(actor.organizationId(),code).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
     actor.requireRow(q);
     return attempts.findTop100ByOrganizationIdAndQueueCodeOrderByOfferedAtDesc(actor.organizationId(),code).stream()
-      .map(a->new AttemptView(a.getId(),a.getAgentSubject(),a.getAgentName(),a.getOfferedAt(),a.getExpiresAt(),a.getReceivedAt(),a.getFinishedAt(),a.getOutcome(),a.getRoutingCycle())).toList();
+      .map(a->new AttemptView(a.getId(),a.getAgentSubject(),new StaffNames(members).resolve(a.getOrganizationId(),a.getAgentIssuer(),a.getAgentSubject(),a.getAgentName()),a.getOfferedAt(),a.getExpiresAt(),a.getReceivedAt(),a.getFinishedAt(),a.getOutcome(),a.getRoutingCycle())).toList();
   }
 }

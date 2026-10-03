@@ -15,5 +15,6 @@ public class WorkTransferEvent {
   @Column(nullable=false,length=2000) private String reason;
   protected WorkTransferEvent(){}
   WorkTransferEvent(WorkTransfer transfer,WorkspaceAccess.Actor actor,String action,String reason,Instant now){organizationId=transfer.getOrganizationId();transferId=transfer.getId();this.action=action;this.reason=reason;actorIssuer=actor.issuer();actorSubject=actor.subject();actorName=actor.name();occurredAt=now;}
+  public String getActorIssuer(){return actorIssuer;} public String getActorSubject(){return actorSubject;}
   public Long getId(){return id;} public String getAction(){return action;} public String getReason(){return reason;} public String getActorName(){return actorName;} public Instant getOccurredAt(){return occurredAt;}
 }

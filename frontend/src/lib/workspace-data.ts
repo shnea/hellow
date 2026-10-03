@@ -1,11 +1,12 @@
 import type { CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
-export interface ServerQueue {
+export interface ServerQueue { assignedDisplayName?:string;
   code: string; customerCode: string | null; type: string; customerType: string;
   customerName: string; companyName: string | null; phoneNumber: string;
   waitTimeOrSchedule: string; priority: QueueItem['priority']; summary: string;
   unread: boolean; registered: boolean; complainant: boolean;
   status: QueueItem['status']; assignedSubject: string | null; assignedAgent: string | null;
+  callStartedAt?:string|null;callEndedAt?:string|null;
   callEnded: boolean; version: number;mediaAgentIdentity?:string|null;
   offer?:QueueItem['offer'];canAccept?:boolean;routingPaused?:boolean;attemptCount?:number;
 }
@@ -23,7 +24,7 @@ export function queueItem(q: ServerQueue): QueueItem {
     companyName: q.companyName || '', phoneNumber: q.phoneNumber, waitTimeOrSchedule: q.waitTimeOrSchedule,
     priority: q.priority, summary: q.summary, unread: q.unread, isRegistered: q.registered,
     isComplainant: q.complainant, status: q.status, assignedSubject: q.assignedSubject,
-    assignedAgent: q.assignedAgent, callEnded: q.callEnded, version: q.version,mediaAgentIdentity:q.mediaAgentIdentity,
+    assignedAgent: q.assignedDisplayName||q.assignedAgent, callEnded: q.callEnded,callStartedAt:q.callStartedAt,callEndedAt:q.callEndedAt, version: q.version,mediaAgentIdentity:q.mediaAgentIdentity,
     offer:q.offer,canAccept:q.canAccept,routingPaused:q.routingPaused,attemptCount:q.attemptCount };
 }
 export function customerProfile(c: ServerCustomer): CustomerProfile {
@@ -37,9 +38,9 @@ export function requestProfile(q: QueueItem): CustomerProfile {
     company: q.companyName, phoneNumber: q.phoneNumber, email: '', tier: 'Standard', lastContactDate: '첫 접수',
     totalCalls: 0, managerName: q.assignedAgent || '미배정', customerNotes: q.summary, isComplainant: q.isComplainant };
 }
-export interface ServerTimeline { queueCode?:string|null; id: number; createdAt: string; channel: string; agentName: string; title: string; content: string; hasAudio: boolean; audioDuration: string; tags: string | null; }
+export interface ServerTimeline { recordId?:number;recordingStatus?:string; queueCode?:string|null; id: number; createdAt: string; channel: string; agentName: string; title: string; content: string; hasAudio: boolean; audioDuration: string; tags: string | null; }
 export function timelineItem(t: ServerTimeline): TimelineItem {
-  return { id: String(t.id), queueCode:t.queueCode, date: new Date(t.createdAt).toLocaleString('ko-KR'), channel: t.channel.toLowerCase() as TimelineItem['channel'],
+  return { id: String(t.id),recordId:t.recordId,recordingStatus:t.recordingStatus, queueCode:t.queueCode, date: new Date(t.createdAt).toLocaleString('ko-KR'), channel: t.channel.toLowerCase() as TimelineItem['channel'],
     agentName: t.agentName, title: t.title, content: t.content, hasAudio: t.hasAudio, audioDuration: t.audioDuration, tags: t.tags?.split(',') || [] };
 }
 export interface ConsultationDraft {

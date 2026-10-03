@@ -7,7 +7,7 @@ import { PhoneIncoming, CalendarClock, TicketCheck, PhoneCall, Filter } from 'lu
 import { QueueItem, QueueItemType } from '../types';
 
 interface QueuePanelProps {
-  queueItems: QueueItem[];
+  canRead?:boolean;queueItems: QueueItem[];
   selectedQueueId: string;
   onSelectQueueItem: (id: string) => void;
   onAcceptCall?: (item: QueueItem) => void;
@@ -19,7 +19,7 @@ interface QueuePanelProps {
 }
 
 export const QueuePanel: React.FC<QueuePanelProps> = ({
-  queueItems,
+  queueItems,canRead=true,
   selectedQueueId,
   onSelectQueueItem,
   onAcceptCall,
@@ -36,17 +36,17 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   const [historyError,setHistoryError]=useState('');
   const [retry,setRetry]=useState(0);
   useEffect(()=>{
-    if(!organizationId||!['ALL','COMPLETED','CANCELLED'].includes(statusFilter))return;
+    if(!canRead||!organizationId||!['ALL','COMPLETED','CANCELLED'].includes(statusFilter))return;
     const abort=new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHistoryLoading(true);setHistoryError('');
     apiJson<{items:ServerQueue[];hasMore:boolean}>(`/api/queue/history?status=${statusFilter}&page=${page}`,{signal:abort.signal,headers:{'X-Organization-ID':organizationId}})
       .then(result=>{if(!abort.signal.aborted){setHistory(prior=>page===0?result.items.map(queueItem):Array.from(new Map([...prior,...result.items.map(queueItem)].map(item=>[item.id,item])).values()));setHasMore(result.hasMore);}})
-      .catch(error=>{if(!abort.signal.aborted)setHistoryError(error.message);})
+      .catch(error=>{if(!abort.signal.aborted){setHistory([]);setHasMore(false);setHistoryError(error.message);}})
       .finally(()=>{if(!abort.signal.aborted)setHistoryLoading(false);});
     return()=>abort.abort();
-  },[organizationId,statusFilter,page,historyRefresh,retry]);
-  const statusItems=statusFilter==='ALL'?[...queueItems,...history]:statusFilter==='COMPLETED'||statusFilter==='CANCELLED'?history:
+  },[canRead,organizationId,statusFilter,page,historyRefresh,retry]);
+  const statusItems=!canRead?[]:statusFilter==='ALL'?[...queueItems,...history]:statusFilter==='COMPLETED'||statusFilter==='CANCELLED'?history:
     statusFilter==='ACTIVE'?queueItems:queueItems.filter(item=>item.status===statusFilter);
 
   const filteredItems = statusItems.filter((item) => {
@@ -57,6 +57,8 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   const liveCallCount = statusItems.filter((i) => i.type === 'call').length;
   const callbackCount = statusItems.filter((i) => i.type === 'callback').length;
   const ticketCount = statusItems.filter((i) => i.type === 'ticket').length;
+
+  if(!canRead)return <section className="queue-panel w-80 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full p-4"><h2 className="font-bold text-sm">처리 대기열</h2><p role="status" className="mt-4 text-sm text-slate-400">처리 대기열 조회 권한이 없습니다.</p></section>;
 
   return (
     <section className="queue-panel w-80 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none">

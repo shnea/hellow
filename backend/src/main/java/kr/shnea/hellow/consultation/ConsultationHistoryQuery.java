@@ -13,6 +13,7 @@ public class ConsultationHistoryQuery {
   }
   public List<Long> ids(WorkspaceAccess.Actor actor,int page,String search,String name,String phone,String status,String assignee,java.time.Instant from,java.time.Instant to){
     var args=new HashMap<String,Object>();args.put("org",actor.organizationId());args.put("issuer",actor.issuer());args.put("subject",actor.subject());args.put("teams",actor.teamIds().isEmpty()?Set.of(""):actor.teamIds());
+    args.put("participatedRecords",actor.participatedRecords().isEmpty()?Set.of(-1L):actor.participatedRecords());args.put("participatedQueues",actor.participatedQueues().isEmpty()?Set.of(""):actor.participatedQueues());
     args.put("term","%"+search.trim().toLowerCase(Locale.ROOT).replace("!","!!").replace("%","!%").replace("_","!_")+"%");args.put("offset",page*50);
     args.put("name",term(name));args.put("phone",term(phone));args.put("assignee",term(assignee));args.put("status",status);
     String sql="select h.id from (select c.id,c.created_at,c.customer_code,c.queue_code,c.category_sub,cast(c.status as varchar) status,c.agent_name,c.owner_subject from consultations c where "+scope(actor,"c")+
@@ -34,6 +35,7 @@ public class ConsultationHistoryQuery {
     if(a.dataScope()==DataScope.ORGANIZATION)return tenant;
     String owner="("+alias+".owner_issuer=:issuer and "+alias+".owner_subject=:subject)";
     if(a.dataScope()==DataScope.TEAM)owner="("+owner+" or "+alias+".team_id in (:teams))";
+    if(a.participationReadable())owner="("+owner+" or "+alias+(alias.equals("c")?".id in (:participatedRecords)":".code in (:participatedQueues)")+")";
     return tenant+" and "+owner;
   }
 }

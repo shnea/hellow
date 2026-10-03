@@ -23,6 +23,12 @@ it('holds a single media lease across windows and does not request a duplicate t
 const pending={id:'12345678-1234-4123-8123-abcdefabcdef',kind:'CALL',organizationId:'org',consultationId:1,queueCode:'q-one',version:1,status:'CONNECTING',targetMediaIdentity:'transfer-one'} as WorkTransfer;
 function locks(){let held=false;vi.stubGlobal('navigator',{locks:{request:vi.fn(async(_n:string,_o:unknown,cb:(lock:object|null)=>Promise<void>)=>{if(held)return cb(null);held=true;try{return await cb({});}finally{held=false;}})}});return ()=>held;}
 const flush=async()=>{await act(async()=>{for(let i=0;i<8;i++)await Promise.resolve();});};
+it('ends the connected call on document exit, while ordinary rerenders do not end it',async()=>{
+ locks();const fetcher=vi.fn(async()=>new Response(null,{status:200}));vi.stubGlobal('fetch',fetcher);
+ const view=render(<Call code="q-one" identity="agent-one"/>);await flush();view.rerender(<Call code="q-one" identity="agent-one"/>);await flush();expect(fetcher).not.toHaveBeenCalled();
+ fireEvent(window,new Event('pagehide'));expect(fetcher).toHaveBeenCalledWith('/api/queue/q-one/end-call',expect.objectContaining({method:'POST',keepalive:true}));
+ view.unmount();fetcher.mockClear();fireEvent(window,new Event('pagehide'));expect(fetcher).not.toHaveBeenCalled();
+});
 it('retains mute on reconnect and resets it for a different call',async()=>{
   locks();
   function Controls({code}:{code:string}){const c=useCall(code);return <><span>{c.isMuted?'muted':'unmuted'}</span><button onClick={()=>void c.setMuted(true)}>mute</button><button onClick={c.retry}>retry</button></>;}

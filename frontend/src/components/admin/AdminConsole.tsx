@@ -10,7 +10,7 @@ import { TemplateManagement } from './TemplateManagement';
 import { StructureManagement } from './StructureManagement';
 import './admin.css';
 
-interface Identity {subject:string;name:string;platformAdmin:boolean;}
+interface Identity {subject:string;loginId?:string;name:string;platformAdmin:boolean;}
 interface Impact {organizationId:string;name:string;inherited:string[];}
 export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrganizationId}:{platform?:boolean;onWorkspace?:()=>void;embedded?:boolean;fixedOrganizationId?:string}) {
   const [identity,setIdentity]=useState<Identity|null>(null);const [organizations,setOrganizations]=useState<AdminOrganization[]>([]);
@@ -24,7 +24,7 @@ export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrg
   useEffect(()=>{
     const abort=new AbortController();
     Promise.all([apiJson<Identity>('/api/me',{signal:abort.signal}),apiJson<AdminOrganization[]>('/api/admin/organizations',{signal:abort.signal})])
-      .then(([me,orgs])=>{if(abort.signal.aborted)return;setIdentity(me);setAdminSubject(me.subject);setOrganizations(orgs);
+      .then(([me,orgs])=>{if(abort.signal.aborted)return;setIdentity(me);setAdminSubject(me.loginId||'');setOrganizations(orgs);
         const prior=sessionStorage.getItem('hellow_organization_id');
         selected.current=fixedOrganizationId?(orgs.find(o=>o.id===fixedOrganizationId)?.id||''):orgs.find(o=>o.id===prior)?.id||orgs[0]?.id||'';setOrganizationId(selected.current);
         if(platform&&!me.platformAdmin)setError('최고관리자 권한이 없습니다. 조직 관리 화면을 이용해 주세요.');
@@ -66,7 +66,7 @@ export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrg
       {platform&&<section className="admin-section"><h2>조직 생성</h2><form className="admin-form" onSubmit={e=>{e.preventDefault();void createOrganization();}}>
         <div className="admin-form-grid"><label>조직 이름<input required maxLength={150} value={orgName} disabled={busy} onChange={e=>setOrgName(e.target.value)}/></label>
         <label>최초 관리자 계정 ID<input required maxLength={255} value={adminSubject} disabled={busy} onChange={e=>setAdminSubject(e.target.value)}/></label></div>
-        <p>현재 계정 ID가 기본으로 입력됩니다. 최초 관리자에게 조직 업무 권한이 부여됩니다.</p>
+        <p>확인된 로그인 아이디가 기본으로 입력됩니다. 최초 관리자에게 조직 업무 권한이 부여됩니다.</p>
         <button className="admin-primary" disabled={busy}>{busy?'생성 중…':'조직 생성'}</button></form>{message&&<p role="status" className="admin-success">{message}</p>}
         <h3>등록된 조직</h3><ul className="admin-organization-list">{organizations.map(o=><li key={o.id}><strong>{o.name}</strong><span>{o.active?'활성':'중지'}</span><code>{o.id}</code></li>)}</ul>
       </section>}
@@ -88,7 +88,7 @@ export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrg
         </>}
         {settings&&tab==='audit'&&<section className="admin-section"><h2>로그인·변경 이력</h2><p>CRM에서 확인한 로그인·로그아웃 요청·조직 진입과 관리 변경의 최근 100건입니다. 플랫폼 전체 인증 이력과는 별개입니다.</p>
           {!events.length?<p>아직 기록된 이력이 없습니다. 로그인하거나 설정을 변경하면 표시됩니다.</p>:<div className="admin-table-scroll"><table><thead><tr><th>시각</th><th>작업</th><th>계정</th><th>변경 내용</th></tr></thead><tbody>
-          {events.map(e=><tr key={e.id}><td>{new Date(e.occurredAt).toLocaleString('ko-KR')}</td><td>{actionLabels[e.action]||e.action}</td><td>{e.actorSubject}</td><td>{e.details}</td></tr>)}
+          {events.map(e=><tr key={e.id}><td>{new Date(e.occurredAt).toLocaleString('ko-KR')}</td><td>{actionLabels[e.action]||e.action}</td><td>{e.actorName||'이름 미확인 직원'}</td><td>{e.details}</td></tr>)}
           </tbody></table></div>}</section>}
       </>}
     </>}

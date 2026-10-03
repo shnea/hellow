@@ -38,7 +38,8 @@ public class WorkTransferService {
     this.organizations=organizations;this.lock=lock;this.presence=presence;this.attempts=attempts;this.followups=followups;this.audits=audits;this.json=json;this.clock=clock;this.media=media;
     this.transactions=new org.springframework.transaction.support.TransactionTemplate(transactionManager);
   }
-  public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped WorkTransfer transfer,boolean canAccept,boolean canReject,boolean canCancel,boolean canReadRecord){}
+  public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"fromName","toName","requesterName"}) WorkTransfer transfer,boolean canAccept,boolean canReject,boolean canCancel,boolean canReadRecord,String fromName,String toName,String requesterName){}
+  public record EventView(@com.fasterxml.jackson.annotation.JsonUnwrapped @com.fasterxml.jackson.annotation.JsonIgnoreProperties("actorName") WorkTransferEvent event,String actorName){}
   public record Page(List<View> items,int page,boolean hasMore){}
   public enum Direction {ALL,SENT,RECEIVED}
   public record Assignee(Long memberId,String name,String teamId){}
@@ -113,8 +114,8 @@ public class WorkTransferService {
     var result=transfers.findAll(scope,PageRequest.of(page,50,Sort.by(Sort.Direction.DESC,"requestedAt").and(Sort.by("id"))));
     return new Page(result.getContent().stream().map(t->view(t,actor)).toList(),page,result.hasNext());
   }
-  @Transactional(readOnly=true) public List<WorkTransferEvent> history(String id,int page){
-    page(page);var actor=access.require("transfer:read");read(actor,id);return events.findByOrganizationIdAndTransferIdOrderByIdDesc(actor.organizationId(),id,PageRequest.of(page,50));
+  @Transactional(readOnly=true) public List<EventView> history(String id,int page){
+    page(page);var actor=access.require("transfer:read");read(actor,id);return events.findByOrganizationIdAndTransferIdOrderByIdDesc(actor.organizationId(),id,PageRequest.of(page,50)).stream().map(e->new EventView(e,new StaffNames(members).resolve(actor.organizationId(),e.getActorIssuer(),e.getActorSubject(),e.getActorName()))).toList();
   }
   @Transactional(readOnly=true) public List<Assignee> assignees(Long recordId){
     return assignees(recordId,false);
@@ -229,7 +230,7 @@ public class WorkTransferService {
       &&records.findByOrganizationIdAndId(actor.organizationId(),t.getConsultationId()).map(r->maySend(actor,r)).orElse(false);}
   private View view(WorkTransfer t,WorkspaceAccess.Actor actor){
     boolean pending=t.pending();var record=records.findByOrganizationIdAndId(actor.organizationId(),t.getConsultationId());
-    return new View(t,t.getStatus()==WorkTransfer.Status.OFFERED&&recipient(t,actor)&&invalid(t)==null,pending&&recipient(t,actor),pending&&mayCancel(t,actor),record.map(r->actor.can("consultation:read",r)).orElse(false));
+    return new View(t,t.getStatus()==WorkTransfer.Status.OFFERED&&recipient(t,actor)&&invalid(t)==null,pending&&recipient(t,actor),pending&&mayCancel(t,actor),record.map(r->actor.can("consultation:read",r)).orElse(false),new StaffNames(members).resolve(actor.organizationId(),t.getFromIssuer(),t.getFromSubject(),t.getFromName()),new StaffNames(members).resolve(actor.organizationId(),t.getToIssuer(),t.getToSubject(),t.getToName()),new StaffNames(members).resolve(actor.organizationId(),t.getRequesterIssuer(),t.getRequesterSubject(),t.getRequesterName()));
   }
   private WorkTransfer read(WorkspaceAccess.Actor actor,String id){return transfers.findOne(scope(actor).and(BusinessScope.equal("id",id))).orElseThrow(()->new ResponseStatusException(NOT_FOUND));}
   private Specification<WorkTransfer> scope(WorkspaceAccess.Actor actor){

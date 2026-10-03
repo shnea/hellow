@@ -43,7 +43,8 @@ public class FollowUpService {
     this.members=members;this.organizations=organizations;this.routingLock=routingLock;
     this.presence=presence;this.attempts=attempts;this.audits=audits;this.json=json;this.clock=clock;this.transfers=transfers;
   }
-  public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped FollowUpAction task,boolean canWrite,boolean canAssign,boolean canProcess,String contactName,String phoneNumber){}
+  public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"assignedName","creatorName"}) FollowUpAction task,boolean canWrite,boolean canAssign,boolean canProcess,String contactName,String phoneNumber,String assignedName,String creatorName){}
+  public record EventView(@com.fasterxml.jackson.annotation.JsonUnwrapped @com.fasterxml.jackson.annotation.JsonIgnoreProperties("actorName") FollowUpEvent event,String actorName){}
   public record Page(List<View> items,int page,boolean hasMore){}
   public record Assignee(Long memberId,String name,String teamId){}
   public record Active(boolean processing,Long id){}
@@ -115,9 +116,9 @@ public class FollowUpService {
   @Transactional(readOnly=true)
   public View get(Long id){var actor=access.require("followup:read");return view(visible(id,actor),actor);}
   @Transactional(readOnly=true)
-  public List<FollowUpEvent> history(Long id,int page){
+  public List<EventView> history(Long id,int page){
     var actor=access.require("followup:read");visible(id,actor);
-    return events.findByOrganizationIdAndFollowUpIdOrderByIdDesc(actor.organizationId(),id,PageRequest.of(page,50));
+    return events.findByOrganizationIdAndFollowUpIdOrderByIdDesc(actor.organizationId(),id,PageRequest.of(page,50)).stream().map(e->new EventView(e,new StaffNames(members).resolve(actor.organizationId(),e.getActorIssuer(),e.getActorSubject(),e.getActorName()))).toList();
   }
   @Transactional(readOnly=true)
   public List<Assignee> assignees(){
@@ -210,7 +211,7 @@ public class FollowUpService {
   private View view(FollowUpAction task,WorkspaceAccess.Actor actor){
     boolean write=actor.can("followup:read",task)&&actor.can("followup:write",task);
     var source=task.getQueueCode()==null?null:queues.findByOrganizationIdAndCode(task.getOrganizationId(),task.getQueueCode()).orElse(null);
-    return new View(task,write,write&&actor.can("followup:assign",task),write&&owned(task,actor),source==null?null:source.getCustomerName(),source==null?null:source.getPhoneNumber());
+    return new View(task,write,write&&actor.can("followup:assign",task),write&&owned(task,actor),source==null?null:source.getCustomerName(),source==null?null:source.getPhoneNumber(),task.getAssignedMemberId()==null?null:new StaffNames(members).resolve(actor.organizationId(),task.getOwnerIssuer(),task.getOwnerSubject(),task.getAssignedName()),new StaffNames(members).resolve(actor.organizationId(),task.getCreatorIssuer(),task.getCreatorSubject(),task.getCreatorName()));
   }
   private String requestKey(WorkspaceAccess.Actor actor,String requestId){
     return UUID.nameUUIDFromBytes((actor.organizationId()+"\n"+actor.issuer()+"\n"+actor.subject()+"\n"+requestId.toLowerCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8)).toString();

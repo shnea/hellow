@@ -15,6 +15,7 @@ it('keeps customer audio when the former agent leaves and removes every remainin
  const source=track('source'),customer=track('customer'),target=track('target');
  mocks.events.get('unsubscribe')!(source.audio);
  expect(source.element.isConnected).toBe(false);expect(customer.element.isConnected).toBe(true);expect(target.element.isConnected).toBe(true);
+ expect(mocks.capture).toHaveBeenCalledTimes(1);expect(mocks.stop).not.toHaveBeenCalled();expect(mocks.connect).toHaveBeenCalledTimes(1);
  call.disconnect();expect(customer.element.isConnected).toBe(false);expect(target.element.isConnected).toBe(false);expect(customer.audio.detach).toHaveBeenCalled();
 });
 it('reports a recoverable Korean connection error without exposing the SDK message',async()=>{
