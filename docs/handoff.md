@@ -1,5 +1,12 @@
 # 작업 인계 기록
 
+## 2026-10-03 LTE 경로 진단 — 공유기 전체 규칙 확인 대기
+
+- 사용자가 LTE로 새 통화를 시도해 PC 시간은 진행·휴대폰0초를 재현했다. 서버는 상담사 ACTIVE/마이크 송출, 고객 Chrome Mobile WebView Android는 연결 전 SIGNAL_SOURCE_CLOSE였다. 현 타이머는 각 클라이언트 연결 기준이므로 PC 시간만으로 양방향 연결 성공을 판정하지 않는다.
+- Windows PktMon에서 음성 호스트 TCP7881/UDP7882·3478만 counters-only로 측정했다. 실제 LTE 시도 동안 물리 Ethernet 및 모든 계층 수신0건. 도구 정상 여부를 확인하기 위해 공유기3478로 진단 UDP1개를 보내 물리 Realtek NIC Tx1/Rx0을 확인했다. 측정 종료·추가한 필터3개 정리 완료. 음성 내용은 수집하지 않았다.
+- 읽기 전용 UPnP로 ipTIME AX3000M의 실제 WAN IP118.36.243.220을 확인해 서버와 일치했다. GetSpecificPortMappingEntry는 수동 규칙까지 반환한다고 보장할 수 없으며714 응답을 규칙 부재의 증거로 해석하지 않는다. 브라우저 합성 통화의 실제 원격 ICE 후보에 공개IP TCP30163/UDP30164가 포함돼 광고값도 일치했다. 내부 PC/LAN TURN3478 응답·공개30167 timeout을 유지한다. LAN에서 공개 포트 실패만으로 외부망 전체 차단을 확정하지 않는다.
+- 공유기 사진의56~61번 입력값은 맞다. 앞쪽 범위 규칙과 상단 저장/적용 상태가 포함된 전체 화면을 사용자에게 요청했다. 현재 증거는 미전달/상위 차단 경로를 우선 지목하지만 공유기 충돌·적용 누락·LTE 클라이언트 송신 자체 중 최종 원인은 확정하지 않았다. 방화벽 전체 해제나 임의 포트 재변경은 하지 않았다. 진단 도구는 Git 제외 `output/lte-path-probe.py`, `output/media-diagnostics.cjs`, `output/rtc-repair-probe.cjs`에 있다.
+
 ## 2026-10-03 상담 대기 전 마이크 준비 확인
 
 - **개발 반영 완료: `1fe0ef4`**, API22:57:48·웹22:57:33 KST. 이전 두 번째 롤백의 차이는 접수37건의 `version`/`media_cleanup_until`뿐으로 종료 Media 정리 worker에 의한 변경이었다. 최종 배포는 Nginx와 자동 worker를 멈춘 검증 구간에서 복원 DB 및 실제 DB의 모든 기존 행·열 hash를 확인하고, 정상 worker 설정을 복원해 API를 재시작한 뒤 외부 요청을 열었다. 고객6/접수37/상담61/타임라인30/Membership4/직접 권한52/역할 연결1/역할1/grant13 보존·V15·웹/API health·외부 login/support/공개 조직 HTTP200 통과. 백업·복원 DB·이미지 증거는 `output/workspace-repair-deployment.json`에 보존한다. 이전 a18194f의 PC 마이크 선확보와 앞선 복구 변경도 함께 반영됐다. 실제 삼성 브라우저/LTE 수락·운영 NAS 반영은 완료하지 않았다.
