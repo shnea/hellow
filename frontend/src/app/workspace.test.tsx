@@ -6,14 +6,14 @@ import type { ConsultationDraft } from '@/lib/workspace-data';
 import {prepareMicrophone} from '@/lib/microphone-readiness';
 vi.mock('@/lib/microphone-readiness',()=>({prepareMicrophone:vi.fn(async()=>{}),microphoneReady:vi.fn(async()=>true)}));
 
-vi.mock('@/components/SidebarGNB', () => ({ SidebarGNB: ({onTabChange}:{onTabChange:(tab:string)=>void}) => <nav>Navigation<button onClick={()=>onTabChange('settings')}>시스템 설정</button></nav> }));
+vi.mock('@/components/SidebarGNB', () => ({ SidebarGNB: ({onTabChange}:{onTabChange:(tab:string)=>void}) => <nav>Navigation<button onClick={()=>onTabChange('customers')}>고객 페이지</button><button onClick={()=>onTabChange('tickets')}>상담 이력 페이지</button><button onClick={()=>onTabChange('settings')}>시스템 설정</button></nav> }));
 vi.mock('@/components/admin/AdminConsole',()=>({AdminConsole:({fixedOrganizationId}:{fixedOrganizationId:string})=><section>관리 대상:{fixedOrganizationId}</section>}));
 vi.mock('@/hooks/use-call', () => ({ useCall: () => ({status:'idle',duration:0,setMuted:vi.fn()}) }));
 vi.mock('@/components/QueuePanel', () => ({ QueuePanel: ({queueItems,onSelectQueueItem,onAcceptCall}: {queueItems:{id:string}[];onSelectQueueItem:(id:string)=>void;onAcceptCall:(q:unknown)=>void}) => <div>{queueItems.map(q=><div key={q.id}><button onClick={()=>onSelectQueueItem(q.id)}>{q.id}</button><button onClick={()=>onAcceptCall?.(q)}>accept-{q.id}</button></div>)}</div> }));
 vi.mock('@/components/ActiveWorkspace', () => ({ ActiveWorkspace: ({customer,initialDraft,onDraftChange,onSaveConsultation,readOnly}: {customer:{id:string;name:string};initialDraft:ConsultationDraft;readOnly:boolean;onDraftChange:(d:ConsultationDraft)=>void;onSaveConsultation:(d:ConsultationDraft & {isComplete:boolean})=>Promise<void>}) => <section><p>{customer.id}:{customer.name}</p><p>{readOnly?'editor-readonly':'editor-editable'}</p><p>{initialDraft?.memo || 'empty-draft'}</p>
   <button onClick={()=>onDraftChange({categoryMain:'Support',categorySub:'Product',status:'in_progress',selectedTags:[],memo:'A unique draft'})}>type-draft</button>
   <button onClick={()=>void onSaveConsultation({...initialDraft,categoryMain:'Support',categorySub:'Product',selectedTags:[],memo:initialDraft?.memo || '',isComplete:true}).catch(()=>{})}>complete</button></section> }));
-vi.mock('@/components/ContextActionPanel', () => ({ ContextActionPanel: () => <aside>History</aside> }));
+vi.mock('@/components/ContextActionPanel', () => ({ ContextActionPanel: ({onOpenRecord}:{onOpenRecord?:(item:unknown)=>void}) => <aside>History<button onClick={()=>onOpenRecord?.({queueCode:'old-queue'})}>이전 상담 열기</button></aside> }));
 vi.mock('@/components/Toast', () => ({ ToastContainer: ({toasts}: {toasts:{id:string;title:string}[]}) => <div>{toasts.map(t=><p key={t.id}>{t.title}</p>)}</div> }));
 
 const permissions=['queue:read','queue:accept','customer:read','customer:write','consultation:read','consultation:write','followup:write'];
@@ -124,7 +124,7 @@ describe('workspace regressions',()=>{
   it('keeps an unsaved historical record mounted while settings are open',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>path.startsWith('/api/consultations/customer/')?response([{id:7,version:1,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical record',tags:'',agentName:'Alice',createdAt:'2026-10-03T01:00:00Z'}]):original(path,o));
-    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();fireEvent.click(screen.getByText('type-draft'));
     fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
     expect(screen.getByRole('heading',{name:'시스템 설정'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();
@@ -225,7 +225,7 @@ describe('workspace regressions',()=>{
   it('preserves historical editing when heartbeat fails and does not claim the agent is ready',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/heartbeat'?response({detail:'State unavailable'},503):p.startsWith('/api/consultations/customer/')?response([{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}]):original(p,o));
-    render(<Workspace/>);await flush();expect(screen.getByText('editor-editable')).toBeTruthy();
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();expect(screen.getByText('editor-editable')).toBeTruthy();
     fireEvent.click(screen.getByText('type-draft'));expect(screen.getByText('A unique draft')).toBeTruthy();
     expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).disabled).toBe(true);
     expect(screen.getByRole('button',{name:'상태 다시 확인'})).toBeTruthy();
@@ -233,7 +233,7 @@ describe('workspace regressions',()=>{
   it('keeps server availability after a failed manual change and retries with its revision',async()=>{
     items=[];availability='AWAY';const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/status'?response({detail:'Stale state'},409):p.startsWith('/api/consultations/customer/')?response([{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}]):original(p,o));
-    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();fireEvent.click(screen.getByText('type-draft'));
     fireEvent.change(screen.getByLabelText('수신 상태 선택'),{target:{value:'AVAILABLE'}});await flush();
     expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).value).toBe('AWAY');expect(screen.getByText('A unique draft')).toBeTruthy();
     expect(JSON.parse(fetchMock.mock.calls.find(([p])=>p==='/api/agents/me/status')?.[1]?.body as string)).toEqual({state:'AVAILABLE',expectedVersion:1});
@@ -281,7 +281,7 @@ describe('workspace regressions',()=>{
       if(path==='/api/consultations/customer/cust-1')return response([{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical memo',tags:'',agentName:'Alice',createdAt:'2026-10-02T12:00:00'}]);
       return original(path,options);
     });
-    render(<Workspace/>);await flush();expect(screen.getByText('Historical memo')).toBeTruthy();expect(screen.getByText('editor-editable')).toBeTruthy();
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();expect(screen.getByText('Historical memo')).toBeTruthy();expect(screen.getByText('editor-editable')).toBeTruthy();
     expect(screen.getByRole('button',{name:'새 기록'})).toBeTruthy();
   });
   it('blocks incoming calls throughout after-call processing',async()=>{
@@ -298,7 +298,7 @@ describe('workspace regressions',()=>{
       if(path==='/api/consultations/customer/cust-1')return response([{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Team-visible record',tags:'',agentName:'Bob',createdAt:'2026-10-02T12:00:00',editable:false}]);
       return original(path,options);
     });
-    render(<Workspace/>);await flush();
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();
     expect(screen.getByText('Team-visible record')).toBeTruthy();
     expect(screen.getByText('editor-readonly')).toBeTruthy();
   });
@@ -325,4 +325,23 @@ describe('workspace regressions',()=>{
     fireEvent.click(screen.getByText('complete'));await flush();await act(async()=>{resolveOld(response([queue()]));});await flush();
     expect(screen.queryByText('queue-1')).toBeNull();expect(screen.getByText('상담 저장·완료')).toBeTruthy();
   });
+});
+
+it('opens timeline history inside the workspace and returns to the unchanged current draft',async()=>{
+ const original=fetchMock.getMockImplementation()!;
+ const old={id:99,version:1,customerCode:null,queueCode:'old-queue',customerName:'이전 미등록 고객',phoneNumber:'01099998888',customerRegistered:false,categoryMain:'일반',categorySub:'문의',status:'COMPLETED',memo:'이전 상담 본문',tags:'',agentName:'Alice',createdAt:'2026-10-02T00:00:00Z',editable:true,processing:false};
+ fetchMock.mockImplementation(async(p,o)=>p==='/api/consultations/queue/old-queue'||p==='/api/consultations/99'?response(old):original(p,o));
+ const view=render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+ fireEvent.click(screen.getByRole('button',{name:'이전 상담 열기'}));await flush();
+ expect(screen.getByText('이전 상담 본문')).toBeTruthy();expect(screen.getByRole('button',{name:'현재 상담으로 돌아가기'})).toBeTruthy();
+ expect(view.container.querySelector('.current-consultation')?.hasAttribute('hidden')).toBe(true);
+ expect(view.container.querySelector('.queue-pane')).not.toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'현재 상담으로 돌아가기'}));await flush();
+ expect(view.container.querySelector('.current-consultation')?.hasAttribute('hidden')).toBe(false);expect(screen.getByText('A unique draft')).toBeTruthy();
+});
+it('shows unregistered records in the separate history page without the processing queue',async()=>{
+ const original=fetchMock.getMockImplementation()!;
+ fetchMock.mockImplementation(async(p,o)=>p.startsWith('/api/consultations?page=')?response({items:[{id:99,version:1,customerCode:null,queueCode:'old',customerName:'미등록 상담자',phoneNumber:'01088889999',customerRegistered:false,categoryMain:'일반',categorySub:'문의',status:'COMPLETED',memo:'미등록 기록',tags:'',agentName:'Alice',createdAt:'2026-10-02T00:00:00Z',editable:true}],hasMore:false}):original(p,o));
+ const view=render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'상담 이력 페이지'}));await flush();
+ expect(screen.getByText('미등록 상담자 · 미등록')).toBeTruthy();expect(screen.getByText('미등록 기록')).toBeTruthy();expect(view.container.querySelector('.queue-pane')).toBeNull();
 });

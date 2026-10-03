@@ -29,6 +29,7 @@ import {
   Radio,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
+import {UnregisteredContact} from './UnregisteredContact';
 import { quickTags } from '../data/mockData';
 import { ShneaConsultationEditor } from './ShneaConsultationEditor';
 import { appendDocument, documentText } from '../lib/editor-document';
@@ -104,6 +105,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   const handleEndCallAction = () => onEndCall();
   const [actionError, setActionError] = useState('');
   // Customer Info Card Editing/Registration state
+  const [isRegistering,setIsRegistering]=useState(false);
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
 
@@ -265,7 +267,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
           <div className="flex items-baseline space-x-2">
             <span className="text-sm font-semibold text-slate-200">
-              {customer.isRegistered ? customer.name : '미등록 고객'}
+              {customer.name||'상담 고객'}
             </span>
             <span className="text-xs text-slate-400 font-mono">{customer.phoneNumber}</span>
 
@@ -409,7 +411,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               ) : (
                 <>
                   <AlertCircle className="w-4 h-4 text-amber-400" />
-                  <span className="text-amber-300">미등록 고객 (신규 인입)</span>
+                  <span className="text-amber-300">고객 정보 · 미등록</span>
                 </>
               )}
             </span>
@@ -471,6 +473,8 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
         </div>
 
+        {!customer.isRegistered&&<UnregisteredContact customer={customer} disabled={customerReadOnly||busy} onSave={onUpdateCustomer}
+          onRegister={!recordMode?()=>{setIsRegistering(v=>!v);setIsInfoExpanded(true);}:undefined}/>}
         {/* Collapsible Info Content */}
         {isInfoExpanded && (
           <div className="p-3.5 text-xs">
@@ -699,14 +703,14 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             )}
 
             {/* [케이스 3] 미등록 고객 - 신규 고객 즉시 등록 폼 */}
-            {!customer.isRegistered && (
+            {!customer.isRegistered && isRegistering && (
               <form onSubmit={handleRegisterSubmit} className="space-y-2.5">
                 <div className="bg-amber-950/30 border border-amber-800/40 p-2.5 rounded-xl flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-xs text-amber-200">
                     <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
                     <span>
-                      미등록 번호(<strong className="font-mono text-white">{customer.phoneNumber}</strong>)입니다.
-                      기업 담당자 또는 일반 개인(컴플레인 민원 포함) 정보를 입력하여 즉시 등록할 수 있습니다.
+                      연락처(<strong className="font-mono text-white">{customer.phoneNumber}</strong>)입니다.
+                      고객 등록 없이도 상담 기록과 연락처를 저장할 수 있습니다. 고객 목록에 추가하려면 아래 정보를 입력해 주세요.
                     </span>
                   </div>
                 </div>
@@ -944,25 +948,17 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
         </div>
 
         {/* Rich Editor Toolbar */}
-        <div className="flex items-center justify-between bg-slate-800/95 border border-slate-700 rounded-t-xl px-3 py-1.5 text-xs text-slate-300 shrink-0">
+        <div className="editor-heading flex items-center justify-between bg-slate-800/95 border border-slate-700 rounded-t-xl px-3 py-1.5 text-xs text-slate-300 shrink-0">
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
               <FileText className="w-3.5 h-3.5 text-indigo-400" />
               상담 기록 작성
             </span>
           </div>
-
+          <TemplatePicker templates={content.templates} disabled={readOnly||busy||content.loading} onInsert={insertTemplate}/>
         </div>
         {content.error&&<p role="alert" className="p-2 text-amber-200 text-sm">분류·템플릿 조회 실패: {content.error}<button className="ml-2 underline" disabled={content.loading} onClick={content.reload}>목록 다시 조회</button></p>}
         {content.loading&&!content.catalog&&<p role="status" className="p-2 text-sm">분류·템플릿 조회 중…</p>}
-        <details className="editor-content-tools shrink-0 bg-slate-800 text-sm">
-          <summary className="px-3 py-3 cursor-pointer">태그·템플릿 추가</summary>
-          <div className="p-2 flex flex-wrap gap-2 max-h-36 overflow-auto">
-            <div className="flex flex-wrap gap-2">{quickTags.map(tag=><button key={tag} aria-pressed={selectedTags.includes(tag)} disabled={readOnly||busy} className={`px-3 rounded ${selectedTags.includes(tag)?'bg-indigo-700':'bg-slate-700'}`} onClick={()=>toggleTag(tag)}>{tag}</button>)}</div>
-            <button type="button" className="px-3 rounded bg-slate-700" disabled={content.loading} onClick={content.reload}>분류·템플릿 목록 새로고침</button>
-            <TemplatePicker templates={content.templates} disabled={readOnly||busy} onInsert={insertTemplate}/>
-          </div>
-        </details>
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}
         <div className="consultation-document-area flex-1 flex flex-col min-h-0 overflow-hidden">
           <ShneaConsultationEditor

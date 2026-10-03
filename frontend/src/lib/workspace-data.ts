@@ -37,9 +37,9 @@ export function requestProfile(q: QueueItem): CustomerProfile {
     company: q.companyName, phoneNumber: q.phoneNumber, email: '', tier: 'Standard', lastContactDate: '첫 접수',
     totalCalls: 0, managerName: q.assignedAgent || '미배정', customerNotes: q.summary, isComplainant: q.isComplainant };
 }
-export interface ServerTimeline { id: number; createdAt: string; channel: string; agentName: string; title: string; content: string; hasAudio: boolean; audioDuration: string; tags: string | null; }
+export interface ServerTimeline { queueCode?:string|null; id: number; createdAt: string; channel: string; agentName: string; title: string; content: string; hasAudio: boolean; audioDuration: string; tags: string | null; }
 export function timelineItem(t: ServerTimeline): TimelineItem {
-  return { id: String(t.id), date: new Date(t.createdAt).toLocaleString('ko-KR'), channel: t.channel.toLowerCase() as TimelineItem['channel'],
+  return { id: String(t.id), queueCode:t.queueCode, date: new Date(t.createdAt).toLocaleString('ko-KR'), channel: t.channel.toLowerCase() as TimelineItem['channel'],
     agentName: t.agentName, title: t.title, content: t.content, hasAudio: t.hasAudio, audioDuration: t.audioDuration, tags: t.tags?.split(',') || [] };
 }
 export interface ConsultationDraft {

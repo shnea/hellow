@@ -51,6 +51,7 @@ export interface CustomerProfile {
 export type TimelineChannel = 'all' | 'call' | 'email' | 'chat' | 'ticket';
 
 export interface TimelineItem {
+  queueCode?:string|null;
   id: string;
   date: string;
   channel: 'call' | 'email' | 'chat' | 'ticket';

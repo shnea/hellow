@@ -62,6 +62,28 @@ class CustomerHistoryIntegrationTest {
     assertThat(followups.findByOrganizationIdAndQueueCode("a","active").getFirst().getCustomerCode()).isEqualTo(code);
     mvc.perform(actor(get("/api/consultations/customer/"+code),"alice","a")).andExpect(jsonPath("$.length()").value(1));
   }
+  @Test void historyIncludesUnregisteredContactAndEnforcesTenantAndOwnerScope()throws Exception{
+    fixture("alice-history","alice","a",true);fixture("bob-history","bob","a",true);fixture("other-org","eve","b",true);
+    var all=ok(mvc.perform(actor(get("/api/consultations"),"alice","a")));
+    assertThat(all.path("items").size()).isEqualTo(2);
+    assertThat(all.path("items").get(0).path("customerName").asText()).isEqualTo("접수 당시 이름");
+    assertThat(all.path("items").get(0).path("customerRegistered").asBoolean()).isFalse();
+    var own=ok(mvc.perform(actor(get("/api/consultations").param("search","접수 당시"),"bob","a")));
+    assertThat(own.path("items").size()).isEqualTo(1);assertThat(own.path("items").get(0).path("queueCode").asText()).isEqualTo("bob-history");
+    mvc.perform(actor(get("/api/consultations").param("page","-1"),"alice","a")).andExpect(status().isBadRequest());
+  }
+  @Test void historicalUnregisteredContactCanBeEditedWithoutRegistrationAndRejectsStaleOrForeignWrites()throws Exception{
+    var q=fixture("contact-history","alice","a",true);
+    var update=Map.of("expectedVersion",q.getVersion(),"name","수정한 고객","phoneNumber","01098765432","company","회사","customerType","INDIVIDUAL");
+    mvc.perform(actor(put("/api/queue/contact-history/contact"),"bob","a").contentType(MediaType.APPLICATION_JSON).content(body(update))).andExpect(status().isNotFound());
+    mvc.perform(actor(put("/api/queue/contact-history/contact"),"eve","b").contentType(MediaType.APPLICATION_JSON).content(body(update))).andExpect(status().isNotFound());
+    var updated=ok(mvc.perform(actor(put("/api/queue/contact-history/contact"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(body(update))));
+    assertThat(updated.path("customerName").asText()).isEqualTo("수정한 고객");assertThat(updated.path("registered").asBoolean()).isFalse();
+    assertThat(queues.findByCode(q.getCode()).orElseThrow().getCustomerCode()).isNull();assertThat(customers.count()).isEqualTo(1);
+    mvc.perform(actor(put("/api/queue/contact-history/contact"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(body(update))).andExpect(status().isConflict());
+    var results=ok(mvc.perform(actor(get("/api/consultations").param("search","01098765432"),"alice","a")));
+    assertThat(results.path("items").size()).isEqualTo(1);assertThat(results.path("items").get(0).path("customerName").asText()).isEqualTo("수정한 고객");
+  }
   @Test void currentExistingCustomerLinkAlsoSynchronizesDraftAndIsIdempotent()throws Exception{
     fixture("active","alice","a",false);
     for(int i=0;i<2;i++)mvc.perform(actor(post("/api/customers/queue/active/link"),"alice","a").contentType(MediaType.APPLICATION_JSON).content("{\"customerCode\":\"customer\"}")).andExpect(status().isOk());

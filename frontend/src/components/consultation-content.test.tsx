@@ -29,17 +29,17 @@ it('preserves saved labels for retired classifications and legacy completed reco
   expect(screen.getByText(/기록 분류: 예전 대분류 › 예전 상세/)).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'임시 저장'}));await waitFor(()=>expect(save).toHaveBeenCalledOnce());expect(save.mock.calls[0][0]).toMatchObject({categoryId:null,categoryMain:'예전 대분류',categorySub:'예전 상세',resultId:null});
 });
 it('inserts an independent template document and retains it after a save conflict',async()=>{
-  const save=vi.fn<(d:ConsultationDraft&{isComplete:boolean})=>Promise<void>>(async()=>{throw new Error('다른 창에서 변경됐습니다.');});render(<ActiveWorkspace {...props} onSaveConsultation={save}/>);await screen.findByRole('option',{name:'설치 안내'});
-  fireEvent.click(screen.getByText('태그·템플릿 추가'));fireEvent.change(screen.getByLabelText('삽입할 템플릿'),{target:{value:'common-1'}});fireEvent.click(screen.getByRole('button',{name:'본문에 삽입'}));
+  const save=vi.fn<(d:ConsultationDraft&{isComplete:boolean})=>Promise<void>>(async()=>{throw new Error('다른 창에서 변경됐습니다.');});render(<ActiveWorkspace {...props} onSaveConsultation={save}/>);await screen.findByRole('button',{name:'설치 안내'});
+  fireEvent.click(screen.getByRole('button',{name:'설치 안내'}));expect(screen.queryByText('태그·템플릿 추가')).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:'임시 저장'}));await screen.findByText('다른 창에서 변경됐습니다.');expect(documentText((screen.getByLabelText('문서 본문') as HTMLTextAreaElement).value)).toContain('설치 안내 원문');
   const submitted=save.mock.calls[0][0];expect(submitted.memo).toContain('bold');expect(submitted.memo).not.toContain('common-1');
 });
 it('refreshes configuration on return from settings without replacing unsaved document content',async()=>{
   const save=vi.fn<(d:ConsultationDraft&{isComplete:boolean})=>Promise<void>>(async()=>{});
-  const view=render(<ActiveWorkspace {...props} contentRefresh={0} onSaveConsultation={save}/>);await screen.findByRole('option',{name:'설치 안내'});
+  const view=render(<ActiveWorkspace {...props} contentRefresh={0} onSaveConsultation={save}/>);await screen.findByRole('button',{name:'설치 안내'});
   fireEvent.change(screen.getByLabelText('문서 본문'),{target:{value:'내 미저장 문서'}});
   fetchMock.mockImplementation(async(path:string)=>Response.json(path==='/api/consultation-catalog'?catalog:[{...template,name:'변경된 템플릿'}]));
-  view.rerender(<ActiveWorkspace {...props} contentRefresh={1} onSaveConsultation={save}/>);await screen.findByRole('option',{name:'변경된 템플릿'});
+  view.rerender(<ActiveWorkspace {...props} contentRefresh={1} onSaveConsultation={save}/>);await screen.findByRole('button',{name:'변경된 템플릿'});
   expect((screen.getByLabelText('문서 본문') as HTMLTextAreaElement).value).toBe('내 미저장 문서');
 });
 it('creates an organization override and restores with both version checks',async()=>{

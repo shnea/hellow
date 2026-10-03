@@ -23,7 +23,7 @@ it('restores a historical draft after remount and fetches its current server ver
 it('opens the exact transferred standalone record without a customer grant or querying a different customer',async()=>{
   const fetcher=vi.fn(async(path:string)=>{expect(path).toBe('/api/consultations/1');return Response.json({...record,customerCode:null,queueCode:null});});vi.stubGlobal('fetch',fetcher);
   render(<CustomerRecordsWorkspace {...props} customers={[]} focus={{id:1,revision:1}}/>);await flush();
-  expect(fetcher.mock.calls.every(([path])=>path==='/api/consultations/1')).toBe(true);expect((screen.getByLabelText('검수 본문') as HTMLTextAreaElement).value).toBe('원본');expect(screen.getByText(/고객 정보 조회 불가/)).toBeTruthy();
+  expect(fetcher.mock.calls.every(([path])=>path==='/api/consultations/1')).toBe(true);expect((screen.getByLabelText('검수 본문') as HTMLTextAreaElement).value).toBe('원본');expect(screen.getByText(/상담 고객/)).toBeTruthy();
 });
 it('requires saving a changed draft before requesting responsibility transfer',async()=>{
   const request=vi.fn();vi.stubGlobal('fetch',vi.fn(async()=>Response.json([record])));

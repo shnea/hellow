@@ -236,6 +236,10 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   }
 
   // Getters
+  public void updateUnregisteredContact(String name,String company,String phone,Customer.CustomerType type){
+    this.customerName=name;this.companyName=company;this.phoneNumber=phone;
+    this.phoneKey=kr.shnea.hellow.customer.PhoneNumbers.key(phone);this.customerType=type;
+  }
   public Long getId() {
     return id;
   }

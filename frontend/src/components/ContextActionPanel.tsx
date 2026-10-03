@@ -25,6 +25,7 @@ interface ContextActionPanelProps {
   customerName: string;
   customerPhone: string;
   onQuoteTimeline: (content: string) => void;
+  onOpenRecord?: (item:TimelineItem)=>void;
   onAddFollowUpAction: (actionType: string, details: string) => void;
   onRequestTransfer?:()=>void;transferDisabled?:boolean;transferIsCall?:boolean;
   activeFollowUpTab?: 'visit' | 'callback' | 'transfer' | 'notification';
@@ -35,6 +36,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
   customerName,
   customerPhone,
   onQuoteTimeline,
+  onOpenRecord,
   onAddFollowUpAction,
   onRequestTransfer,transferDisabled=true,transferIsCall=false,
   activeFollowUpTab = 'visit',
@@ -150,8 +152,8 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
           filteredTimeline.map((item) => (
             <div
               key={item.id}
-              onDoubleClick={() => setSelectedDetailItem(item)}
-                tabIndex={0} role="button" onKeyDown={event => {if(event.key === "Enter") setSelectedDetailItem(item);}}
+              onClick={() => item.queueCode&&onOpenRecord?onOpenRecord(item):setSelectedDetailItem(item)}
+                tabIndex={0} role="button" onKeyDown={event => {if(event.target!==event.currentTarget)return;if(event.key === "Enter"||event.key===' '){event.preventDefault();if(item.queueCode&&onOpenRecord)onOpenRecord(item);else setSelectedDetailItem(item);}}}
               className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl relative group hover:border-slate-700 transition-colors cursor-pointer select-none"
               title="상세 보기"
             >

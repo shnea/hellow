@@ -40,6 +40,26 @@ public class CustomerConsultationController {
           return view(actor,record);
         }).toList();
   }
+  public record HistoryPage(List<Map<String,Object>> items,int page,boolean hasMore){}
+  @GetMapping
+  public HistoryPage history(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="") String search){
+    var actor=access.require("consultation:read");
+    if(page<0||page>100000||search.length()>100)throw new ResponseStatusException(BAD_REQUEST);
+    org.springframework.data.jpa.domain.Specification<Consultation> scope=BusinessScope.rows(actor);
+    if(!search.isBlank())scope=scope.and((root,query,cb)->{
+      String term="%"+search.trim().toLowerCase(Locale.ROOT).replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%";
+      var intake=query.subquery(Integer.class);var q=intake.from(QueueItem.class);
+      intake.select(cb.literal(1)).where(cb.equal(q.get("organizationId"),actor.organizationId()),cb.equal(q.get("code"),root.get("queueCode")),
+          cb.or(cb.like(cb.lower(q.get("customerName")),term,'\\'),cb.like(q.get("phoneNumber"),term,'\\')));
+      var customer=query.subquery(Integer.class);var c=customer.from(kr.shnea.hellow.customer.Customer.class);
+      customer.select(cb.literal(1)).where(cb.equal(c.get("organizationId"),actor.organizationId()),cb.equal(c.get("code"),root.get("customerCode")),
+          cb.or(cb.like(cb.lower(c.get("name")),term,'\\'),cb.like(c.get("phoneNumber"),term,'\\')));
+      return cb.or(cb.exists(intake),cb.exists(customer),cb.like(cb.lower(root.get("categorySub")),term,'\\'));
+    });
+    var rows=records.findAll(scope,org.springframework.data.domain.PageRequest.of(page,50,org.springframework.data.domain.Sort.by(
+        org.springframework.data.domain.Sort.Order.desc("createdAt"),org.springframework.data.domain.Sort.Order.desc("id"))));
+    return new HistoryPage(rows.getContent().stream().map(r->view(actor,r)).toList(),page,rows.hasNext());
+  }
   /** An accepted standalone transfer can be opened without granting access to other customer records. */
   @GetMapping("/{id}")
   public Map<String,Object> get(@PathVariable Long id) {
@@ -48,8 +68,16 @@ public class CustomerConsultationController {
   }
   private Map<String,Object> view(WorkspaceAccess.Actor actor,Consultation record) {
     Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
-    boolean processing=record.getQueueCode()!=null&&queues.findByOrganizationIdAndCode(actor.organizationId(),record.getQueueCode())
-        .map(q->q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING).orElse(false);
+    var intake=record.getQueueCode()==null?Optional.<QueueItem>empty():queues.findByOrganizationIdAndCode(actor.organizationId(),record.getQueueCode());
+    var customer=record.getCustomerCode()==null?Optional.<kr.shnea.hellow.customer.Customer>empty():customers.findByOrganizationIdAndCode(actor.organizationId(),record.getCustomerCode());
+    view.put("customerName",customer.map(c->c.getName()).orElseGet(()->intake.map(QueueItem::getCustomerName).orElse("상담 고객")));
+    view.put("phoneNumber",customer.map(c->c.getPhoneNumber()).orElseGet(()->intake.map(QueueItem::getPhoneNumber).orElse("")));
+    view.put("companyName",customer.map(c->c.getCompany()).orElseGet(()->intake.map(QueueItem::getCompanyName).orElse("")));
+    view.put("customerType",customer.map(c->c.getCustomerType()).orElseGet(()->intake.map(QueueItem::getCustomerType).orElse(kr.shnea.hellow.customer.Customer.CustomerType.INDIVIDUAL)));
+    view.put("customerRegistered",customer.map(c->c.isRegistered()).orElse(false));
+    view.put("contactVersion",intake.map(QueueItem::getVersion).orElse(0L));
+    view.put("contactEditable",customer.map(c->actor.can("customer:write",c)).orElseGet(()->intake.map(q->actor.can("customer:write",q)).orElse(false)));
+    boolean processing=intake.map(q->q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING).orElse(false);
     view.put("processing",processing);view.put("editable",actor.can("consultation:write",record)&&!processing);return view;
   }
   public record CreateRequest(@NotBlank String customerCode,@NotNull UUID requestId) {}
