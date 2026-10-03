@@ -94,7 +94,7 @@ class WorkspaceIntegrationTest {
 
   String body(long version, boolean complete) {
     return """
-    {"categoryMain":"Support","categorySub":"Product","expectedVersion":%d,"memo":"saved text",
+    {"categoryMain":"일반 상담","categorySub":"일반 문의","categoryId":"general-inquiry","resultId":"resolved","expectedVersion":%d,"memo":"saved text",
      "editorDocument":{"format":"shnea-editor","version":3,"content":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"saved text","marks":[{"type":"bold"}]}]}]}},"tags":"test","callDurationSeconds":0,"complete":%s}
     """
         .formatted(version, complete);

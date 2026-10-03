@@ -24,6 +24,7 @@ public class ConsultationController {
   private final WorkspaceAccess access;
   private final ObjectMapper json;
   private final AttachmentRepository attachments;
+  private final kr.shnea.hellow.content.CatalogService catalog;
 
   public ConsultationController(
       ConsultationRepository consultations,
@@ -31,13 +32,14 @@ public class ConsultationController {
       TimelineRepository timelines,
       WorkspaceAccess access,
       ObjectMapper json,
-      AttachmentRepository attachments) {
+      AttachmentRepository attachments,kr.shnea.hellow.content.CatalogService catalog) {
     this.consultations = consultations;
     this.queues = queues;
     this.timelines = timelines;
     this.access = access;
     this.json = json;
     this.attachments = attachments;
+    this.catalog = catalog;
   }
 
   public record SaveRequest(
@@ -48,7 +50,9 @@ public class ConsultationController {
       @NotNull JsonNode editorDocument,
       @Size(max = 255) String tags,
       @Min(0) int callDurationSeconds,
-      boolean complete) {}
+      boolean complete,
+      @Size(max=64) String categoryId,
+      @Size(max=64) String resultId) {}
 
   @GetMapping("/queue/{code}")
   public ResponseEntity<Consultation> draft(@PathVariable String code) {
@@ -81,6 +85,8 @@ public class ConsultationController {
       if (java.util.Objects.equals(saved.getEditorDocument(), r.editorDocument().toString())
           && java.util.Objects.equals(saved.getCategoryMain(), r.categoryMain())
           && java.util.Objects.equals(saved.getCategorySub(), r.categorySub())
+          && java.util.Objects.equals(saved.getCategoryId(),r.categoryId())
+          && java.util.Objects.equals(saved.getResultId(),r.resultId())
           && java.util.Objects.equals(saved.getTags(), r.tags())) return saved;
       throw new ResponseStatusException(CONFLICT, "이미 완료된 상담입니다. 새 요청을 저장할 수 없습니다.");
     }
@@ -91,6 +97,7 @@ public class ConsultationController {
         || !r.editorDocument().path("content").isObject())
       throw new ResponseStatusException(BAD_REQUEST, "에디터 문서 형식이 올바르지 않습니다.");
     validateFiles(r.editorDocument(), actor.organizationId(), code);
+    var classification=catalog.select(actor.organizationId(),r.categoryId(),r.resultId(),existing.orElse(null),r.categoryMain(),r.categorySub(),r.complete());
     var c =
         existing.orElseGet(
             () -> {
@@ -123,6 +130,7 @@ public class ConsultationController {
         r.editorDocument().toString(),
         r.tags(),
         r.callDurationSeconds());
+    c.classify(classification);
     consultations.saveAndFlush(c);
     if (r.complete()) {
       var item =
@@ -132,7 +140,7 @@ public class ConsultationController {
                   ? TimelineItem.ChannelType.CALL
                   : TimelineItem.ChannelType.TICKET,
               actor.name(),
-              "상담 완료: " + r.categorySub(),
+              "상담 완료: " + c.getCategorySub() + (c.getResultName()==null?"":" · "+c.getResultName()),
               r.memo() == null ? "" : r.memo(),
               false,
               null,

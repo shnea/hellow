@@ -47,6 +47,14 @@ public class WorkspaceAccess {
         jwt.getIssuer().toString(), member.getTeamId(), grants.get(permission), authority.teamScope(member), grants);
   }
 
+  public Actor requireAny(String... permissions) {
+    for(String permission:permissions) {
+      try{return require(permission);}
+      catch(ResponseStatusException e){if(!e.getStatusCode().equals(FORBIDDEN))throw e;}
+    }
+    throw new ResponseStatusException(FORBIDDEN,"이 작업의 권한이 없습니다.");
+  }
+
   public record Actor(String organizationId, String subject, String name, String issuer,
       String teamId, DataScope dataScope, java.util.Set<String> teamIds, java.util.Map<String,DataScope> grants) {
     public java.util.Optional<Actor> forPermission(String permission) {

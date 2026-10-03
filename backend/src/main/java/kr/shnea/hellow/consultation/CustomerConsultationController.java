@@ -25,10 +25,12 @@ public class CustomerConsultationController {
   private final AttachmentRepository attachments;
   private final WorkspaceAccess access;
   private final ObjectMapper json;
+  private final kr.shnea.hellow.content.CatalogService catalog;
   public CustomerConsultationController(ConsultationRepository records,ConsultationRevisionRepository revisions,
-      CustomerRepository customers,QueueItemRepository queues,AttachmentRepository attachments,WorkspaceAccess access,ObjectMapper json) {
+      CustomerRepository customers,QueueItemRepository queues,AttachmentRepository attachments,WorkspaceAccess access,ObjectMapper json,kr.shnea.hellow.content.CatalogService catalog) {
     this.records=records;this.revisions=revisions;this.customers=customers;this.queues=queues;
     this.attachments=attachments;this.access=access;this.json=json;
+    this.catalog=catalog;
   }
   @GetMapping("/customer/{code}")
   public List<Map<String,Object>> list(@PathVariable String code) {
@@ -54,6 +56,7 @@ public class CustomerConsultationController {
     var record=new Consultation(r.customerCode(),"일반 상담","일반 문의",Consultation.ConsultationStatus.IN_PROGRESS,"","",actor.name(),0);
     record.setOrganizationId(actor.organizationId());record.bind(null,actor.subject());record.setRequestKey(key);
     record.assignOwner(actor);
+    record.classify(catalog.initial(actor.organizationId()));
     return records.saveAndFlush(record);
   }
   @GetMapping("/{id}/revisions")
@@ -78,7 +81,9 @@ public class CustomerConsultationController {
     revisions.save(new ConsultationRevision(record,actor.subject(),actor.name(),json.writeValueAsString(record)));
     var status=record.getStatus();
     if(status==Consultation.ConsultationStatus.IN_PROGRESS && r.complete()) status=Consultation.ConsultationStatus.COMPLETED;
+    var classification=catalog.select(actor.organizationId(),r.categoryId(),r.resultId(),record,r.categoryMain(),r.categorySub(),status==Consultation.ConsultationStatus.COMPLETED);
     record.update(record.getCustomerCode(),r.categoryMain(),r.categorySub(),status,r.memo(),r.editorDocument().toString(),r.tags(),record.getCallDurationSeconds());
+    record.classify(classification);
     return records.saveAndFlush(record);
   }
   private void validateFiles(JsonNode node,Consultation record) {

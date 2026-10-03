@@ -11,12 +11,13 @@ import { customerProfile, queueItem, requestProfile, timelineItem, type Consulta
 import { useCall } from '@/hooks/use-call';
 import { CustomerRecordsWorkspace } from '@/components/CustomerRecordsWorkspace';
 import { IncomingRequestModal } from '@/components/IncomingRequestModal';
+import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import './workspace.css';
 import type { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
 interface Identity { subject: string; name: string; platformAdmin?: boolean; organizations: { id: string; name: string; publicCode?: string; permissions: string[];scopes?:Record<string,string>;teamId?:string }[]; }
-interface SavedConsultation { version: number; categoryMain: string; categorySub: string; tags: string; editorDocument: string; memo: string; }
+interface SavedConsultation { categoryId?:string|null;categoryPath?:string|null;resultId?:string|null;resultName?:string; version: number; categoryMain: string; categorySub: string; tags: string; editorDocument: string; memo: string; }
 
 export default function ConsultationWorkspacePage() {
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -167,16 +168,16 @@ export default function ConsultationWorkspacePage() {
     apiJson<SavedConsultation | null>(`/api/consultations/queue/${code}`, { signal: abort.signal }).then(saved => {
       if (abort.signal.aborted) return;
       versions.current[code] = saved?.version || 0;
-      if (saved) setDrafts(prev => ({ ...prev, [code]: { categoryMain: saved.categoryMain, categorySub: saved.categorySub,
+      if (saved) setDrafts(prev => ({ ...prev, [code]: { ...savedClassification(saved),resultId:saved.resultId??null,resultName:saved.resultName||'',
         status: 'in_progress', selectedTags: saved.tags?.split(',') || [], memo: saved.editorDocument || saved.memo || '' } }));
       setDraftReady(prev => ({ ...prev, [code]: true }));
     }).catch(error => { if (!abort.signal.aborted) setDraftError(error.message); });
     return () => abort.abort();
   }, [selectedQueueCode, writable, draftReady]);
-  const run = async (action: () => Promise<void>) => {
+  const run = async <T,>(action: () => Promise<T>):Promise<T> => {
     if (busyRef.current) throw new Error('이전 요청을 처리 중입니다.');
     busyRef.current = true; setBusy(true); generation.current += 1;
-    try { await action(); }
+    try { return await action(); }
     catch (error) { notify('warning', '작업 실패 · 입력 보존', (error as Error).message); throw error; }
     finally { busyRef.current = false; setBusy(false); setRefresh(value => value + 1); }
   };
@@ -216,11 +217,12 @@ export default function ConsultationWorkspacePage() {
   const save = async (data: ConsultationDraft & { isComplete: boolean }) => run(async () => {
     const code = selected;
     const saved = await apiJson<SavedConsultation>(`/api/consultations/queue/${code}`, jsonBody({ categoryMain: data.categoryMain,
-      categorySub: data.categorySub, expectedVersion: versions.current[code] || 0, memo: documentText(data.memo), editorDocument: readDocument(data.memo),
+      categorySub: data.categorySub,categoryId:data.categoryId??null,resultId:data.resultId??null, expectedVersion: versions.current[code] || 0, memo: documentText(data.memo), editorDocument: readDocument(data.memo),
       tags: data.selectedTags.join(','), callDurationSeconds: activeCall === code ? call.duration : durations.current[code]||0, complete: data.isComplete }, 'PUT'));
     versions.current[code] = saved.version; setTimelineRefresh(value => value + 1);
     if (data.isComplete) { setQueue(prev => prev.filter(q => q.id !== code)); queueRef.current = queueRef.current.filter(q => q.id !== code); setSelected(''); }
     notify('success', data.isComplete ? '상담 저장·완료' : '초안 저장', '서버 저장이 확인됐습니다.');
+    const confirmed={...data,...savedClassification(saved),resultId:saved.resultId??null,resultName:saved.resultName||''};setDrafts(prev=>({...prev,[code]:confirmed}));return confirmed;
   });
   const changeCustomer = async (data: Partial<CustomerProfile>, register: boolean) => run(async () => {
     if (!customer || !item) return;
@@ -242,9 +244,9 @@ export default function ConsultationWorkspacePage() {
     {identity&&<button disabled={checkingIdentity} onClick={refreshIdentity} className="text-left text-indigo-300 underline">{checkingIdentity?'권한 확인 중…':'조직 권한 다시 확인'}</button>}
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
-  if(currentTab==='settings')return <><WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
-    blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}}/><ToastContainer toasts={toasts} onDismiss={id=>setToasts(prev=>prev.filter(t=>t.id!==id))}/></>;
-  return <div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
+  return <>{currentTab==='settings'&&<WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
+    blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}}/>}
+  <div className={`crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100 ${currentTab==='settings'?'workspace-settings-hidden':''}`}>
     <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
@@ -266,7 +268,7 @@ export default function ConsultationWorkspacePage() {
         <div className={`queue-pane ${mobilePanel==='queue'&&!showRecords?'mobile-visible':''} ${showRecords?'records-active':''}`}>
           <QueuePanel queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined} />
         </div>
-        <CustomerRecordsWorkspace active={showRecords} customers={Object.values(customers)} organizationId={organizationId} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
+        <CustomerRecordsWorkspace key={organizationId} active={showRecords} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError}
           activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>
         {customer && item && !showRecords ? <div className="interaction-workspace flex flex-1 min-w-0 min-h-0"><div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
           {writable && !item.customerCode && can('customer:write') && <label className="p-2 text-sm text-slate-300">기존 고객 연결 (직원 확인)
@@ -286,7 +288,7 @@ export default function ConsultationWorkspacePage() {
           </div>}
           {writable && !can('consultation:write') && <p role="status" className="px-4 py-3 text-sm bg-slate-800">상담 기록 작성 권한이 없습니다. 조직 관리자에게 권한을 요청해 주세요.</p>}
           {draftError && <p role="alert" className="p-3 text-amber-300">{draftError}<button className="ml-2 underline" onClick={() => {setDraftReady({});setRefresh(v=>v+1);}}>초안 다시 조회</button></p>}
-          {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId}
+          {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId} contentRefresh={identityRefresh}
             initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} customerReadOnly={!can('customer:write')||customer.canEdit===false||Boolean(queueError)} busy={busy}
             callDuration={activeCall === item.id ? call.duration : 0} isCallActive={activeCall === item.id} mediaStatus={call.status} onMute={call.setMuted} onEndCall={endCall}
             onStartCall={() => notify('info', '발신 미지원', '현재는 고객이 요청한 웹 음성 상담을 수락할 수 있습니다.')} onOpenTransfer={() => setFollowupTab('transfer')}
@@ -298,7 +300,8 @@ export default function ConsultationWorkspacePage() {
         </div></div> : null}
         {loading&&<p className="sr-only" role="status">업무 데이터를 불러오고 있습니다.</p>}
       </div>
-    </div><ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
+    </div>
+  </div><ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
     {incoming&&can('queue:accept')&&<IncomingRequestModal key={incoming.id} item={incoming} busy={busy} blocked={queueError||(incoming.type==='call'?receivingBlocked:'')} onAccept={()=>accept(incoming)} onDismiss={()=>setDismissedIncoming(prev=>[...prev,incoming.id])}/>}
-  </div>;
+  </>;
 }

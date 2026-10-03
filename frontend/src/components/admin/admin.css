@@ -65,6 +65,11 @@
 .admin-team-members li { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #334155; }
 .admin-team-members [draggable=true] { cursor:grab; }
 .admin-team-members [draggable=true]:active { cursor:grabbing; }
+.admin-content-list li { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid #334155; }
+.admin-content-list li > div,.admin-content-list li > span { min-width:0; overflow-wrap:anywhere; }
+.admin-shell textarea { width:100%; padding:12px; border:1px solid #64748b; border-radius:8px; background:#1e293b; color:#f1f5f9; resize:vertical; min-height:180px; }
+.admin-template-body { white-space:pre-wrap; overflow-wrap:anywhere; }
+.admin-server-copy { padding:16px 0; }
 @media(max-width:640px) {
  .admin-shell { padding:16px; }
  .admin-header { align-items:flex-start; flex-direction:column; gap:12px; }
@@ -76,4 +81,5 @@
  .admin-team-tree ul ul { margin-left:12px; padding-left:12px; }
  .admin-shell button,.admin-shell input:not([type=checkbox]),.admin-shell select,.admin-shell summary { min-height:44px; }
  .admin-shell input:not([type=checkbox]),.admin-shell select { font-size:16px; }
+ .admin-shell textarea { font-size:16px; }
 }

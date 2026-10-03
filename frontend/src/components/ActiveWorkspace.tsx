@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Phone,
   PhoneOff,
@@ -29,15 +29,20 @@ import {
   Radio,
 } from 'lucide-react';
 import { CustomerProfile, CustomerType } from '../types';
-import { consultationCategories, quickTags } from '../data/mockData';
+import { quickTags } from '../data/mockData';
 import { ShneaConsultationEditor } from './ShneaConsultationEditor';
 import { appendDocument, documentText } from '../lib/editor-document';
+import { useConsultationContent } from '../hooks/use-consultation-content';
+import { classify, type Classification } from '../lib/consultation-content';
+import { ConsultationClassification } from './ConsultationClassification';
+import { TemplatePicker } from './TemplatePicker';
 import type { ConsultationDraft } from '../lib/workspace-data';
 
 interface ActiveWorkspaceProps {
   customer: CustomerProfile;
   queueCode: string;
   organizationId: string;
+  contentRefresh?:number;
   initialDraft?: ConsultationDraft;
   onDraftChange: (draft: ConsultationDraft) => void;
   readOnly?: boolean;
@@ -51,14 +56,7 @@ interface ActiveWorkspaceProps {
   onEndCall: () => void;
   onStartCall: () => void;
   onOpenTransfer: () => void;
-  onSaveConsultation: (data: {
-    categoryMain: string;
-    categorySub: string;
-    status: string;
-    selectedTags: string[];
-    memo: string;
-    isComplete: boolean;
-  }) => Promise<void>;
+  onSaveConsultation: (data: ConsultationDraft & {isComplete:boolean}) => Promise<ConsultationDraft|void>;
   onRegisterCustomer: (data: {
     customerType: CustomerType;
     name: string;
@@ -76,7 +74,7 @@ interface ActiveWorkspaceProps {
 }
 
 export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
-  customer, queueCode, organizationId, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute,
+  customer, queueCode, organizationId, contentRefresh=0, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute,
   callDuration,
   isCallActive,
   onEndCall,
@@ -131,8 +129,12 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   }, [customer, isEditingInfo]);
 
   // Consultation memo form state
-  const [mainCategory, setMainCategory] = useState(initialDraft?.categoryMain || consultationCategories[0].main);
-  const [subCategory, setSubCategory] = useState(initialDraft?.categorySub || consultationCategories[0].subs[0]);
+  const content=useConsultationContent(organizationId,contentRefresh);
+  const [classification,setClassification]=useState<Classification>(initialDraft||{categoryMain:'',categorySub:''});
+  const effectiveClassification=useMemo(()=>classification.categoryId===undefined&&content.catalog
+    ?classify(content.catalog.effective.categories,content.catalog.effective.categories.find(c=>c.active)!.id):classification,[classification,content.catalog]);
+  const [resultId,setResultId]=useState<string|null>(initialDraft?.resultId||null);
+  const [resultName,setResultName]=useState(initialDraft?.resultName||'');
   const [status, setStatus] = useState<'in_progress' | 'completed' | 'escalated'>(initialDraft?.status==='completed'?'completed':initialDraft?.status==='escalated'?'escalated':'in_progress');
   const [selectedTags, setSelectedTags] = useState<string[]>(initialDraft?.selectedTags || []);
   const [memoText, setMemoText] = useState<string>(initialDraft?.memo || '');
@@ -140,8 +142,8 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   const draftChangeRef = useRef(onDraftChange);
   useEffect(() => {draftChangeRef.current=onDraftChange;}, [onDraftChange]);
   useEffect(() => {
-    if (!readOnly) draftChangeRef.current({categoryMain:mainCategory,categorySub:subCategory,status,selectedTags,memo:memoText});
-  }, [mainCategory,subCategory,status,selectedTags,memoText,readOnly]);
+    if (!readOnly) draftChangeRef.current({...effectiveClassification,resultId,resultName,status,selectedTags,memo:memoText});
+  }, [effectiveClassification,resultId,resultName,status,selectedTags,memoText,readOnly]);
   // Handle quoted text insertion from timeline
   useEffect(() => {
     if (quotedText) {
@@ -167,24 +169,16 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
     }
   };
 
-  const insertTemplate = (templateName: string) => {
-    let tpl = '';
-    if (templateName === '컴플레인') {
-      tpl = '[⚠️ 컴플레인 및 민원 접수]\n- 민원 유형: 환불 지연 / 서비스 오류 / 상담 불만\n- 고객 요구사항: 결제 즉시 취소 및 사과 안내 요청\n- 약속 기한: 당일 이내 회신\n- 상담사 조치: 상급자 보고 및 긴급 승인 요청';
-    } else if (templateName === '견적') {
-      tpl = '[도입 견적 협의 내용]\n- 도입 규모: 50계정\n- 결제 주기: 연간 일괄/분기 분납\n- 특별 할인율 요청: 15% 검토\n- 전달 마감일: 이번 주 금요일까지';
-    } else if (templateName === '기술') {
-      tpl = '[기술 지원 및 장애 분석]\n- 발생 환경: 내부망 Linux 환경\n- 증상: 웹소켓 세션 10분 후 간헐적 타임아웃\n- 조치 계획: 패킷 덤프 수집 후 엔지니어 파견 분석';
-    } else if (templateName === '콜백') {
-      tpl = '[부재중 콜백 약속]\n- 고객 부재로 통화 미연결\n- 재통화 희망 일시: 당일 17:00 이후\n- 주요 문의: 정기 점검 일정 확인';
-    }
-    setMemoText(prev => appendDocument(prev, tpl));
-  };
+  const insertTemplate=(body:string)=>setMemoText(prev=>appendDocument(prev,body));
   const handleSave = async (isComplete: boolean) => {
     if(readOnly || busy) return;
     setActionError('');
     try {
-      await onSaveConsultation({categoryMain:mainCategory,categorySub:subCategory,status,selectedTags,memo:memoText,isComplete});
+      if(effectiveClassification.categoryId===undefined)throw new Error('상담 분류 목록을 불러온 뒤 다시 저장해 주세요.');
+      if(isComplete&&!resultId&&!(recordMode&&status==='completed'&&effectiveClassification.categoryId===null))throw new Error('상담 완료 전에 처리 결과를 선택해 주세요.');
+      const confirmed=await onSaveConsultation({...effectiveClassification,resultId,resultName,status,selectedTags,memo:memoText,isComplete});
+      setClassification(confirmed||effectiveClassification);
+      if(confirmed){setResultId(confirmed.resultId||null);setResultName(confirmed.resultName||'');}
       if(isComplete)setStatus('completed');
       setLastSavedTime(new Date().toLocaleTimeString('ko-KR'));
     } catch(error) { setActionError((error as Error).message); }
@@ -875,44 +869,8 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       <div className="flex-1 flex flex-col p-3 overflow-hidden min-h-0">
         {/* Compact Integrated Category, Tags & Status Bar */}
         <div className="classification-bar flex flex-wrap items-center justify-between gap-2 mb-2 p-1.5 px-3 bg-slate-950/70 border border-slate-800 rounded-xl shrink-0">
-          {/* 좌측: 대분류 > 중분류 */}
-          <div className="flex items-center space-x-2 text-xs">
-            <span className="font-semibold text-slate-400 text-[11px] shrink-0">상담 분류:</span>
-            <select
-                      disabled={readOnly || busy}
-              value={mainCategory}
-              onChange={(e) => {
-                setMainCategory(e.target.value);
-                const subOptions = consultationCategories.find((c) => c.main === e.target.value)?.subs || [];
-                if (subOptions.length > 0) setSubCategory(subOptions[0]);
-              }}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              {!consultationCategories.some(c=>c.main===mainCategory)&&<option value={mainCategory}>{mainCategory}</option>}
-              {consultationCategories.map((c) => (
-                <option key={c.main} value={c.main}>
-                  {c.main}
-                </option>
-              ))}
-            </select>
-            <span className="text-slate-500 font-semibold">&gt;</span>
-            <select
-                      disabled={readOnly || busy}
-              value={subCategory}
-              onChange={(e) => setSubCategory(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              {!consultationCategories.find(c=>c.main===mainCategory)?.subs.includes(subCategory)&&<option value={subCategory}>{subCategory}</option>}
-              {consultationCategories
-                .find((c) => c.main === mainCategory)
-                ?.subs.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-            </select>
-          </div>
-
+          <ConsultationClassification catalog={content.catalog?.effective||null} value={effectiveClassification} resultId={resultId} resultName={resultName} disabled={readOnly||busy}
+            onCategory={setClassification} onResult={(id,name)=>{setResultId(id);setResultName(name);}}/>
           {/* 중앙: 빠른 태그 칩 */}
           <div className="quick-tags flex items-center space-x-1 overflow-x-auto text-xs py-0.5">
             <Tag className="w-3 h-3 text-slate-400 shrink-0 mr-0.5" />
@@ -988,49 +946,15 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             </span>
           </div>
 
-          {/* Quick Template Inserts */}
-          <div className="template-controls flex items-center space-x-1.5">
-            <span className="text-[11px] text-slate-400">자주 쓰는 템플릿:</span>
-            <button
-                disabled={readOnly || busy}
-              type="button"
-              onClick={() => insertTemplate('컴플레인')}
-              className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 hover:bg-rose-900 rounded text-[11px] font-semibold transition-colors"
-            >
-              ⚠️ 컴플레인 접수
-            </button>
-            <button
-                disabled={readOnly || busy}
-              type="button"
-              onClick={() => insertTemplate('견적')}
-              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-            >
-              + 견적 협의
-            </button>
-            <button
-                disabled={readOnly || busy}
-              type="button"
-              onClick={() => insertTemplate('기술')}
-              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-            >
-              + 기술 장애
-            </button>
-            <button
-                disabled={readOnly || busy}
-              type="button"
-              onClick={() => insertTemplate('콜백')}
-              className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px] text-slate-200 transition-colors"
-            >
-              + 부재 콜백
-            </button>
-          </div>
         </div>
-
-        <details className="mobile-editor-tools shrink-0 bg-slate-800 text-sm">
+        {content.error&&<p role="alert" className="p-2 text-amber-200 text-sm">분류·템플릿 조회 실패: {content.error}<button className="ml-2 underline" disabled={content.loading} onClick={content.reload}>목록 다시 조회</button></p>}
+        {content.loading&&!content.catalog&&<p role="status" className="p-2 text-sm">분류·템플릿 조회 중…</p>}
+        <details className="editor-content-tools shrink-0 bg-slate-800 text-sm">
           <summary className="px-3 py-3 cursor-pointer">태그·템플릿 추가</summary>
           <div className="p-2 flex flex-wrap gap-2 max-h-36 overflow-auto">
-            {quickTags.map(tag=><button key={tag} aria-pressed={selectedTags.includes(tag)} disabled={readOnly||busy} className={`px-3 rounded ${selectedTags.includes(tag)?'bg-indigo-700':'bg-slate-700'}`} onClick={()=>toggleTag(tag)}>{tag}</button>)}
-            {['컴플레인','견적','기술','콜백'].map(name=><button key={name} className="px-3 rounded bg-slate-700" disabled={readOnly||busy} onClick={()=>insertTemplate(name)}>{name} 템플릿</button>)}
+            <div className="flex flex-wrap gap-2">{quickTags.map(tag=><button key={tag} aria-pressed={selectedTags.includes(tag)} disabled={readOnly||busy} className={`px-3 rounded ${selectedTags.includes(tag)?'bg-indigo-700':'bg-slate-700'}`} onClick={()=>toggleTag(tag)}>{tag}</button>)}</div>
+            <button type="button" className="px-3 rounded bg-slate-700" disabled={content.loading} onClick={content.reload}>분류·템플릿 목록 새로고침</button>
+            <TemplatePicker templates={content.templates} disabled={readOnly||busy} onInsert={insertTemplate}/>
           </div>
         </details>
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}

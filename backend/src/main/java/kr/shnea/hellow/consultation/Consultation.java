@@ -22,6 +22,19 @@ public class Consultation extends kr.shnea.hellow.security.OrganizationOwned {
   @Column(nullable = false, length = 100)
   private String categorySub;
 
+  @Column(length=64) private String categoryId;
+  @Column(columnDefinition="TEXT") private String categoryPath;
+  @Column(length=64) private String resultId;
+  @Column(length=100) private String resultName;
+
+  public String getCategoryId(){return categoryId;}
+  public String getCategoryPath(){return categoryPath;}
+  public String getResultId(){return resultId;}
+  public String getResultName(){return resultName;}
+  public void classify(kr.shnea.hellow.content.CatalogService.Selection s){
+    categoryId=s.categoryId();categoryPath=s.categoryPath();categoryMain=s.main();categorySub=s.sub();resultId=s.resultId();resultName=s.resultName();
+  }
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 32)
   private ConsultationStatus status;

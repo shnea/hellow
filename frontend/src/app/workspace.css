@@ -1,4 +1,5 @@
 .workspace-mobile-tabs,.records-mobile-tabs,.mobile-editor-tools { display:none; }
+.crm-shell.workspace-settings-hidden { display:none; }
 .incoming-request { width:min(600px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; margin:auto; }
 .incoming-request::backdrop { background:rgb(2 6 23 / .8); }
 .queue-pane.records-active { display:none; }
@@ -67,4 +68,23 @@
 @media (max-width:767px) and (max-height:600px) {
   .records-editor,.interaction-editor { overflow-y:auto; }
   .active-workspace { flex-shrink:0;min-height:500px; }
+}
+.consultation-classification { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:end; gap:8px; flex:1 1 100%; width:100%; min-width:0; font-size:12px; }
+.consultation-classification label { display:grid; gap:4px; flex:1 1 120px; min-width:0; color:#cbd5e1; }
+.active-workspace .consultation-classification select { width:100%; max-width:100%; padding:6px 8px; border:1px solid #475569; border-radius:8px; background:#1e293b; color:#f1f5f9; }
+.classification-snapshot { grid-column:1/-1; width:100%; color:#cbd5e1; overflow-wrap:anywhere; }
+.template-picker { display:flex; flex-wrap:wrap; align-items:end; gap:8px; width:100%; }
+.template-picker label { display:grid; gap:4px; flex:1; min-width:160px; }
+.template-picker select { padding:8px; background:#0f172a; color:#f1f5f9; border:1px solid #64748b; border-radius:8px; width:100%; }
+.template-picker button { padding:8px 12px; background:#4338ca; border-radius:8px; }
+.template-picker details { width:100%; }
+.template-picker details p { max-height:180px; overflow:auto; padding:8px; color:#cbd5e1; }
+.editor-content-tools summary { min-height:44px; }
+.editor-content-tools :focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; }
+@media(max-width:1023px) {
+  .records-editor,.interaction-editor { overflow-y:auto; }
+  .active-workspace:has(.editor-content-tools[open]) { min-height:800px; flex-shrink:0; }
+  .active-workspace .consultation-classification { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .classification-snapshot { grid-column:1/-1; }
+  .active-workspace .consultation-classification select { font-size:16px; }
 }

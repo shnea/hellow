@@ -40,5 +40,5 @@ export function timelineItem(t: ServerTimeline): TimelineItem {
     agentName: t.agentName, title: t.title, content: t.content, hasAudio: t.hasAudio, audioDuration: t.audioDuration, tags: t.tags?.split(',') || [] };
 }
 export interface ConsultationDraft {
-  categoryMain: string; categorySub: string; status: string; selectedTags: string[]; memo: string;
+  categoryMain: string; categorySub: string; categoryId?:string|null; categoryPath?:string[]; resultId?:string|null; resultName?:string; status: string; selectedTags: string[]; memo: string;
 }

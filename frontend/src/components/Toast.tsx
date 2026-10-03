@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, Info, AlertCircle, X } from 'lucide-react';
 
 export interface ToastMessage {
@@ -34,13 +34,15 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
   toast,
   onDismiss,
 }) => {
+  const dismiss=useRef(onDismiss);
+  useEffect(()=>{dismiss.current=onDismiss;},[onDismiss]);
   useEffect(() => {
     // 3.5초 후 자동 소멸
     const timer = setTimeout(() => {
-      onDismiss(toast.id);
+      dismiss.current(toast.id);
     }, 3500);
     return () => clearTimeout(timer);
-  }, [toast, onDismiss]);
+  }, [toast.id]);
 
   const icons = {
     success: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,

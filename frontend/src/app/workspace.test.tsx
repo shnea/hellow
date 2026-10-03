@@ -37,6 +37,15 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('keeps an unsaved historical record mounted while settings are open',async()=>{
+    items=[];const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>path.startsWith('/api/consultations/customer/')?response([{id:7,version:1,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical record',tags:'',agentName:'Alice',createdAt:'2026-10-03T01:00:00Z'}]):original(path,o));
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
+    expect(screen.getByRole('heading',{name:'시스템 설정'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();
+    expect(screen.getByText('A unique draft')).toBeTruthy();
+  });
   it('opens settings in the same workspace and restores an unsaved draft on return',async()=>{
     const open=vi.spyOn(window,'open').mockImplementation(()=>null);
     render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));

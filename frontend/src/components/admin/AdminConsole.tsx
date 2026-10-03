@@ -5,6 +5,8 @@ import { apiJson, jsonBody } from '@/lib/api';
 import { actionLabels, adminJson, type AdminOrganization, type AdminMember, type AdminInvitation, type AdminEvent, type SettingsView, type AdminTeam, type AdminRole } from '@/lib/admin';
 import { MemberManagement } from './MemberManagement';
 import { SettingsManagement } from './SettingsManagement';
+import { CatalogManagement } from './CatalogManagement';
+import { TemplateManagement } from './TemplateManagement';
 import { StructureManagement } from './StructureManagement';
 import './admin.css';
 
@@ -13,7 +15,7 @@ interface Impact {organizationId:string;name:string;inherited:string[];}
 export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrganizationId}:{platform?:boolean;onWorkspace?:()=>void;embedded?:boolean;fixedOrganizationId?:string}) {
   const [identity,setIdentity]=useState<Identity|null>(null);const [organizations,setOrganizations]=useState<AdminOrganization[]>([]);
   const [organizationId,setOrganizationId]=useState('');const selected=useRef('');
-  const [tab,setTab]=useState<'members'|'structure'|'settings'|'audit'>(platform?'settings':'members');
+  const [tab,setTab]=useState<'members'|'structure'|'settings'|'content'|'audit'>(platform?'settings':'members');
   const [teams,setTeams]=useState<AdminTeam[]>([]);const [roles,setRoles]=useState<AdminRole[]>([]);
   const [members,setMembers]=useState<AdminMember[]>([]);const [invites,setInvites]=useState<AdminInvitation[]>([]);
   const [events,setEvents]=useState<AdminEvent[]>([]);const [settings,setSettings]=useState<SettingsView|null>(null);const [impact,setImpact]=useState<Impact[]>([]);
@@ -73,10 +75,11 @@ export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrg
         {org&&<a href={`/support?org=${encodeURIComponent(org.publicCode)}`} target="_blank" rel="noopener noreferrer">고객 접수 화면 열기</a>}
       </section>}
       {(!platform&&!organizations.length)?<p className="admin-section">관리 가능한 조직이 없습니다. 조직 관리자에게 관리 권한을 요청해 주세요.</p>:<>
-        <nav className="admin-tabs" aria-label="관리 항목">{(!platform?['members','structure','settings','audit']:['settings','audit']).map(value=><button key={value} aria-current={tab===value?'page':undefined}
-          onClick={()=>setTab(value as typeof tab)}>{value==='members'?'직원·초대':value==='structure'?'팀·역할':value==='settings'?'고객 접수 설정':'로그인·변경 이력'}</button>)}
+        <nav className="admin-tabs" aria-label="관리 항목">{(!platform?['members','structure','settings','content','audit']:['settings','content','audit']).map(value=><button key={value} aria-current={tab===value?'page':undefined}
+          onClick={()=>setTab(value as typeof tab)}>{value==='members'?'직원·초대':value==='structure'?'팀·역할':value==='settings'?'고객 접수 설정':value==='content'?'분류·템플릿':'로그인·변경 이력'}</button>)}
           <button disabled={loading} onClick={()=>{setError('');void reload().catch(()=>{});}}>다시 조회</button></nav>
         {error&&<p role="alert" className="admin-error">{error}</p>}{loading&&<p role="status" className="admin-section">관리 정보를 불러오고 있습니다.</p>}
+        {tab==='content'&&<><CatalogManagement key={`catalog:${platform}:${organizationId}`} scope={platform?'common':'organization'} organizationId={organizationId}/><TemplateManagement key={`templates:${platform}:${organizationId}`} scope={platform?'common':'organization'} organizationId={organizationId}/></>}
         {settings&&tab==='members'&&<MemberManagement key={organizationId} organizationId={organizationId} members={members} invitations={invites} reload={reload}/>}
         {settings&&tab==='structure'&&<StructureManagement key={organizationId} organizationId={organizationId} members={members} teams={teams} roles={roles} reload={reload}/>}
         {tab==='settings'&&settings&&<><SettingsManagement key={`${platform}:${organizationId}`} scope={platform?'common':'organization'} organizationId={organizationId} initial={settings} onSaved={setSettings}/>

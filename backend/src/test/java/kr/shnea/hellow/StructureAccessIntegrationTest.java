@@ -74,7 +74,7 @@ class StructureAccessIntegrationTest {
   Map<String,Object> assignment(String subject,String team,Set<String> roleIds,Set<String> direct,DataScope scope) {
     var r=new HashMap<String,Object>();r.put("expectedVersion",member(subject).getVersion());r.put("teamId",team);r.put("roleIds",roleIds);r.put("permissions",direct);r.put("dataScope",scope);return r;
   }
-  Map<String,Object> save(long version){return Map.of("categoryMain","일반","categorySub","수정","expectedVersion",version,"memo","updated","editorDocument",Map.of("format","shnea-editor","content",Map.of("type","doc","content",List.of())),"tags","","complete",true);}
+  Map<String,Object> save(long version){return Map.of("categoryMain","일반 상담","categorySub","일반 문의","categoryId","general-inquiry","resultId","resolved","expectedVersion",version,"memo","updated","editorDocument",Map.of("format","shnea-editor","content",Map.of("type","doc","content",List.of())),"tags","","complete",true);}
   @Test void selfTeamAndOrganizationFilterCustomerRecordsAndTimelineInSql() throws Exception {
     assertThat(getJson("/api/customers","alice").size()).isEqualTo(1);
     assertThat(getJson("/api/consultations/customer/customer-a","alice").get(0).get("agentSubject").asText()).isEqualTo("alice");

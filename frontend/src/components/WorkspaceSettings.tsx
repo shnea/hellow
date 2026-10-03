@@ -1,4 +1,5 @@
 'use client';
+import { TemplateManagement } from './admin/TemplateManagement';
 import { AdminConsole } from './admin/AdminConsole';
 import { useState } from 'react';
 import './admin/admin.css';
@@ -19,6 +20,7 @@ export function WorkspaceSettings({organizations,organizationId,platformAdmin,bl
       {!current?.permissions.includes('organization:admin')&&!platformAdmin&&<p>조직 관리는 해당 조직의 관리자에게 요청해 주세요.</p>}
     </section>
     {platformAdmin&&<nav className="admin-tabs" aria-label="관리 범위"><button aria-current={!platform?'page':undefined} onClick={()=>setPlatform(false)}>현재 조직 관리</button><button aria-current={platform?'page':undefined} onClick={()=>setPlatform(true)}>최고관리자</button></nav>}
+    {current?.permissions.includes('template:personal')&&<details className="admin-personal-templates"><summary>내 템플릿 관리</summary><TemplateManagement key={`personal:${organizationId}`} scope="personal" organizationId={organizationId}/></details>}
     {(platformAdmin||current?.permissions.includes('organization:admin'))&&<AdminConsole key={`${platform}:${organizationId}`} platform={platform&&platformAdmin} embedded fixedOrganizationId={platform?undefined:organizationId}/>}
   </main>;
 }
