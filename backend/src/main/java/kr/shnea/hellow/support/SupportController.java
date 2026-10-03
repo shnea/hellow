@@ -23,16 +23,18 @@ public class SupportController {
   private final java.time.Clock clock;
   private final com.fasterxml.jackson.databind.ObjectMapper json;
   private final int pendingLimit;
+  private final CustomerIdentityService customerIdentity;
 
   public SupportController(
       QueueItemRepository queues, OrganizationRepository organizations, LiveKitService media,
       kr.shnea.hellow.settings.SupportSettingsService settings,java.time.Clock clock,com.fasterxml.jackson.databind.ObjectMapper json,
-      @org.springframework.beans.factory.annotation.Value("${hellow.public-pending-limit:100}") int pendingLimit) {
+      @org.springframework.beans.factory.annotation.Value("${hellow.public-pending-limit:100}") int pendingLimit,CustomerIdentityService customerIdentity) {
     this.queues = queues;
     this.organizations = organizations;
     this.media = media;
     this.settings = settings;
     this.clock=clock;this.json=json;
+    this.customerIdentity=customerIdentity;
     if(pendingLimit<1)throw new IllegalArgumentException("Public pending limit must be positive");this.pendingLimit=pendingLimit;
   }
 
@@ -60,7 +62,7 @@ public class SupportController {
         organizations
             .lockPublicCode(r.organizationCode())
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    // Untrusted public input never confirms an existing customer's identity by phone.
+    // Lookup is staff-only; response never exposes matching customer information or history.
     String key = requestKey(org.getId(),r.requestId());
     var existing = queues.findByRequestKey(key);
     String fingerprint=fingerprint(r);
@@ -87,6 +89,7 @@ public class SupportController {
             false,
             false);
     q.setOrganizationId(org.getId());
+    customerIdentity.identify(q);
     q.setSessionId(UUID.randomUUID().toString() + UUID.randomUUID());
     q.setRequestKey(key);
     q.initializeSupportSession(clock.instant().plus(java.time.Duration.ofHours(24)),fingerprint);
@@ -143,7 +146,7 @@ public class SupportController {
     return media.createToken(
         q.getOrganizationId() + "-" + q.getCode(),
         "customer-" + q.getCode(),
-        q.getCustomerName(),
+        "고객",
         false);
   }
 

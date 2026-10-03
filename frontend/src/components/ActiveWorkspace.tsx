@@ -16,7 +16,6 @@ import {
   Tag,
   FileText,
   Clock,
-  UserPlus,
   UserCheck2,
   Edit3,
   Check,
@@ -47,6 +46,7 @@ interface ActiveWorkspaceProps {
   initialDraft?: ConsultationDraft;
   onDraftChange: (draft: ConsultationDraft) => void;
   readOnly?: boolean;
+  idle?: boolean;
   customerReadOnly?: boolean;
   recordMode?: boolean;
   busy?: boolean;
@@ -77,14 +77,13 @@ interface ActiveWorkspaceProps {
 }
 
 export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
-  customer, queueCode, organizationId, contentRefresh=0, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute, isMuted=false,
+  customer, queueCode, organizationId, contentRefresh=0, idle=false, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute, isMuted=false,
   callDuration,
   isCallActive,
   onEndCall,
   onOpenTransfer,
   canTransfer=false,
   onSaveConsultation,
-  onRegisterCustomer,
   onUpdateCustomer,
   quotedText,
   onClearQuotedText,
@@ -105,12 +104,12 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   const handleEndCallAction = () => onEndCall();
   const [actionError, setActionError] = useState('');
   // Customer Info Card Editing/Registration state
-  const [isRegistering,setIsRegistering]=useState(false);
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
 
   // Form states for Customer Info
   const [formType, setFormType] = useState<CustomerType>(customer.customerType || 'corporate');
+  const [formPhone, setFormPhone]=useState(customer.phoneNumber||'');
   const [formName, setFormName] = useState(customer.name || '');
   const [formCompany, setFormCompany] = useState(customer.company || '');
   const [formTitle, setFormTitle] = useState(customer.title || '');
@@ -126,7 +125,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
     // Synchronize server profile changes while preserving an open editing form.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormType(customer.customerType || 'corporate');
-    setFormName(customer.name || '');
+    setFormName(customer.name || '');setFormPhone(customer.phoneNumber||'');
     setFormCompany(customer.company || (customer.customerType === 'individual' ? '개인 (일반)' : ''));
     setFormTitle(customer.title || (customer.customerType === 'individual' ? '일반 이용자' : ''));
     setFormDepartment(customer.department || '');
@@ -179,7 +178,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
   const insertTemplate=(body:string)=>setMemoText(prev=>appendDocument(prev,body));
   const handleSave = async (isComplete: boolean) => {
-    if(readOnly || busy) return;
+    if(readOnly || busy || idle) return;
     setActionError('');
     try {
       if(effectiveClassification.categoryId===undefined)throw new Error('상담 분류 목록을 불러온 뒤 다시 저장해 주세요.');
@@ -191,31 +190,11 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       setLastSavedTime(new Date().toLocaleTimeString('ko-KR'));
     } catch(error) { setActionError((error as Error).message); }
   };
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName.trim()) {
-      alert('고객명을 입력해 주세요.');
-      return;
-    }
-    try { await onRegisterCustomer({
-      customerType: formType,
-      name: formName.trim(),
-      company: formType === 'individual' ? (formCompany.trim() || '개인 고객') : (formCompany.trim() || '미지정 회사'),
-      title: formType === 'individual' ? (formTitle.trim() || '일반 이용자') : (formTitle.trim() || '담당자'),
-      department: formType === 'individual' ? '' : formDepartment.trim(),
-      email: formEmail.trim(),
-      tier: formTier,
-      customerNotes: formNotes.trim(),
-      isComplainant: formIsComplainant,
-    });
-    setIsEditingInfo(false); } catch(error) { setActionError((error as Error).message); }
-  };
-
   const handleUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try { await onUpdateCustomer({
       customerType: formType,
-      name: formName.trim() || customer.name,
+      name: formName.trim() || customer.name,phoneNumber:formPhone.trim(),
       company: formType === 'individual' ? (formCompany.trim() || '개인 고객') : (formCompany.trim() || customer.company),
       title: formTitle.trim() || customer.title,
       department: formType === 'individual' ? '' : (formDepartment.trim() || customer.department),
@@ -267,7 +246,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
           <div className="flex items-baseline space-x-2">
             <span className="text-sm font-semibold text-slate-200">
-              {customer.name||'상담 고객'}
+              {customer.name||(idle?'':'상담 고객')}
             </span>
             <span className="text-xs text-slate-400 font-mono">{customer.phoneNumber}</span>
 
@@ -282,11 +261,11 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                   개인 고객 (B2C)
                 </span>
               )
-            ) : (
+            ) : !idle ? (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold animate-pulse">
                 미등록 발신
               </span>
-            )}
+            ) : null}
 
             {customer.isComplainant && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold flex items-center gap-1 animate-pulse">
@@ -411,7 +390,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               ) : (
                 <>
                   <AlertCircle className="w-4 h-4 text-amber-400" />
-                  <span className="text-amber-300">고객 정보 · 미등록</span>
+                  <span className="text-amber-300">{idle?'고객 정보':'고객 정보 · 미등록'}</span>
                 </>
               )}
             </span>
@@ -473,8 +452,8 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
         </div>
 
-        {!customer.isRegistered&&<UnregisteredContact customer={customer} disabled={customerReadOnly||busy} onSave={onUpdateCustomer}
-          onRegister={!recordMode?()=>{setIsRegistering(v=>!v);setIsInfoExpanded(true);}:undefined}/>}
+        {!customer.isRegistered&&<UnregisteredContact customer={customer} idle={idle} disabled={customerReadOnly||busy} onSave={onUpdateCustomer}
+          />}
         {/* Collapsible Info Content */}
         {isInfoExpanded && (
           <div className="p-3.5 text-xs">
@@ -643,6 +622,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
                     </div>
                   </div>
                   <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">연락처<input type="tel" required disabled={customerReadOnly||busy} value={formPhone} onChange={e=>setFormPhone(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5"/></label>
                     <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
                     <select
                       disabled={customerReadOnly || busy}
@@ -703,174 +683,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             )}
 
             {/* [케이스 3] 미등록 고객 - 신규 고객 즉시 등록 폼 */}
-            {!customer.isRegistered && isRegistering && (
-              <form onSubmit={handleRegisterSubmit} className="space-y-2.5">
-                <div className="bg-amber-950/30 border border-amber-800/40 p-2.5 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-xs text-amber-200">
-                    <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                    <span>
-                      연락처(<strong className="font-mono text-white">{customer.phoneNumber}</strong>)입니다.
-                      고객 등록 없이도 상담 기록과 연락처를 저장할 수 있습니다. 고객 목록에 추가하려면 아래 정보를 입력해 주세요.
-                    </span>
-                  </div>
-                </div>
 
-                {/* 고객 유형 선택 */}
-                <div className="flex items-center space-x-4 pb-1 border-b border-slate-800">
-                  <span className="text-[11px] font-semibold text-slate-300">신규 등록 유형:</span>
-                  <label className="flex items-center space-x-1.5 cursor-pointer">
-                    <input
-                      disabled={customerReadOnly || busy}
-                      type="radio"
-                      name="registerCustomerType"
-                      checked={formType === 'corporate'}
-                      onChange={() => setFormType('corporate')}
-                      className="text-indigo-600 focus:ring-0"
-                    />
-                    <span className="text-xs text-slate-200">🏢 기업 고객 (B2B)</span>
-                  </label>
-                  <label className="flex items-center space-x-1.5 cursor-pointer">
-                    <input
-                      disabled={customerReadOnly || busy}
-                      type="radio"
-                      name="registerCustomerType"
-                      checked={formType === 'individual'}
-                      onChange={() => {
-                        setFormType('individual');
-                        if (!formCompany) setFormCompany('개인 고객');
-                      }}
-                      className="text-indigo-600 focus:ring-0"
-                    />
-                    <span className="text-xs text-slate-200">👤 개인 / 일반 고객 (B2C)</span>
-                  </label>
-                  <label className="flex items-center space-x-1.5 cursor-pointer ml-auto">
-                    <input
-                      disabled={customerReadOnly || busy}
-                      type="checkbox"
-                      checked={formIsComplainant}
-                      onChange={(e) => setFormIsComplainant(e.target.checked)}
-                      className="text-rose-600 rounded focus:ring-0"
-                    />
-                    <span className="text-xs font-semibold text-rose-400">⚠️ 컴플레인 / 불만 고객으로 등록</span>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                      고객명 <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      disabled={customerReadOnly || busy}
-                      type="text"
-                      required
-                      placeholder="예: 홍길동"
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                      {formType === 'corporate' ? '회사명 / 조직명' : '소속 / 구분'}
-                    </label>
-                    <input
-                      disabled={customerReadOnly || busy}
-                      type="text"
-                      placeholder={formType === 'corporate' ? '예: (주)한국소프트' : '개인 고객'}
-                      value={formCompany}
-                      onChange={(e) => setFormCompany(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">
-                      {formType === 'corporate' ? '부서 / 직책' : '직업 / 호칭'}
-                    </label>
-                    {formType === 'corporate' ? (
-                      <div className="flex gap-1">
-                        <input
-                      disabled={customerReadOnly || busy}
-                          type="text"
-                          placeholder="부서"
-                          value={formDepartment}
-                          onChange={(e) => setFormDepartment(e.target.value)}
-                          className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
-                        />
-                        <input
-                      disabled={customerReadOnly || busy}
-                          type="text"
-                          placeholder="직책"
-                          value={formTitle}
-                          onChange={(e) => setFormTitle(e.target.value)}
-                          className="w-1/2 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
-                        />
-                      </div>
-                    ) : (
-                      <input
-                      disabled={customerReadOnly || busy}
-                        type="text"
-                        placeholder="예: 일반 소비자"
-                        value={formTitle}
-                        onChange={(e) => setFormTitle(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
-                      />
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">고객 등급</label>
-                    <select
-                      disabled={customerReadOnly || busy}
-                      value={formTier}
-                      onChange={(e) => setFormTier(e.target.value as 'VIP' | 'Gold' | 'Standard')}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500"
-                    >
-                      <option value="Standard">Standard (일반)</option>
-                      <option value="Gold">Gold</option>
-                      <option value="VIP">VIP</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2.5 items-end">
-                  <div className="col-span-2">
-                    <label className="block text-[11px] text-slate-400 mb-1">이메일 주소</label>
-                    <input
-                      disabled={customerReadOnly || busy}
-                      type="email"
-                      placeholder="example@email.com"
-                      value={formEmail}
-                      onChange={(e) => setFormEmail(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">발신 전화번호</label>
-                    <input
-                      type="text"
-                      disabled
-                      value={customer.phoneNumber}
-                      className="w-full bg-slate-850 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-400 font-mono cursor-not-allowed text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <button
-                disabled={customerReadOnly || busy}
-                      type="submit"
-                      className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950 transition-all"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>신규 고객으로 등록</span>
-                    </button>
-                  </div>
-                </div>
-              </form>
-            )}
           </div>
         )}
       </div>
@@ -921,7 +734,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
               진행 중
             </button>
             <button
-                disabled={readOnly || busy || isCallActive}
+                disabled={idle || readOnly || busy || isCallActive}
               type="button"
               onClick={() => void handleSave(true)}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
@@ -984,7 +797,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
         <div className="flex items-center space-x-2">
           {/* Temporary Save */}
           <button
-                disabled={readOnly || busy}
+                disabled={idle || readOnly || busy}
             type="button"
             onClick={() => handleSave(false)}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium flex items-center gap-1.5 transition-colors border border-slate-700"
@@ -1009,7 +822,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
           {/* Complete Consultation */}
           <button
-                disabled={readOnly || busy || isCallActive}
+                disabled={idle || readOnly || busy || isCallActive}
                 title={isCallActive ? '통화를 종료한 뒤 기록을 완료해 주세요.' : '상담 기록 저장 및 완료'}
             type="button"
             onClick={() => handleSave(true)}

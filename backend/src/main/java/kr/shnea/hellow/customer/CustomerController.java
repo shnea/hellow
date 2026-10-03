@@ -104,6 +104,7 @@ public class CustomerController {
   public Customer update(@PathVariable String code, @Valid @RequestBody CustomerRequest r) {
     var actor = access.require("customer:write");
     var c = owned(actor, code);
+    c.changePhoneNumber(r.phoneNumber().trim());
     c.updateInfo(
         Customer.CustomerType.valueOf(r.customerType()),
         r.name(),

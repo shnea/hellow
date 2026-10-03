@@ -25,6 +25,8 @@ public class ConsultationController {
   private final ObjectMapper json;
   private final AttachmentRepository attachments;
   private final kr.shnea.hellow.content.CatalogService catalog;
+  private final kr.shnea.hellow.customer.CustomerIdentityService customerIdentity;
+  private final ConsultationRevisionRepository revisions;
 
   public ConsultationController(
       ConsultationRepository consultations,
@@ -32,7 +34,7 @@ public class ConsultationController {
       TimelineRepository timelines,
       WorkspaceAccess access,
       ObjectMapper json,
-      AttachmentRepository attachments,kr.shnea.hellow.content.CatalogService catalog) {
+      AttachmentRepository attachments,kr.shnea.hellow.content.CatalogService catalog,kr.shnea.hellow.customer.CustomerIdentityService customerIdentity,ConsultationRevisionRepository revisions) {
     this.consultations = consultations;
     this.queues = queues;
     this.timelines = timelines;
@@ -40,6 +42,7 @@ public class ConsultationController {
     this.json = json;
     this.attachments = attachments;
     this.catalog = catalog;
+    this.customerIdentity=customerIdentity;this.revisions=revisions;
   }
 
   public record SaveRequest(
@@ -72,27 +75,21 @@ public class ConsultationController {
   @Transactional
   public Consultation save(@PathVariable String code, @Valid @RequestBody SaveRequest r) {
     var actor = access.require("consultation:write");
+    customerIdentity.lockOrganization(actor.organizationId());
     var q =
         queues
             .lockByCode(actor.organizationId(), code)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
     var existing = consultations.findByOrganizationIdAndQueueCode(actor.organizationId(), code);
     existing.ifPresent(actor::requireRow);
-    if (q.getStatus() == QueueItem.QueueStatus.COMPLETED
-        && existing.isPresent()
-        && actor.subject().equals(existing.get().getAgentSubject())
-        && r.complete()) {
-      var saved = existing.get();
-      if (java.util.Objects.equals(saved.getEditorDocument(), r.editorDocument().toString())
-          && java.util.Objects.equals(saved.getCategoryMain(), r.categoryMain())
-          && java.util.Objects.equals(saved.getCategorySub(), r.categorySub())
-          && java.util.Objects.equals(saved.getCategoryId(),r.categoryId())
-          && java.util.Objects.equals(saved.getResultId(),r.resultId())
-          && java.util.Objects.equals(saved.getTags(), r.tags())) return saved;
-      throw new ResponseStatusException(CONFLICT, "이미 완료된 상담입니다. 새 요청을 저장할 수 없습니다.");
+    actor.requireRow(q);
+    boolean historical=q.getStatus()==QueueItem.QueueStatus.COMPLETED||q.getStatus()==QueueItem.QueueStatus.CANCELLED;
+    if(historical&&existing.isPresent()&&r.complete()){
+      var prior=existing.get();
+      if(Objects.equals(prior.getEditorDocument(),r.editorDocument().toString())&&Objects.equals(prior.getCategoryMain(),r.categoryMain())&&Objects.equals(prior.getCategorySub(),r.categorySub())&&Objects.equals(prior.getCategoryId(),r.categoryId())&&Objects.equals(prior.getResultId(),r.resultId())&&Objects.equals(prior.getTags(),r.tags())&&Objects.equals(prior.getMemo(),r.memo()))return prior;
     }
-    q.requireOwner(actor.subject());
-    if (r.complete() && q.getType() == QueueItem.ItemType.CALL && !q.isCallEnded())
+    if(!historical)q.requireOwner(actor.subject());
+    if (!historical && r.complete() && q.getType() == QueueItem.ItemType.CALL && !q.isCallEnded())
       throw new ResponseStatusException(CONFLICT, "통화를 종료한 뒤 상담을 완료해 주세요.");
     if (!"shnea-editor".equals(r.editorDocument().path("format").asText())
         || !r.editorDocument().path("content").isObject())
@@ -120,11 +117,13 @@ public class ConsultationController {
     long current = c.getVersion() == null ? 0 : c.getVersion();
     if (current != r.expectedVersion())
       throw new ResponseStatusException(CONFLICT, "다른 창에서 변경된 상담입니다. 초안을 보존하고 최신 기록을 확인해 주세요.");
+    if(existing.isPresent())try{revisions.save(new ConsultationRevision(c,actor.subject(),actor.name(),json.writeValueAsString(c)));}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}
+    customerIdentity.onSave(q,actor);
     c.update(
         q.getCustomerCode(),
         r.categoryMain(),
         r.categorySub(),
-        r.complete()
+        (historical||r.complete())
             ? Consultation.ConsultationStatus.COMPLETED
             : Consultation.ConsultationStatus.IN_PROGRESS,
         r.memo(),
@@ -133,7 +132,7 @@ public class ConsultationController {
         r.callDurationSeconds());
     c.classify(classification);
     consultations.saveAndFlush(c);
-    if (r.complete()) {
+    if (r.complete()&&!historical) {
       var item =
           new TimelineItem(
               q.getCustomerCode(),

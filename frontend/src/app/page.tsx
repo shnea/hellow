@@ -16,7 +16,7 @@ import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { AgentStatusControl } from '@/components/AgentStatusControl';
-import { AssignmentHistory } from '@/components/AssignmentHistory';
+
 import {FollowUpWorkspace} from '@/components/followup/FollowUpWorkspace';
 import {followUpJson,type FollowUp,type ActiveFollowUp} from '@/lib/followup';
 import {agentStateLabels,type AgentView,type Availability,type AgentState} from '@/lib/agent-state';
@@ -264,11 +264,11 @@ export default function ConsultationWorkspacePage() {
   const openHistory=(item:QueueItem)=>{void run(async()=>{
     setInlineRecordFocus(null);setHistorySelection(item);setSelected(item.id);setCurrentTab('workspace');setMobilePanel('editor');
     if(!can('consultation:read'))return;
-    const saved=await apiJson<SavedConsultation|null>(`/api/consultations/queue/${item.id}`);
+    const saved=await apiJson<SavedConsultation|null>(`/api/consultations/intake/${item.id}`);
     if(saved){setDrafts(prev=>({...prev,[item.id]:prev[item.id]||savedDraft(saved)}));setInlineRecordFocus({id:saved.id,revision:++transferRevision.current});}
   }).catch(()=>{});};
   const openTimelineRecord=(entry:TimelineItem)=>{if(!entry.queueCode)return;void run(async()=>{
-    const saved=await apiJson<SavedConsultation|null>(`/api/consultations/queue/${entry.queueCode}`);
+    const saved=await apiJson<SavedConsultation|null>(`/api/consultations/intake/${entry.queueCode}`);
     if(!saved)throw new Error('이 이력에 연결된 상담 기록이 없습니다.');
     setInlineRecordFocus({id:saved.id,revision:++transferRevision.current});setMobilePanel('editor');
   }).catch(()=>{});};
@@ -380,10 +380,6 @@ export default function ConsultationWorkspacePage() {
     setQueue(clear);queueRef.current=clear(queueRef.current);
     notify('info','상담 거절','다음 가능한 상담사에게 배정합니다.');
   }).catch(()=>{});};
-  const restartRouting=(q:QueueItem)=>{void run(async()=>{
-    await apiJson(`/api/queue/${q.id}/restart-routing`,jsonBody({expectedVersion:q.version}));
-    notify('success','배정 다시 시작','이전 배정 이력을 보존하고 다시 배정합니다.');
-  }).catch(()=>{});};
   const endCall = () => { if (activeCall) void run(async () => {
     const ended=queueItem(await apiJson<ServerQueue>(`/api/queue/${activeCall}/end-call`, { method: 'POST' }));
     setQueue(prev=>prev.map(q=>q.id===ended.id?ended:q));queueRef.current=queueRef.current.map(q=>q.id===ended.id?ended:q);
@@ -404,9 +400,13 @@ export default function ConsultationWorkspacePage() {
         }
         throw error;
       });
+    customerCache.current.expiresAt=0;setRefresh(v=>v+1);
     versions.current[code] = saved.version; setTimelineRefresh(value => value + 1);
     setDraftConflicts(prev=>{const copy={...prev};delete copy[code];return copy;});
-    if (data.isComplete) { setQueue(prev => prev.filter(q => q.id !== code)); queueRef.current = queueRef.current.filter(q => q.id !== code); setSelected(''); }
+    if (data.isComplete) {
+      if(item){setHistorySelection({...item,status:'COMPLETED'});setInlineRecordFocus({id:saved.id,revision:++transferRevision.current});}
+      setQueue(prev => prev.filter(q => q.id !== code));queueRef.current=queueRef.current.filter(q=>q.id!==code);
+    }
     notify('success', data.isComplete ? '상담 저장·완료' : '초안 저장', '서버 저장이 확인됐습니다.');
     const confirmed={...data,...savedClassification(saved),resultId:saved.resultId??null,resultName:saved.resultName||'',status:saved.status?.toLowerCase()||data.status};setDrafts(prev=>({...prev,[code]:confirmed}));
     setHandoffBaselines(prev=>prev[code]?{...prev,[code]:{...prev[code],draft:confirmed}}:prev);return confirmed;
@@ -493,11 +493,11 @@ export default function ConsultationWorkspacePage() {
         {!showRecords&&<div className={`queue-pane ${mobilePanel==='queue'?'mobile-visible':''}`}>
           <QueuePanel key={`queue:${organizationId}:${identity.issuer}:${identity.subject}`} organizationId={organizationId} historyRefresh={timelineRefresh} onOpenHistory={openHistory} queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
             onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}
-            assignmentHistory={item&&can('queue:read')?<AssignmentHistory key={item.id} item={item} busy={busy} canRestart={can('queue:accept')&&!queueError&&!agentError} onRestart={()=>restartRouting(item)}/>:undefined}/>
+            />
         </div>}
         <CustomerRecordsWorkspace key={`records:${organizationId}:${identity.issuer}:${identity.subject}`} draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:records`} active={showRecords} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} recordRefresh={timelineRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError&&!customerError}
           canRequestFollowUp={can('followup:read')&&can('followup:write')} onRequestFollowUp={(code,name)=>{setFollowUpSource({code,name});setCurrentTab('followups');}}
-          historyMode={currentTab==='tickets'} focus={recordFocus} canTransfer={can('consultation:transfer')&&can('transfer:read')} onRequestTransfer={setTransferSource}
+          historyMode focus={recordFocus} canTransfer={can('consultation:transfer')&&can('transfer:read')} onRequestTransfer={setTransferSource}
           activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>
         {customer && item && !showRecords ? <div className="interaction-workspace flex flex-1 min-w-0 min-h-0"><div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
           <CustomerRecordsWorkspace key={`inline:${organizationId}:${identity.subject}`} embedded historyMode active={Boolean(inlineRecordFocus)} focus={inlineRecordFocus}
@@ -537,7 +537,14 @@ export default function ConsultationWorkspacePage() {
             onOpenRecord={canReadConsultation?openTimelineRecord:undefined} onQuoteTimeline={text=>{setInlineRecordFocus(null);setQuotedText(text);}} onAddFollowUpAction={()=>notify('info','준비 중','메시지 발송은 후속 작업입니다.')} activeFollowUpTab={followupTab}
             onRequestTransfer={requestQueueTransfer} transferDisabled={!writable||!can('consultation:transfer')||!can('transfer:read')||busy||Boolean(queueError)||!draftReady[item.id]} transferIsCall={item.type==='call'&&!item.callEnded}/>
         </div></div> : null}
-        {!showRecords&&!item&&<div className="flex-1 grid place-content-center p-6 text-slate-300" role="status">처리 대기열에서 상담을 선택해 주세요.</div>}
+        {!showRecords&&!item&&<div className="interaction-workspace flex flex-1 min-w-0 min-h-0">
+          <div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
+            <ActiveWorkspace customer={{id:'',name:'',phoneNumber:'',customerType:'individual',isRegistered:false,tier:'Standard',email:'',lastContactDate:'',totalCalls:0,managerName:''}} queueCode="" organizationId={organizationId}
+              initialDraft={drafts['idle']} onDraftChange={draft=>{versions.current.idle=0;setDrafts(prev=>({...prev,idle:draft}));}} readOnly={!can('consultation:write')} customerReadOnly idle
+              onSaveConsultation={async()=>{}} onRegisterCustomer={async()=>{}} onUpdateCustomer={async()=>{}} mediaStatus="idle" isCallActive={false} callDuration={0} onMute={()=>undefined} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}/>
+          </div><div className={`interaction-history flex flex-col w-96 shrink-0 min-h-0 ${mobilePanel==='history'?'mobile-visible':''}`}>
+            <ContextActionPanel organizationId={organizationId} identityKey={identity.subject} queueCode="" timeline={[]} customerName="" customerPhone="" readOnly onQuoteTimeline={()=>{}} onFollowUpCreated={followUpCreated} onOpenFollowUps={()=>setCurrentTab('followups')} onAddFollowUpAction={()=>{}}/>
+          </div></div>}
         {loading&&<p className="sr-only" role="status">업무 데이터를 불러오고 있습니다.</p>}
       </div>
     </div>

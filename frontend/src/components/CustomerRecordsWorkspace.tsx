@@ -51,7 +51,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
         const dirty=Object.fromEntries(Object.keys(cached.drafts).map(id=>[id,true]));
         dirtyRef.current=dirty;setDirtyRecords(dirty);
         const id=Number(cached.selected);
-        if(Number.isSafeInteger(id)&&id>0){setDirectRecordId(id);setSelected(id);}
+        if(Number.isSafeInteger(id)&&id!==0){setDirectRecordId(id);setSelected(id);}
       }
       setCacheReady(true);
     }catch{setCacheError('보관된 상담 기록 초안을 읽지 못했습니다. 이 탭을 닫지 말고 저장 상태를 확인해 주세요.');}
@@ -110,10 +110,10 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
     if(!record||busy)throw new Error('저장할 기록을 선택해 주세요.');setBusy(true);setError('');setNotice('');
     try {
       if(stale)throw new Error('최신 기록과 내 입력을 확인한 뒤 다시 적용해 주세요.');
-      const r=await apiJson<RecordData>(`/api/consultations/${record.id}`,jsonBody({categoryMain:data.categoryMain,categorySub:data.categorySub,categoryId:data.categoryId??null,resultId:data.resultId??null,
+      const r=await apiJson<RecordData>(record.id<0?`/api/consultations/queue/${record.queueCode}`:`/api/consultations/${record.id}`,jsonBody({categoryMain:data.categoryMain,categorySub:data.categorySub,categoryId:data.categoryId??null,resultId:data.resultId??null,
         expectedVersion:draftVersions[record.id]??record.version,memo:documentText(data.memo),editorDocument:readDocument(data.memo),tags:data.selectedTags.join(','),callDurationSeconds:0,complete:data.isComplete},'PUT'));
-      setRecords(prev=>prev.map(p=>p.id===r.id?{...p,...r}:p));setNotice('기록을 저장했습니다. 수정 전 내용은 변경 이력에 보존됩니다.');setRevisions(null);
-      const confirmed=draft(r);setDrafts(prev=>({...prev,[r.id]:confirmed}));setDraftVersions(prev=>({...prev,[r.id]:r.version}));setDirtyRecords(prev=>({...prev,[r.id]:false}));onRecordSaved?.();return confirmed;
+      setRecords(prev=>prev.map(p=>p.id===record.id?{...p,...r}:p));setSelected(r.id);if(directRecordId)setDirectRecordId(r.id);setRefresh(v=>v+1);setNotice('기록을 저장했습니다. 수정 전 내용은 변경 이력에 보존됩니다.');setRevisions(null);
+      const confirmed=draft(r);setDrafts(prev=>({...prev,[r.id]:confirmed}));setDraftVersions(prev=>({...prev,[r.id]:r.version}));setDirtyRecords(prev=>({...prev,[record.id]:false,[r.id]:false}));onRecordSaved?.();return confirmed;
     }catch(e){
       setError((e as Error).message);
       if(e instanceof ApiError&&e.status===409)setRefresh(v=>v+1);
@@ -132,7 +132,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
     try{const r=await apiJson<ServerCustomer>(`/api/customers/${customer.id}`,jsonBody({...merged,customerType:merged.customerType.toUpperCase(),complainant:merged.isComplainant||false},'PUT'));onCustomerSaved(customerProfile(r));}
     catch(e){setError((e as Error).message);throw e;}
   };
-  const loadRevisions=async()=>{if(!record)return;try{setRevisions(await apiJson<Revision[]>(`/api/consultations/${record.id}/revisions`));}catch(e){setError((e as Error).message);}};
+  const loadRevisions=async()=>{if(!record)return;if(record.id<0){setRevisions([]);return;}try{setRevisions(await apiJson<Revision[]>(`/api/consultations/${record.id}/revisions`));}catch(e){setError((e as Error).message);}};
   const requestTransfer=()=>{
     if(!record||!onRequestTransfer||!canTransfer||!canWrite||record.editable===false||ongoing||busy||loading)return;
     if(stale){setError('최신 기록을 확인한 뒤 업무 이관을 요청해 주세요. 내 입력은 유지됩니다.');return;}
@@ -166,7 +166,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
         {record&&canTransfer&&canWrite&&record.editable!==false&&!ongoing&&onRequestTransfer&&<button disabled={busy||loading||stale} className="underline p-1 shrink-0" onClick={requestTransfer}>업무 이관 요청</button>}
         {record&&<button className="underline p-1 shrink-0" onClick={()=>void loadRevisions()}>변경 이력</button>}</div>
       {canRead&&revisions&&<div className="p-3 bg-slate-950 max-h-64 overflow-auto text-sm"><button className="underline mb-2" onClick={()=>setRevisions(null)}>변경 이력 닫기</button>{!revisions.length&&<p>변경 이력이 없습니다.</p>}{revisions.map(r=><details key={r.id} className="py-2"><summary>{new Date(r.changedAt).toLocaleString('ko-KR')} · {r.actorName}</summary><p className="whitespace-pre-wrap mt-2">{JSON.parse(r.beforeDocument).memo}</p></details>)}</div>}
-      {record&&customer?<ActiveWorkspace key={`${organizationId}:${record.id}`} customer={customer} queueCode={`record-${record.id}`} organizationId={organizationId} contentRefresh={contentRefresh} initialDraft={drafts[record.id]} onDraftChange={d=>{setDrafts(prev=>({...prev,[record.id]:d}));setDirtyRecords(prev=>({...prev,[record.id]:!sameConsultationDraft(d,draft(record))}));}}
+      {record&&customer?<ActiveWorkspace key={`${organizationId}:${record.id}`} customer={customer} queueCode={record.id<0?record.queueCode!: `record-${record.id}`} organizationId={organizationId} contentRefresh={contentRefresh} initialDraft={drafts[record.id]} onDraftChange={d=>{setDrafts(prev=>({...prev,[record.id]:d}));setDirtyRecords(prev=>({...prev,[record.id]:!sameConsultationDraft(d,draft(record))}));}}
         readOnly={!canWrite||record.editable===false||Boolean(ongoing)||stale} customerReadOnly={!canEditCustomer||customer.canEdit===false} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}
         onSaveConsultation={save} onRegisterCustomer={async()=>{throw new Error('고객 목록에서 등록된 고객을 선택해 주세요.');}} onUpdateCustomer={updateCustomer}/>
         :<div className="flex-1 grid place-content-center gap-3 p-6 text-slate-300" role="status"><p>{loading?'상담 기록을 불러오고 있습니다.':customer?`${customer.name} 고객의 기록을 선택하거나 새 기록을 작성해 주세요.`:'상담 기록을 선택해 주세요.'}</p>{customer&&!historyMode&&!embedded&&<button className="px-4 py-3 bg-indigo-700 rounded text-white disabled:opacity-50" disabled={!canWrite||busy||loading} onClick={()=>void create()}>새 상담 기록 작성</button>}</div>}

@@ -13,7 +13,6 @@ interface QueuePanelProps {
   onAcceptCall?: (item: QueueItem) => void;
   callBlocked?: boolean;
   onReject?:(item:QueueItem)=>void;
-  assignmentHistory?:React.ReactNode;
   organizationId?:string;
   historyRefresh?:number;
   onOpenHistory?:(item:QueueItem)=>void;
@@ -25,7 +24,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   onSelectQueueItem,
   onAcceptCall,
   callBlocked=false,
-  onReject,assignmentHistory,
+  onReject,
   organizationId,historyRefresh=0,onOpenHistory,
 }) => {
   const [filterType, setFilterType] = useState<'all' | QueueItemType>('all');
@@ -254,7 +253,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                   </button>
                 )}
               </div>
-              {isSelected&&assignmentHistory&&<div onClick={event=>event.stopPropagation()}>{assignmentHistory}</div>}
+
             </div>
           );
         })}

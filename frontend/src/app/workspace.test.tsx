@@ -39,13 +39,20 @@ beforeEach(()=>{
     if(path==='/api/agents/me/status'){const body=JSON.parse(options?.body as string);availability=body.state;agentRevision++;activeOrg=new Headers(options?.headers).get('X-Organization-ID')||'org-a';return response(agent());}
     if(path==='/api/customers')return response([serverCustomer]);
     if(path.startsWith('/api/timeline/'))return response([]);
-    if(path.startsWith('/api/consultations/customer/'))return response([]);
+    if(path.startsWith('/api/consultations?page='))return response({items:[],hasMore:false});
     if(path.startsWith('/api/consultations/'))return response(null,204);
     return response({});
   });vi.stubGlobal('fetch',fetchMock);
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('keeps all workspace panels open with an empty queue',async()=>{
+    items=[];const view=render(<Workspace/>);await flush();
+    expect(view.container.querySelector('.queue-pane')).not.toBeNull();
+    expect(view.container.querySelector('.interaction-editor')).not.toBeNull();
+    expect(view.container.querySelector('.interaction-history')).not.toBeNull();
+    expect(screen.queryByText('처리 대기열에서 상담을 선택해 주세요.')).toBeNull();
+  });
   it('restores an unsaved draft after remount and compares it with a changed server version',async()=>{
     let version=1;const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(p,o)=>p==='/api/consultations/queue/queue-1'?response({id:1,version,memo:'Server draft',tags:''}):original(p,o));
@@ -123,7 +130,7 @@ describe('workspace regressions',()=>{
   });
   it('keeps an unsaved historical record mounted while settings are open',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
-    fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>path.startsWith('/api/consultations/customer/')?response([{id:7,version:1,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical record',tags:'',agentName:'Alice',createdAt:'2026-10-03T01:00:00Z'}]):original(path,o));
+    fetchMock.mockImplementation(async(path:string,o?:RequestInit)=>path.startsWith('/api/consultations?page=')?response({items:[{id:7,version:1,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical record',tags:'',agentName:'Alice',createdAt:'2026-10-03T01:00:00Z'}],hasMore:false}):original(path,o));
     render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();fireEvent.click(screen.getByText('type-draft'));
     fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
     expect(screen.getByRole('heading',{name:'시스템 설정'})).toBeTruthy();
@@ -224,7 +231,7 @@ describe('workspace regressions',()=>{
   });
   it('preserves historical editing when heartbeat fails and does not claim the agent is ready',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
-    fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/heartbeat'?response({detail:'State unavailable'},503):p.startsWith('/api/consultations/customer/')?response([{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}]):original(p,o));
+    fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/heartbeat'?response({detail:'State unavailable'},503):p.startsWith('/api/consultations?page=')?response({items:[{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}],hasMore:false}):original(p,o));
     render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();expect(screen.getByText('editor-editable')).toBeTruthy();
     fireEvent.click(screen.getByText('type-draft'));expect(screen.getByText('A unique draft')).toBeTruthy();
     expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).disabled).toBe(true);
@@ -232,7 +239,7 @@ describe('workspace regressions',()=>{
   });
   it('keeps server availability after a failed manual change and retries with its revision',async()=>{
     items=[];availability='AWAY';const original=fetchMock.getMockImplementation()!;
-    fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/status'?response({detail:'Stale state'},409):p.startsWith('/api/consultations/customer/')?response([{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}]):original(p,o));
+    fetchMock.mockImplementation(async(p,o)=>p==='/api/agents/me/status'?response({detail:'Stale state'},409):p.startsWith('/api/consultations?page=')?response({items:[{id:7,version:1,status:'COMPLETED',memo:'Historical record',tags:'',createdAt:'2026-10-03T01:00:00Z'}],hasMore:false}):original(p,o));
     render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();fireEvent.click(screen.getByText('type-draft'));
     fireEvent.change(screen.getByLabelText('수신 상태 선택'),{target:{value:'AVAILABLE'}});await flush();
     expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).value).toBe('AWAY');expect(screen.getByText('A unique draft')).toBeTruthy();
@@ -278,7 +285,7 @@ describe('workspace regressions',()=>{
   it('keeps historical records editable when the queue is empty',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
-      if(path==='/api/consultations/customer/cust-1')return response([{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical memo',tags:'',agentName:'Alice',createdAt:'2026-10-02T12:00:00'}]);
+      if(path.startsWith('/api/consultations?page='))return response({items:[{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Historical memo',tags:'',agentName:'Alice',createdAt:'2026-10-02T12:00:00'}],hasMore:false});
       return original(path,options);
     });
     render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();expect(screen.getByText('Historical memo')).toBeTruthy();expect(screen.getByText('editor-editable')).toBeTruthy();
@@ -295,7 +302,7 @@ describe('workspace regressions',()=>{
   it('opens a team-visible record read-only when its write scope belongs to another employee',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
-      if(path==='/api/consultations/customer/cust-1')return response([{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Team-visible record',tags:'',agentName:'Bob',createdAt:'2026-10-02T12:00:00',editable:false}]);
+      if(path.startsWith('/api/consultations?page='))return response({items:[{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Team-visible record',tags:'',agentName:'Bob',createdAt:'2026-10-02T12:00:00',editable:false}],hasMore:false});
       return original(path,options);
     });
     render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'고객 페이지'}));await flush();
@@ -330,7 +337,7 @@ describe('workspace regressions',()=>{
 it('opens timeline history inside the workspace and returns to the unchanged current draft',async()=>{
  const original=fetchMock.getMockImplementation()!;
  const old={id:99,version:1,customerCode:null,queueCode:'old-queue',customerName:'이전 미등록 고객',phoneNumber:'01099998888',customerRegistered:false,categoryMain:'일반',categorySub:'문의',status:'COMPLETED',memo:'이전 상담 본문',tags:'',agentName:'Alice',createdAt:'2026-10-02T00:00:00Z',editable:true,processing:false};
- fetchMock.mockImplementation(async(p,o)=>p==='/api/consultations/queue/old-queue'||p==='/api/consultations/99'?response(old):original(p,o));
+ fetchMock.mockImplementation(async(p,o)=>p==='/api/consultations/intake/old-queue'||p==='/api/consultations/99'?response(old):original(p,o));
  const view=render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
  fireEvent.click(screen.getByRole('button',{name:'이전 상담 열기'}));await flush();
  expect(screen.getByText('이전 상담 본문')).toBeTruthy();expect(screen.getByRole('button',{name:'현재 상담으로 돌아가기'})).toBeTruthy();

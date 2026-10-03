@@ -72,6 +72,39 @@ class CustomerHistoryIntegrationTest {
     assertThat(own.path("items").size()).isEqualTo(1);assertThat(own.path("items").get(0).path("queueCode").asText()).isEqualTo("bob-history");
     mvc.perform(actor(get("/api/consultations").param("page","-1"),"alice","a")).andExpect(status().isBadRequest());
   }
+  @Test void administratorEnteredLoginBindsVerifiedIdentityOnceWithoutChangingGrants()throws Exception{
+    var m=members.saveAndFlush(new Membership("a",ISSUER,"login-name",Set.of("queue:read","consultation:read")));
+    mvc.perform(get("/api/me").with(jwt().jwt(j->j.issuer(ISSUER).subject("immutable-123").claim("preferred_username","login-name"))))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.organizations[0].id").value("a"));
+    var bound=members.findById(m.getId()).orElseThrow();assertThat(bound.getSubject()).isEqualTo("immutable-123");assertThat(bound.getPermissions()).containsExactlyInAnyOrder("queue:read","consultation:read");
+    mvc.perform(get("/api/me").with(jwt().jwt(j->j.issuer(ISSUER).subject("different-user").claim("preferred_username","login-name"))))
+      .andExpect(jsonPath("$.organizations.length()").value(0));
+    mvc.perform(actor(get("/api/queue"),"immutable-123","a")).andExpect(status().isOk());
+  }
+  @Test void unsavedCancelledIntakesAreVisibleAndScoped()throws Exception{
+    var q=new QueueItem("unsaved",QueueItem.ItemType.CALL,Customer.CustomerType.INDIVIDUAL,"식별 불가",null,"잘못된 번호",null,"normal","연결되지 않은 문의",false,false,false);
+    q.setOrganizationId("a");q.assignOwner(owner("alice","a"));queues.saveAndFlush(q);
+    var rows=ok(mvc.perform(actor(get("/api/consultations"),"alice","a")));
+    assertThat(rows.path("items").size()).isEqualTo(1);assertThat(rows.path("items").get(0).path("memo").asText()).isEqualTo("연결되지 않은 문의");
+    assertThat(rows.path("items").get(0).path("id").asLong()).isNegative();
+    mvc.perform(actor(get("/api/consultations/"+(-q.getId())),"bob","a")).andExpect(status().isNotFound());
+    assertThat(ok(mvc.perform(actor(get("/api/consultations"),"eve","b"))).path("items").size()).isZero();
+  }
+  @Test void savingRegistersCustomerAndNextIncomingCallFindsHistoryWithoutPublicDisclosure()throws Exception{
+    var q=fixture("new-person","alice","a",false);q.updateUnregisteredContact("새 고객",null,"01099887766",Customer.CustomerType.INDIVIDUAL);queues.saveAndFlush(q);
+    var r=records.findByOrganizationIdAndQueueCode("a",q.getCode()).orElseThrow();
+    String payload="""
+      {"expectedVersion":%d,"categoryMain":"당시 대분류","categorySub":"당시 상세","memo":"추가 정보","editorDocument":{"format":"shnea-editor","version":3,"content":{"type":"doc","content":[]}},"tags":"","complete":false}
+      """.formatted(r.getVersion());
+    ok(mvc.perform(actor(put("/api/consultations/queue/new-person"),"alice","a").contentType(MediaType.APPLICATION_JSON).content(payload)));
+    String customer=queues.findByCode(q.getCode()).orElseThrow().getCustomerCode();assertThat(customer).isNotNull();
+    assertThat(customers.findByCode(customer).orElseThrow().isRegistered()).isTrue();
+    var request=Map.of("organizationCode","a-public","requestId",UUID.randomUUID().toString(),"customerType","INDIVIDUAL","customerName","발신자 입력","phoneNumber","010-9988-7766","inquiryType","문의","message","재문의","channel","CALL");
+    var incoming=ok(mvc.perform(post("/api/support/request").contentType(MediaType.APPLICATION_JSON).content(body(request))));
+    assertThat(incoming.has("customerCode")).isFalse();assertThat(incoming.has("customerName")).isFalse();
+    assertThat(queues.findByCode(incoming.path("queueCode").asText()).orElseThrow().getCustomerCode()).isEqualTo(customer);
+    assertThat(ok(mvc.perform(actor(get("/api/timeline/customer/"+customer),"alice","a"))).size()).isGreaterThan(0);
+  }
   @Test void historicalUnregisteredContactCanBeEditedWithoutRegistrationAndRejectsStaleOrForeignWrites()throws Exception{
     var q=fixture("contact-history","alice","a",true);
     var update=Map.of("expectedVersion",q.getVersion(),"name","수정한 고객","phoneNumber","01098765432","company","회사","customerType","INDIVIDUAL");

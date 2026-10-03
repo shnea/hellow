@@ -32,7 +32,7 @@ export function MemberManagement({organizationId,members,invitations,reload}:Pro
     </tbody></table></div>
     <form className="admin-form" onSubmit={e=>{e.preventDefault();void save();}}>
       <h3>{edit?'직원 권한 변경':'계정 ID로 직원 등록'}</h3><div className="admin-form-grid">
-        <label>플랫폼 계정 ID<input required value={subject} disabled={busy||Boolean(edit)} maxLength={255} onChange={e=>setSubject(e.target.value)}/></label>
+        <label>플랫폼 로그인 아이디 또는 고유 사용자 ID<input required value={subject} disabled={busy||Boolean(edit)} maxLength={255} onChange={e=>setSubject(e.target.value)}/><small>로그인 아이디로 등록하면 해당 직원의 첫 로그인에서 계정이 연결됩니다.</small></label>
         <label>표시 이름<input value={name} disabled={busy} maxLength={100} onChange={e=>setName(e.target.value)}/></label>
       </div><p>직접 부여한 기능 권한입니다. 역할과 접근 범위는 팀·역할 화면에서 함께 변경할 수 있습니다.</p><PermissionsField value={permissions} onChange={setPermissions} disabled={busy}/>
       {edit&&<label className="admin-check"><input type="checkbox" checked={active} disabled={busy} onChange={e=>setActive(e.target.checked)}/>조직 접근 허용</label>}

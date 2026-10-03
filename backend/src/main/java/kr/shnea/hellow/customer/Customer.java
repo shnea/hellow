@@ -128,6 +128,8 @@ public class Customer extends kr.shnea.hellow.security.OrganizationOwned {
     this.lastContactAt = LocalDateTime.now();
   }
 
+  public void changePhoneNumber(String phone){this.phoneNumber=phone;}
+
   // Getters
   public Long getId() {
     return id;

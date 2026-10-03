@@ -61,6 +61,8 @@ public class Membership {
     return subject;
   }
 
+  public void bindIdentity(String subject) { this.subject=subject; }
+
   public String getIssuer() {
     return issuer;
   }

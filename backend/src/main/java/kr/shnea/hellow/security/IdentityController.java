@@ -9,20 +9,23 @@ public class IdentityController {
   private final MembershipRepository memberships;
   private final OrganizationRepository organizations;
   private final AdminAccess admin;
+  private final MembershipIdentityLinker linker;
 
   public IdentityController(
       WorkspaceAccess access,
       MembershipRepository memberships,
-      OrganizationRepository organizations, AdminAccess admin) {
+      OrganizationRepository organizations, AdminAccess admin,MembershipIdentityLinker linker) {
     this.access = access;
     this.memberships = memberships;
     this.organizations = organizations;
     this.admin = admin;
+    this.linker=linker;
   }
 
   @GetMapping("/api/me")
   public Map<String, Object> me() {
     var jwt = access.identity();
+    linker.link(jwt);
     var orgs =
         memberships
             .findByIssuerAndSubjectAndActiveTrue(jwt.getIssuer().toString(), jwt.getSubject())

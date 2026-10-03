@@ -26,11 +26,14 @@ public class CustomerConsultationController {
   private final WorkspaceAccess access;
   private final ObjectMapper json;
   private final kr.shnea.hellow.content.CatalogService catalog;
+  private final ConsultationHistoryQuery history;
+  private final kr.shnea.hellow.customer.CustomerIdentityService customerIdentity;
   public CustomerConsultationController(ConsultationRepository records,ConsultationRevisionRepository revisions,
-      CustomerRepository customers,QueueItemRepository queues,AttachmentRepository attachments,WorkspaceAccess access,ObjectMapper json,kr.shnea.hellow.content.CatalogService catalog) {
+      CustomerRepository customers,QueueItemRepository queues,AttachmentRepository attachments,WorkspaceAccess access,ObjectMapper json,kr.shnea.hellow.content.CatalogService catalog,ConsultationHistoryQuery history,kr.shnea.hellow.customer.CustomerIdentityService customerIdentity) {
     this.records=records;this.revisions=revisions;this.customers=customers;this.queues=queues;
     this.attachments=attachments;this.access=access;this.json=json;
     this.catalog=catalog;
+    this.history=history;this.customerIdentity=customerIdentity;
   }
   @GetMapping("/customer/{code}")
   public List<Map<String,Object>> list(@PathVariable String code) {
@@ -45,26 +48,28 @@ public class CustomerConsultationController {
   public HistoryPage history(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="") String search){
     var actor=access.require("consultation:read");
     if(page<0||page>100000||search.length()>100)throw new ResponseStatusException(BAD_REQUEST);
-    org.springframework.data.jpa.domain.Specification<Consultation> scope=BusinessScope.rows(actor);
-    if(!search.isBlank())scope=scope.and((root,query,cb)->{
-      String term="%"+search.trim().toLowerCase(Locale.ROOT).replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%";
-      var intake=query.subquery(Integer.class);var q=intake.from(QueueItem.class);
-      intake.select(cb.literal(1)).where(cb.equal(q.get("organizationId"),actor.organizationId()),cb.equal(q.get("code"),root.get("queueCode")),
-          cb.or(cb.like(cb.lower(q.get("customerName")),term,'\\'),cb.like(q.get("phoneNumber"),term,'\\')));
-      var customer=query.subquery(Integer.class);var c=customer.from(kr.shnea.hellow.customer.Customer.class);
-      customer.select(cb.literal(1)).where(cb.equal(c.get("organizationId"),actor.organizationId()),cb.equal(c.get("code"),root.get("customerCode")),
-          cb.or(cb.like(cb.lower(c.get("name")),term,'\\'),cb.like(c.get("phoneNumber"),term,'\\')));
-      return cb.or(cb.exists(intake),cb.exists(customer),cb.like(cb.lower(root.get("categorySub")),term,'\\'));
-    });
-    var rows=records.findAll(scope,org.springframework.data.domain.PageRequest.of(page,50,org.springframework.data.domain.Sort.by(
-        org.springframework.data.domain.Sort.Order.desc("createdAt"),org.springframework.data.domain.Sort.Order.desc("id"))));
-    return new HistoryPage(rows.getContent().stream().map(r->view(actor,r)).toList(),page,rows.hasNext());
+    var ids=history.ids(actor,page,search);
+    return new HistoryPage(ids.stream().limit(50).map(id->id<0?intakeView(actor,-id):view(actor,requireRecord(actor,id))).toList(),page,ids.size()>50);
   }
   /** An accepted standalone transfer can be opened without granting access to other customer records. */
   @GetMapping("/{id}")
   public Map<String,Object> get(@PathVariable Long id) {
     var actor=access.require("consultation:read");
+    if(id<0)return intakeView(actor,-id);
     return view(actor,requireRecord(actor,id));
+  }
+  @GetMapping("/intake/{code}")
+  public Map<String,Object> intake(@PathVariable String code){var actor=access.require("consultation:read");var q=queues.findByOrganizationIdAndCode(actor.organizationId(),code).orElseThrow(()->new ResponseStatusException(NOT_FOUND));return intakeView(actor,q.getId());}
+  private Map<String,Object> intakeView(WorkspaceAccess.Actor actor,long id){
+    var q=queues.findById(id).orElseThrow(()->new ResponseStatusException(NOT_FOUND));actor.requireRow(q);
+    var existing=records.findByOrganizationIdAndQueueCode(actor.organizationId(),q.getCode());
+    if(existing.isPresent()){actor.requireRow(existing.get());return view(actor,existing.get());}
+    var result=new LinkedHashMap<String,Object>();result.put("id",-id);result.put("version",0);result.put("queueCode",q.getCode());result.put("customerCode",q.getCustomerCode());
+    result.put("customerName",q.getCustomerName());result.put("phoneNumber",q.getPhoneNumber());result.put("companyName",q.getCompanyName());result.put("customerType",q.getCustomerType());result.put("customerRegistered",q.getCustomerCode()!=null);
+    result.put("contactVersion",q.getVersion());result.put("contactEditable",actor.can("customer:write",q));result.put("createdAt",q.getCreatedAt());result.put("agentName",q.getAssignedAgent());
+    result.put("categoryMain","일반 상담");result.put("categorySub",q.getInquiryType()==null?"일반 문의":q.getInquiryType());result.put("status",q.getStatus());result.put("memo",q.getSummary());result.put("tags","");
+    boolean processing=q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING;
+    result.put("processing",processing);result.put("editable",actor.can("consultation:write",q)&&!processing);return result;
   }
   private Map<String,Object> view(WorkspaceAccess.Actor actor,Consultation record) {
     Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
@@ -106,7 +111,7 @@ public class CustomerConsultationController {
   @PutMapping("/{id}")
   @Transactional
   public Consultation update(@PathVariable Long id,@Valid @RequestBody ConsultationController.SaveRequest r) throws com.fasterxml.jackson.core.JsonProcessingException {
-    var actor=access.require("consultation:write");var record=requireRecord(actor,id);
+    var actor=access.require("consultation:write");customerIdentity.lockOrganization(actor.organizationId());var record=requireRecord(actor,id);
     // An ongoing interaction must use its owner's queue save endpoint, so completion remains atomic.
     if(record.getQueueCode()!=null) {
       var q=queues.findByOrganizationIdAndCode(actor.organizationId(),record.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
@@ -118,6 +123,7 @@ public class CustomerConsultationController {
       throw new ResponseStatusException(BAD_REQUEST,"에디터 문서 형식을 확인해 주세요.");
     validateFiles(r.editorDocument(),record);
     revisions.save(new ConsultationRevision(record,actor.subject(),actor.name(),json.writeValueAsString(record)));
+    if(record.getQueueCode()!=null)customerIdentity.onSave(queues.lockByCode(actor.organizationId(),record.getQueueCode()).orElseThrow(),actor);
     var status=record.getStatus();
     if(status==Consultation.ConsultationStatus.IN_PROGRESS && r.complete()) status=Consultation.ConsultationStatus.COMPLETED;
     var classification=catalog.select(actor.organizationId(),r.categoryId(),r.resultId(),record,r.categoryMain(),r.categorySub(),status==Consultation.ConsultationStatus.COMPLETED);

@@ -33,8 +33,8 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
   const menuItems = [
     { id: 'workspace', label: '상담 워크스페이스', icon: PhoneCall },
-    { id: 'customers', label: '고객·거래처 디렉터리', icon: Users },
-    { id: 'tickets', label: '티켓 & 상담 이력', icon: Ticket },
+    { id: 'customers', label: '고객·상담 이력', icon: Users },
+    { id: 'tickets', label: '상담 이력', icon: Ticket },
     { id: 'followups', label: '콜백·방문 예약', icon: CalendarClock },
     { id: 'transfers', label: '상담 이관', icon: ArrowRightLeft },
     { id: 'stats', label: '상담 통계·리포트', icon: BarChart3 },
