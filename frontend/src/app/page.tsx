@@ -20,6 +20,7 @@ import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { AgentStatusControl } from '@/components/AgentStatusControl';
+import { ReportingWorkspace } from '@/components/reporting/ReportingWorkspace';
 
 import {FollowUpWorkspace} from '@/components/followup/FollowUpWorkspace';
 import {followUpJson,type FollowUp,type ActiveFollowUp} from '@/lib/followup';
@@ -502,9 +503,9 @@ export default function ConsultationWorkspacePage() {
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
   return <><div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
-    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')}
+    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')} showReports={can('report:read')||can('agent:monitor')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
-      onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
+      onTabChange={setCurrentTab}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
     <div className="flex flex-1 flex-col min-w-0">
       <div className="workspace-heading px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
@@ -527,6 +528,7 @@ export default function ConsultationWorkspacePage() {
         {canReadConsultation&&<button onClick={()=>setCurrentTab('tickets')}>My 상담 이력</button>}
         {can('followup:read')&&<button onClick={()=>setCurrentTab('followups')}>예약</button>}
         {can('transfer:read')&&<button onClick={()=>setCurrentTab('transfers')}>상담 이관</button>}
+        {(can('report:read')||can('agent:monitor'))&&<button onClick={()=>setCurrentTab('stats')}>현황·통계</button>}
         <button onClick={()=>setCurrentTab('settings')}>설정</button>
       </nav>
       {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
@@ -541,7 +543,8 @@ export default function ConsultationWorkspacePage() {
         localInputs={Object.entries(handoffBaselines).filter(([code,base])=>drafts[code]&&!sameConsultationDraft(drafts[code],base.draft)&&!queue.some(q=>q.id===code&&q.assignedSubject===identity.subject)).map(([code,base])=>({code,recordId:base.recordId,name:base.name,text:documentText(drafts[code].memo)}))}/>
       {currentTab==='settings'&&<div className="workspace-settings-pane"><WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
         blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}} embedded/></div>}
-      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers||currentTab==='settings'?'workspace-main-hidden':''}`}>
+      <ReportingWorkspace key={`reports:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} active={currentTab==='stats'} organizationId={organizationId} accessKey={accessKey} canMonitor={can('agent:monitor')} canReport={can('report:read')} canReadHistory={canReadConsultation} onHistory={()=>setCurrentTab(canReadAllHistory?'customers':'tickets')}/>
+      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers||currentTab==='settings'||currentTab==='stats'?'workspace-main-hidden':''}`}>
         {!showRecords&&<div className={`queue-pane ${mobilePanel==='queue'?'mobile-visible':''}`}>
           <QueuePanel key={`queue:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} canRead={can('queue:read')} organizationId={organizationId} historyRefresh={timelineRefresh} onOpenHistory={openHistory} queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
             onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}

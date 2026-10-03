@@ -124,7 +124,7 @@ public class RoutingService {
       a=attempts.save(new AssignmentAttempt(q.getOrganizationId(),code,q.getRoutingCycle(),p,now));
     }
     a.received(now);a.finish(ACCEPTED,now);
-    q.acceptBy(actor.subject(),actor.name());q.assignOwner(actor);p.observeWork(code,now);
+    q.acceptBy(actor.subject(),actor.name());q.recordFirstAcceptance(now);q.assignOwner(actor);p.observeWork(code,now);
     return queues.save(q);
   }
 
@@ -248,6 +248,14 @@ public class RoutingService {
     return new AgentView(state,p.getAvailability(),p.getStateRevision(),p.getOrganizationId(),p.getHeartbeatAt()==null?null:p.getHeartbeatAt().plusSeconds(45),p.getAvailableSince(),
       code==null?visible.map(AssignmentAttempt::getQueueCode).orElse(null):code,visible.map(AssignmentAttempt::getId).orElse(null),visible.map(AssignmentAttempt::getExpiresAt).orElse(null),
       followups.activeForIdentity(p.getIssuer(),p.getSubject()).stream().filter(f->org.equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null),reserved.stream().filter(t->org.equals(t.getOrganizationId())).map(t->t.getId()).findFirst().orElse(null));
+  }
+
+  /** Same routing semantics, without exposing work in another organization to monitors. */
+  @Transactional(readOnly=true)
+  public String monitoringState(Membership member,Instant now){
+    return presence.findByIssuerAndSubject(member.getIssuer(),member.getSubject())
+      .filter(p->member.getOrganizationId().equals(p.getOrganizationId()))
+      .map(p->view(p,member.getOrganizationId(),now).state()).orElse("OFFLINE");
   }
 
   private AgentView withoutPresence(WorkspaceAccess.Actor actor){

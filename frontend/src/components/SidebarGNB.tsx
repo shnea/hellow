@@ -15,6 +15,7 @@ interface SidebarGNBProps {
   showSettings?: boolean;
   showFollowups?:boolean;
   showTransfers?:boolean;
+  showReports?:boolean;
   supportLink?: string;
   showHistory?:boolean;showAllHistory?:boolean;
 }
@@ -28,6 +29,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   showSettings=false,
   showFollowups=false,
   showTransfers=false,
+  showReports=false,
   supportLink,
   showHistory=true,showAllHistory=false,
 }) => {
@@ -39,7 +41,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
     { id: 'tickets', label: 'My 상담 이력', icon: Ticket },
     { id: 'followups', label: '콜백·방문 예약', icon: CalendarClock },
     { id: 'transfers', label: '상담 이관', icon: ArrowRightLeft },
-    { id: 'stats', label: '상담 통계·리포트', icon: BarChart3 },
+    { id: 'stats', label: '상담 현황·통계', icon: BarChart3 },
     { id: 'settings', label: '시스템 설정', icon: Settings },
   ];
 
@@ -62,7 +64,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
       {/* Main Navigation Tabs */}
       <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
-        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(item.id!=='customers'||showAllHistory)&&(item.id!=='tickets'||showHistory)).map((item) => {
+        {menuItems.filter(item=>(item.id!=='stats'||showReports)&&(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(item.id!=='customers'||showAllHistory)&&(item.id!=='tickets'||showHistory)).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (

@@ -97,6 +97,9 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   private boolean callEnded;
   private java.time.Instant mediaRequestedAt;
   private java.time.Instant callStartedAt;
+  private java.time.Instant firstAcceptedAt;
+  public java.time.Instant getFirstAcceptedAt(){return firstAcceptedAt;}
+  public void recordFirstAcceptance(java.time.Instant now){if(firstAcceptedAt==null)firstAcceptedAt=now;}
   private java.time.Instant callEndedAt;
   private java.time.Instant mediaMissingSince;
   public java.time.Instant getMediaMissingSince(){return mediaMissingSince;}

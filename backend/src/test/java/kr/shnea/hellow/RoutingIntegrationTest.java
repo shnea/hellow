@@ -77,6 +77,7 @@ class RoutingIntegrationTest {
     accept("bob","a","first",a.getId()).andExpect(status().isConflict());
     accept("alice","a","first","stale").andExpect(status().isConflict());
     accept("alice","a","first",a.getId()).andExpect(status().isOk());accept("alice","a","first",a.getId()).andExpect(status().isOk());
+    assertThat(queues.findByCode("first").orElseThrow().getFirstAcceptedAt()).isEqualTo(now);
     assertThat(heartbeat("alice","a",null).path("state").asText()).isEqualTo("CALLING");
     mvc.perform(actor(post("/api/queue/first/end-call"),"alice","a")).andExpect(status().isOk());
     var after=heartbeat("alice","a",null);assertThat(after.path("state").asText()).isEqualTo("AFTER_CALL");

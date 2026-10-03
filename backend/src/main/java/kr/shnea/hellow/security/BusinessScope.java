@@ -9,6 +9,18 @@ import org.springframework.data.jpa.domain.Specification;
 /** Apply both tenant and ownership predicates in SQL before any row is returned. */
 public final class BusinessScope {
   private BusinessScope() {}
+  /** SQL aggregates use the same tenant/current-owner boundary as criteria queries.
+   * Participation is a separate original-content read relation, never a reporting grant. */
+  public static String ownershipSql(WorkspaceAccess.Actor actor,String alias,java.util.Map<String,Object> parameters) {
+    parameters.put("organization",actor.organizationId());
+    if(actor.dataScope()==DataScope.ORGANIZATION)return alias+".organization_id=:organization";
+    parameters.put("issuer",actor.issuer());parameters.put("subject",actor.subject());
+    String owner="("+alias+".owner_issuer=:issuer AND "+alias+".owner_subject=:subject)";
+    if(actor.dataScope()==DataScope.TEAM&&!actor.teamIds().isEmpty()){
+      parameters.put("scopeTeams",actor.teamIds());owner="("+owner+" OR "+alias+".team_id IN (:scopeTeams))";
+    }
+    return alias+".organization_id=:organization AND "+owner;
+  }
   public static Predicate predicate(WorkspaceAccess.Actor actor, From<?,?> row, CriteriaBuilder cb) {
     Predicate owned=cb.conjunction();
     if(actor.dataScope()!=DataScope.ORGANIZATION) {
