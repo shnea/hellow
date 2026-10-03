@@ -133,6 +133,13 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
     return mediaCleanupUntil;
   }
 
+  /** Called under the source queue lock after a work transfer's recipient is verified. */
+  public void handoff(kr.shnea.hellow.security.WorkspaceAccess.Actor recipient) {
+    if(status!=QueueStatus.PROCESSING)
+      throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"진행 중 접수만 담당자를 변경할 수 있습니다.");
+    assignedSubject=recipient.subject();assignedAgent=recipient.name();assignOwner(recipient);
+  }
+
   public void endCall() {
     if (!this.callEnded) this.mediaCleanupUntil = java.time.Instant.now().plusSeconds(180);
     this.callEnded = true;

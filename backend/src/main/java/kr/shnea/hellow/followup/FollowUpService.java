@@ -34,13 +34,14 @@ public class FollowUpService {
   private final AuditEventRepository audits;
   private final ObjectMapper json;
   private final Clock clock;
+  private final kr.shnea.hellow.transfer.WorkTransferRepository transfers;
   public FollowUpService(FollowUpRepository tasks,FollowUpEventRepository events,QueueItemRepository queues,
       TimelineRepository timeline,WorkspaceAccess access,MembershipRepository members,OrganizationRepository organizations,
       RoutingLockRepository routingLock,AgentPresenceRepository presence,AssignmentAttemptRepository attempts,
-      AuditEventRepository audits,ObjectMapper json,Clock clock){
+      AuditEventRepository audits,ObjectMapper json,Clock clock,kr.shnea.hellow.transfer.WorkTransferRepository transfers){
     this.tasks=tasks;this.events=events;this.queues=queues;this.timeline=timeline;this.access=access;
     this.members=members;this.organizations=organizations;this.routingLock=routingLock;
-    this.presence=presence;this.attempts=attempts;this.audits=audits;this.json=json;this.clock=clock;
+    this.presence=presence;this.attempts=attempts;this.audits=audits;this.json=json;this.clock=clock;this.transfers=transfers;
   }
   public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped FollowUpAction task,boolean canWrite,boolean canAssign,boolean canProcess,String contactName,String phoneNumber){}
   public record Page(List<View> items,int page,boolean hasMore){}
@@ -169,6 +170,7 @@ public class FollowUpService {
         if(!"SCHEDULED".equals(state))throw conflict("확정된 일정만 시작할 수 있습니다.");
         if(task.getScheduledAt().isAfter(now))throw conflict("예약 시각이 아직 되지 않았습니다.");
         if(!queues.activeForIdentity(actor.issuer(),actor.subject()).isEmpty()||!tasks.activeForIdentity(actor.issuer(),actor.subject()).isEmpty()
+            ||!transfers.reservations(actor.issuer(),actor.subject()).isEmpty()
             ||presence.findByIssuerAndSubject(actor.issuer(),actor.subject()).flatMap(p->attempts.activeForPresence(p.getId())).isPresent())
           throw conflict("수신 요청·상담·후처리 또는 다른 후속 업무를 먼저 완료해 주세요.");
       }else if(!"IN_PROGRESS".equals(state))throw conflict("진행 중 업무만 완료하거나 실패로 기록할 수 있습니다.");

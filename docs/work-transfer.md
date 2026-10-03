@@ -20,6 +20,28 @@
 - Media 공급자 호출과 DB 상태 변경 사이의 실패·재시작을 처리할 지속 상태/재시도와 전후 이력이 필요하다. 완료 후 이전 상담사의 토큰 갱신을 거부하고 실제 참가자를 제거한다. 기존 발급 토큰의 재접속 가능 기간에도 제거를 재시도한다.
 - 고객 종료와 이관 수락/확정의 경합, 대상 연결 확인 전에 원본을 끝내는 경로, 연결 확인 후 DB 확정 실패, 기존 참가자 제거 실패를 검증해야 한다. 실제 두 사람 음성 수락은 사용자가 미뤄 둔 [진행표](mvp-progress.md)의 WebRTC 검수에 남아 있다.
 
+## 업무 이관 API
+
+모든 직원 요청은 현재 로그인 Identity와 `X-Organization-ID`를 사용한다. 응답의 capability는 현재 권한과 상태를 반영하며, 제안에 원본 상담 본문은 포함하지 않는다.
+
+| 경로 | 입력·동작 |
+| --- | --- |
+| `POST /api/transfers/work` | consultationId/expectedRecordVersion/toMemberId/reason/memo/requestId(UUID v4). 원본을 유지한 OFFERED 생성·같은 요청 복원 |
+| `GET /api/transfers/request/{requestId}` | 현재 조직·요청 Identity의 기존 요청 또는 빈 성공 응답. 쓰기 없음 |
+| `GET /api/transfers?status=OFFERED&page=0` | 현재 본인/팀/조직 범위 안의 요청, 50건 items/page/hasMore |
+| `GET /api/transfers/{id}` | 현재 요청과 version/canAccept/canReject/canCancel/canReadRecord |
+| `GET /api/transfers/{id}/history?page=0` | 현재 조회 범위로 제한한 수행 이력, 페이지당 50건 |
+| `GET /api/transfers/assignees?consultationId=…` | 현재 원본을 이관할 수 있는 직원만 조회. 실제 선택 가능한 활성 memberId/name/teamId |
+| `POST /api/transfers/{id}/accept` | expectedVersion/reason. 대상만 수락, 현재 원본/권한 재검사 후 담당 원자 변경 |
+| `POST /api/transfers/{id}/reject` | expectedVersion/reason. 대상만 거절, 원본 담당 유지 |
+| `POST /api/transfers/{id}/cancel` | expectedVersion/reason. 현재 원본 이관 권한이 있는 요청자/기존 담당/조직 관리자 취소 |
+
+- 표시한 요청 version이 다르면 409다. 처리 시점에 원본 변경·권한 회수·만료를 발견하면 기존 담당을 유지하며 FAILED/REVOKED/EXPIRED를 저장하고 해당 최종 상태를 성공 응답으로 반환한다. 클라이언트는 HTTP 성공만으로 수락 성공을 표시하지 않고 반환 status를 확인해야 한다.
+- 같은 수행자가 이미 성공한 같은 명령을 다시 보내면 기록된 결과를 반환한다. 다른 종료 명령은 409이며 수락 뒤 원본을 다시 넘기는 동작은 새 UUID 요청으로 수행한다.
+- V14는 현재 담당 이름과 실시간 업무 예약 플래그·Identity당 활성 실시간 대상 unique index를 추가한다. 진행 중 이관 대상은 `TRANSFER_PENDING`이고 ACD 자동/직접 수신, 후속 업무 시작 및 조직 변경을 차단한다. workTransferId는 현재 조직일 때만 보인다. 자리비움/오프라인은 허용하고 worker가 해당 요청의 권한/가용 변경을 기록한다.
+- 2초 worker는 별도 조직별 트랜잭션으로 미결 요청을 재검사한다. 업무 이관으로 종료 통화의 후처리 담당자가 달라져도 원래 참가자 Identity를 이관 이력에서 찾아 기존 통화의 cleanup 기한까지 Media 제거를 재시도한다. 이 경로는 활성 통화의 Media 이관 구현을 뜻하지 않는다.
+- 기한이 지났더라도 EXPIRED 등 최종 결과를 저장하기 전까지 실시간 대상 예약을 유지한다. 가용 검사와 SQL unique index의 OFFERED 조건을 일치시켜, 다른 조직에서 아직 저장되지 않은 만료를 무시하고 같은 Identity를 중복 확보하지 않는다. worker 또는 직원 명령이 최종 결과를 저장하면 예약이 해제된다.
+
 ## 단계별 구현
 
 먼저 상담 업무 요청·수락·거절·취소·만료/회수·원본 보존의 서버 계약을 구현·검수한다. 이어 실제 직원·받은/보낸 이관 목록과 충돌 입력 보존 화면을 연결하고 웹/API를 함께 반영한다. 실시간 통화 이관은 Media 확인/복구 계약까지 구현해야 하며 앞의 업무 이관만으로 전체 목표를 완료 처리하지 않는다.

@@ -46,4 +46,5 @@ public class AgentPresence {
     if(!organizationId.equals(org)){organizationId=org;stateRevision++;}
     observeFollowUp(id,now);
   }
+  public void beginWork(String org,String code,Instant now){if(!organizationId.equals(org)){organizationId=org;stateRevision++;}observeWork(code,now);}
 }

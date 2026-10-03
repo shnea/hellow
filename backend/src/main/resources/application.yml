@@ -52,6 +52,7 @@ management:
         include: health,info
 
 hellow:
+  work-transfer-enabled: ${HELLOW_WORK_TRANSFER_ENABLED:true}
   platform-admin-issuer: ${ADMIN_OIDC_ISSUER:}
   platform-admin-subject: ${ADMIN_OIDC_SUB:}
   api-audience: ${HELLOW_API_AUDIENCE:}

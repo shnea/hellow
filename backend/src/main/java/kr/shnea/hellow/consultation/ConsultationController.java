@@ -61,11 +61,10 @@ public class ConsultationController {
         queues
             .findByOrganizationIdAndCode(actor.organizationId(), code)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    q.requireOwner(actor.subject());
-    return consultations
-        .findByOrganizationIdAndQueueCode(actor.organizationId(), code)
-        .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.noContent().build());
+    var saved=consultations.findByOrganizationIdAndQueueCode(actor.organizationId(),code);
+    if(saved.isPresent()){actor.requireRow(saved.get());return ResponseEntity.ok(saved.get());}
+    actor.requireRow(q);q.requireOwner(actor.subject());
+    return ResponseEntity.noContent().build();
   }
 
   @PutMapping("/queue/{code}")
@@ -77,6 +76,7 @@ public class ConsultationController {
             .lockByCode(actor.organizationId(), code)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
     var existing = consultations.findByOrganizationIdAndQueueCode(actor.organizationId(), code);
+    existing.ifPresent(actor::requireRow);
     if (q.getStatus() == QueueItem.QueueStatus.COMPLETED
         && existing.isPresent()
         && actor.subject().equals(existing.get().getAgentSubject())

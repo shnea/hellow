@@ -15,6 +15,7 @@ public class WorkTransfer extends OrganizationOwned {
   @Column(nullable=false) private Long consultationId;
   @Column(length=64) private String queueCode;
   @Column(nullable=false) private long recordVersion;
+  @Column(nullable=false) private boolean liveWork;
   @Column(nullable=false) private Long fromMemberId;
   @Column(nullable=false,length=255) private String fromIssuer;
   @Column(nullable=false,length=255) private String fromSubject;
@@ -37,9 +38,10 @@ public class WorkTransfer extends OrganizationOwned {
   @com.fasterxml.jackson.annotation.JsonIgnore @Column(nullable=false,unique=true,length=64) private String requestKey;
   @com.fasterxml.jackson.annotation.JsonIgnore @Column(nullable=false,length=64) private String requestFingerprint;
   protected WorkTransfer(){}
-  public WorkTransfer(Consultation record,Membership from,Membership to,WorkspaceAccess.Actor requester,String reason,String memo,String key,String fingerprint,Instant now,Instant expires){
+  public WorkTransfer(Consultation record,Membership from,Membership to,WorkspaceAccess.Actor requester,String reason,String memo,String key,String fingerprint,Instant now,Instant expires,boolean liveWork){
     id=UUID.randomUUID().toString();setOrganizationId(record.getOrganizationId());copyOwner(record);
     consultationId=record.getId();queueCode=record.getQueueCode();recordVersion=record.getVersion();
+    this.liveWork=liveWork;
     fromMemberId=from.getId();fromIssuer=from.getIssuer();fromSubject=from.getSubject();fromName=name(from);
     toMemberId=to.getId();toIssuer=to.getIssuer();toSubject=to.getSubject();toName=name(to);toTeamId=to.getTeamId();
     requesterIssuer=requester.issuer();requesterSubject=requester.subject();requesterName=requester.name();
@@ -51,6 +53,7 @@ public class WorkTransfer extends OrganizationOwned {
   public String getId(){return id;} public Long getVersion(){return version;}
   public Long getConsultationId(){return consultationId;} public String getQueueCode(){return queueCode;}
   public long getRecordVersion(){return recordVersion;} public Long getFromMemberId(){return fromMemberId;}
+  public boolean isLiveWork(){return liveWork;}
   public String getFromIssuer(){return fromIssuer;} public String getFromSubject(){return fromSubject;} public String getFromName(){return fromName;}
   public Long getToMemberId(){return toMemberId;} public String getToIssuer(){return toIssuer;} public String getToSubject(){return toSubject;} public String getToName(){return toName;} public String getToTeamId(){return toTeamId;}
   public String getRequesterIssuer(){return requesterIssuer;} public String getRequesterSubject(){return requesterSubject;} public String getRequesterName(){return requesterName;}

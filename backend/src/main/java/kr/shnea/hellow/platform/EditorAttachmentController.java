@@ -99,7 +99,11 @@ public class EditorAttachmentController {
             .findByOrganizationIdAndFileId(actor.organizationId(), fileId)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
     if(file.getQueueCode().startsWith("record-")) record(actor,file.getQueueCode());
-    else actor.requireRow(queues.findByOrganizationIdAndCode(actor.organizationId(),file.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND)));
+    else {
+      var q=queues.findByOrganizationIdAndCode(actor.organizationId(),file.getQueueCode()).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
+      boolean recordAccess=consultations.findByOrganizationIdAndQueueCode(actor.organizationId(),q.getCode()).map(actor::allows).orElse(false);
+      if(!recordAccess)actor.requireRow(q);
+    }
     return ResponseEntity.ok()
         .cacheControl(CacheControl.noStore())
         .body(platform.getViewTicket(fileId));

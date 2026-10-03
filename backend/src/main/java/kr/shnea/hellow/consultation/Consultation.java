@@ -47,6 +47,9 @@ public class Consultation extends kr.shnea.hellow.security.OrganizationOwned {
 
   @Column(length = 100)
   private String agentName;
+  @Column(length=255) private String currentAssigneeName;
+  public String getCurrentAssigneeName(){return currentAssigneeName;}
+  public void handoff(kr.shnea.hellow.security.WorkspaceAccess.Actor actor){assignOwner(actor);currentAssigneeName=actor.name();}
 
   private int callDurationSeconds;
 

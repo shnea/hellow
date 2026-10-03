@@ -9,6 +9,7 @@ import java.time.*;
 import java.util.*;
 import kr.shnea.hellow.queue.*;
 import kr.shnea.hellow.followup.FollowUpRepository;
+import kr.shnea.hellow.transfer.WorkTransferRepository;
 import kr.shnea.hellow.security.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,15 +29,16 @@ public class RoutingService {
   private final Clock clock;
   private final AuditEventRepository audits;
   private final FollowUpRepository followups;
+  private final WorkTransferRepository transfers;
   public RoutingService(RoutingLockRepository lock,AgentPresenceRepository presence,AssignmentAttemptRepository attempts,
-      QueueItemRepository queues,OrganizationRepository organizations,MembershipRepository members,MembershipAccess authority,Clock clock,AuditEventRepository audits,FollowUpRepository followups){
+      QueueItemRepository queues,OrganizationRepository organizations,MembershipRepository members,MembershipAccess authority,Clock clock,AuditEventRepository audits,FollowUpRepository followups,WorkTransferRepository transfers){
     this.lock=lock;this.presence=presence;this.attempts=attempts;this.queues=queues;
-    this.organizations=organizations;this.members=members;this.authority=authority;this.clock=clock;this.audits=audits;this.followups=followups;
+    this.organizations=organizations;this.members=members;this.authority=authority;this.clock=clock;this.audits=audits;this.followups=followups;this.transfers=transfers;
   }
 
   public record AgentView(String state,AgentPresence.Availability availability,long version,
       String activeOrganizationId,Instant heartbeatExpiresAt,Instant availableSince,
-      String queueCode,String attemptId,Instant offerExpiresAt,Long followUpId){}
+      String queueCode,String attemptId,Instant offerExpiresAt,Long followUpId,String workTransferId){}
   public record OfferView(String id,String subject,String name,Instant expiresAt,boolean received){}
   public record QueueView(@com.fasterxml.jackson.annotation.JsonUnwrapped QueueItem item,OfferView offer,boolean canAccept,boolean routingPaused,int attemptCount){}
   public record AttemptView(String id,String agentSubject,String agentName,Instant offeredAt,
@@ -153,8 +155,8 @@ public class RoutingService {
     reconcile(org,now);attempts.flush();
     if(!organizations.findById(org).map(Organization::isActive).orElse(false))return;
     var agents=presence.findByOrganizationId(org);
-    for(var p:agents){var jobs=work(p);var followUp=followups.activeForIdentity(p.getIssuer(),p.getSubject());
-      p.observeWork(!jobs.isEmpty()?jobs.getFirst().getCode():followUp.isEmpty()?null:"followup-"+followUp.getFirst().getId(),now);}
+    for(var p:agents){var jobs=work(p);var followUp=followups.activeForIdentity(p.getIssuer(),p.getSubject());var reserved=transfers.reservations(p.getIssuer(),p.getSubject());
+      p.observeWork(!jobs.isEmpty()?jobs.getFirst().getCode():!followUp.isEmpty()?"followup-"+followUp.getFirst().getId():reserved.isEmpty()?null:"transfer-"+reserved.getFirst().getId(),now);}
     agents.sort(Comparator.comparing(AgentPresence::getAvailableSince).thenComparing(AgentPresence::getId));
     var waiting=queues.findByOrganizationIdAndStatusOrderByCreatedAtAsc(org,QueueItem.QueueStatus.WAITING);
     waiting.sort(Comparator.comparingInt((QueueItem q)->"urgent".equals(q.getPriority())?0:"low".equals(q.getPriority())?2:1).thenComparing(QueueItem::getCreatedAt).thenComparing(QueueItem::getCode));
@@ -192,7 +194,7 @@ public class RoutingService {
   private void finish(AssignmentAttempt a,AgentPresence p,AssignmentAttempt.Outcome result,Instant now){a.finish(result,now);p.released(now);}
   private void audit(WorkspaceAccess.Actor actor,String action,String target,String details){audits.save(new AuditEvent(actor.organizationId(),actor.issuer(),actor.subject(),action,target,details));}
   private List<AssignmentAttempt> history(QueueItem q){return attempts.findByOrganizationIdAndQueueCodeAndRoutingCycle(q.getOrganizationId(),q.getCode(),q.getRoutingCycle());}
-  private boolean busy(AgentPresence p){return !work(p).isEmpty()||!followups.activeForIdentity(p.getIssuer(),p.getSubject()).isEmpty();}
+  private boolean busy(AgentPresence p){return !work(p).isEmpty()||!followups.activeForIdentity(p.getIssuer(),p.getSubject()).isEmpty()||!transfers.reservations(p.getIssuer(),p.getSubject()).isEmpty();}
   private List<QueueItem> work(AgentPresence p){return queues.activeForIdentity(p.getIssuer(),p.getSubject());}
   private AgentPresence getOrCreate(WorkspaceAccess.Actor actor,Instant now){return presence.findByIssuerAndSubject(actor.issuer(),actor.subject()).orElseGet(()->presence.saveAndFlush(new AgentPresence(actor.issuer(),actor.subject(),actor.organizationId(),actor.name(),now)));}
   private WorkspaceAccess.Actor authorize(WorkspaceAccess.Actor original){
@@ -212,24 +214,26 @@ public class RoutingService {
 
   private AgentView view(AgentPresence p,String org,Instant now){
     var jobs=work(p);var offer=attempts.activeForPresence(p.getId()).filter(a->a.getExpiresAt().isAfter(now));
+    var reserved=transfers.reservations(p.getIssuer(),p.getSubject());
     String state;
     String code=null;
     if(!jobs.isEmpty()){
       var q=jobs.getFirst();state=q.getType()==QueueItem.ItemType.CALL&&q.isCallEnded()?"AFTER_CALL":"CALLING";
       if(org.equals(q.getOrganizationId()))code=q.getCode();
     }else if(!followups.activeForIdentity(p.getIssuer(),p.getSubject()).isEmpty()){state="FOLLOW_UP";}
+    else if(!reserved.isEmpty()){state="TRANSFER_PENDING";}
     else if(offer.isPresent()&&p.live(now)&&p.getAvailability()==AgentPresence.Availability.AVAILABLE){state=offer.get().getReceivedAt()==null?"RESERVED":"RINGING";}
     else state=p.live(now)?p.getAvailability().name():"OFFLINE";
     var visible=offer.filter(a->org.equals(a.getOrganizationId()));
     return new AgentView(state,p.getAvailability(),p.getStateRevision(),p.getOrganizationId(),p.getHeartbeatAt()==null?null:p.getHeartbeatAt().plusSeconds(45),p.getAvailableSince(),
       code==null?visible.map(AssignmentAttempt::getQueueCode).orElse(null):code,visible.map(AssignmentAttempt::getId).orElse(null),visible.map(AssignmentAttempt::getExpiresAt).orElse(null),
-      followups.activeForIdentity(p.getIssuer(),p.getSubject()).stream().filter(f->org.equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null));
+      followups.activeForIdentity(p.getIssuer(),p.getSubject()).stream().filter(f->org.equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null),reserved.stream().filter(t->org.equals(t.getOrganizationId())).map(t->t.getId()).findFirst().orElse(null));
   }
 
   private AgentView withoutPresence(WorkspaceAccess.Actor actor){
     var work=followups.activeForIdentity(actor.issuer(),actor.subject());
     return new AgentView(work.isEmpty()?"OFFLINE":"FOLLOW_UP",AgentPresence.Availability.OFFLINE,0,actor.organizationId(),null,null,null,null,null,
-      work.stream().filter(f->actor.organizationId().equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null));
+      work.stream().filter(f->actor.organizationId().equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null),null);
   }
 
   @Transactional(readOnly=true)
