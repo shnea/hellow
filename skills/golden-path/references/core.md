@@ -10,11 +10,12 @@
 - 기본 구성: workflow는 작업 절차, golden-path는 프로젝트 기준 관리. Impeccable은 [등록된 적용 조건](skills.md)에 맞는 UI 작업에 사용한다.
 - 핵심 경계: Organization 격리 + Permission + Data Scope를 서버에서 검증한다. 직원 OIDC Identity, Membership, 고객 상담 세션을 구분한다. [보안](domains/07-security.md).
 - 아키텍처: CRM Core / Contact Center / Async Worker / External Integration의 책임을 나누되 Entity별 MSA를 만들지 않는다. 실시간 업무 상태와 Media도 분리한다. [구조](domains/05-structure.md).
-- 기술: 현재 코드는 Java 21, Gradle 8.12.1, Spring Boot 3.4.4, Spring Security, JPA, PostgreSQL 17.11, Next.js 16.3.8 App Router, React 19.2.8, TypeScript 5를 사용한다. SHNEA OIDC·File·Editor 계약과 WebRTC/LiveKit을 사용하며 실제 OIDC 설정·2인 통화 검증은 남았다. QueryDSL·Job 도입 여부 등 전체 기술 범위는 [기술](domains/04-technology.md)의 후속 기준을 확인한다.
+- 기술: 현재 코드는 Java 21, Gradle 8.12 계열, Spring Boot 3.4.4, Spring Security, JPA, PostgreSQL 17 계열, Next.js 16.3.8 App Router, React 19.2.8, TypeScript 5를 사용한다. 실제 빌드/의존 버전은 Dockerfile과 lockfile을 확인한다. SHNEA OIDC·File·Editor와 WebRTC/LiveKit을 사용한다. 개발 로그인·사용자의 LTE 통화·녹음 저장 확인 이후에도 실기기 회귀와 운영 수락은 구분한다. QueryDSL·Job 등 후속 범위는 [기술](domains/04-technology.md)를 확인한다.
 - 운영: 개발·운영 Docker Compose, Nginx 30160, linux/amd64 NAS, SHA 이미지 태그, SOPS + age. 구체 주소·사양은 [환경 기준](../../../docs/infrastructure.md).
 - 협업: 사람 친화적 소스 구조. 큰 작업 단위 완료·검증 통과 후 인계 갱신, 커밋·push. [개발 원칙](../../../docs/development.md).
 - 실행·검증 명령: [검증 영역](domains/11-validation.md#실제-실행-명령). 설치 확인을 UI·제품·운영 검증 완료로 취급하지 않는다.
 - 다음 시작점·남은 일: [작업 인계](../../../docs/handoff.md).
+- 다른 AI의 전체 서비스 후속 개발 시작점: [AI 개발 인계서](../../../docs/ai-development-handoff.md), [기능별 상세 명세](../../../docs/remaining-feature-specs.md), [검증·운영·배포](../../../docs/development-acceptance-runbook.md). 확정 요구·현재 구현·설계 제안·미정 정책을 구분한다. 태블릿 가운데 패널 스크롤은 2026-10-04 사용자 실기기 미해결 확인으로 보류다.
 - 상담 이력은 권한 범위 전체/My 목록과 공통 상세 팝업으로 구분한다. SELF는 전체 메뉴를 숨기고 타임라인은 읽기 전용 상세·명시적 인용을 제공한다. 설정·후속 요청·호전환은 작업 화면의 연결을 유지한다. 녹음은 플랫폼 PRIVATE 저장과 독립 재생 권한, 워크스페이스 아이콘을 사용한다. [상담 이력·녹음 계약](../../../docs/consultation-history-recordings.md), [이관 참여자 조회·팝업 계약](../../../docs/work-transfer.md).
 - 사용자 제보 복구: 로그인·1시간 유지·초안·문의 이력·예약 반복·반응형·설정·상태 칩·실통화/플랫폼 녹음을 [복구 범위](../../../docs/workspace-repair.md)에 따라 진행한다. 모의 검사·뷰포트 검수와 실기기/실음성 수락을 구분한다.
-- 남은 수락 조건: 실제 플랫폼 OIDC access token으로 로그인, 첫 조직 Membership과 기존 기록 이관, 파일 업로드, 기존 PUBLIC 파일 정리, 운영 DB 이관·복구, HTTPS/2인 통화와 NAS 배포 검증. [범위](domains/02-scope.md)와 [검증](domains/11-validation.md)에 구현 상태와 미실행 항목을 나눈다. NFR 수치·요금 등 미정 사항은 근거를 확인해 정한다.
+- 남은 수락 조건: 실제 계정·파일 첨부·갱신/절전 복귀, 실제 기기 통화/호전환/종료·녹음 회귀, 운영 DB 이관·복구·NAS 배포. 과거 PUBLIC 파일 정리 항목은 실제 잔존 여부를 조사한 뒤 조치한다. 첫 조직 이관·개발 로그인·LTE 연결 등 이미 확인한 경로를 미구현으로 되돌리지 않는다. 최신 상태는 위 AI 인계와 작업 인계를 따른다. NFR 수치·요금 등 미정 사항은 근거를 확인해 정한다.
