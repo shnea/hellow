@@ -89,6 +89,19 @@ class RoutingIntegrationTest {
     assertThat(attempts.findById(a.getId()).orElseThrow().getOutcome()).isEqualTo(AssignmentAttempt.Outcome.ACCEPTED);
   }
 
+  @Test void unavailableMicrophoneReturnsOfferButPreservesAcceptedCall()throws Exception{
+    ready("alice");ready("bob");request("mic","a");routing.route("a");var first=offer("mic");
+    var unavailable=ok(mvc.perform(actor(post("/api/agents/me/heartbeat"),"alice","a").contentType(MediaType.APPLICATION_JSON).content("{\"mediaReady\":false}")));
+    assertThat(unavailable.path("state").asText()).isEqualTo("AWAY");
+    assertThat(attempts.findById(first.getId()).orElseThrow().getOutcome()).isEqualTo(AssignmentAttempt.Outcome.OFFLINE);
+    var next=offer("mic");assertThat(next.getAgentSubject()).isEqualTo("bob");
+    accept("bob","a","mic",next.getId()).andExpect(status().isOk());
+    var active=ok(mvc.perform(actor(post("/api/agents/me/heartbeat"),"bob","a").contentType(MediaType.APPLICATION_JSON).content("{\"mediaReady\":false}")));
+    assertThat(active.path("state").asText()).isEqualTo("CALLING");
+    assertThat(active.path("availability").asText()).isEqualTo("AWAY");
+    assertThat(attempts.findById(next.getId()).orElseThrow().getOutcome()).isEqualTo(AssignmentAttempt.Outcome.ACCEPTED);
+  }
+
   @Test void rejectionReassignsImmediatelyAndDuplicateRejectDoesNotAffectNewOffer()throws Exception{
     ready("alice");now=now.plusSeconds(1);ready("bob");request("q","a");routing.route("a");var a=offer("q");
     reject("alice","q",a.getId());var b=offer("q");assertThat(b.getAgentSubject()).isEqualTo("bob");

@@ -46,11 +46,24 @@ public class RoutingService {
 
   @Transactional
   public AgentView heartbeat(WorkspaceAccess.Actor original,String receivedAttemptId){
+    return heartbeat(original,receivedAttemptId,null);
+  }
+
+  @Transactional
+  public AgentView heartbeat(WorkspaceAccess.Actor original,String receivedAttemptId,Boolean mediaReady){
     acquire(original.organizationId());var actor=authorize(original);var now=clock.instant();
     var p=getOrCreate(actor,now);
     if(!p.getOrganizationId().equals(actor.organizationId()))
       throw conflict("다른 조직에서 상담 상태를 사용 중입니다. 현재 조직으로 상태를 전환해 주세요.");
     p.heartbeat(actor.name(),now);
+    if(Boolean.FALSE.equals(mediaReady)&&p.getAvailability()==AgentPresence.Availability.AVAILABLE){
+      attempts.activeForPresence(p.getId()).ifPresent(a->{
+        queues.lockByCode(a.getOrganizationId(),a.getQueueCode());finish(a,p,OFFLINE,now);
+      });
+      attempts.flush();
+      p.change(actor.organizationId(),AgentPresence.Availability.AWAY,now);
+      audit(actor,"agent.media.unavailable",p.getId(),"AWAY");
+    }
     if(receivedAttemptId!=null)attempts.findById(receivedAttemptId)
       .filter(a->a.active()&&a.getPresenceId().equals(p.getId())&&a.getOrganizationId().equals(actor.organizationId())&&a.getExpiresAt().isAfter(now))
       .ifPresent(a->a.received(now));

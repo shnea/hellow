@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Workspace from './page';
 import type { ConsultationDraft } from '@/lib/workspace-data';
+import {prepareMicrophone} from '@/lib/microphone-readiness';
+vi.mock('@/lib/microphone-readiness',()=>({prepareMicrophone:vi.fn(async()=>{}),microphoneReady:vi.fn(async()=>true)}));
 
 vi.mock('@/components/SidebarGNB', () => ({ SidebarGNB: ({onTabChange}:{onTabChange:(tab:string)=>void}) => <nav>Navigation<button onClick={()=>onTabChange('settings')}>시스템 설정</button></nav> }));
 vi.mock('@/components/admin/AdminConsole',()=>({AdminConsole:({fixedOrganizationId}:{fixedOrganizationId:string})=><section>관리 대상:{fixedOrganizationId}</section>}));
@@ -25,6 +27,7 @@ let fetchMock:ReturnType<typeof vi.fn<(path:string,options?:RequestInit)=>Promis
 let availability:string;let agentRevision:number;let activeOrg:string;
 function agent(){const job=items.find(q=>q.status==='PROCESSING'&&q.assignedSubject==='alice');const offered=items.find(q=>q.status==='WAITING'&&q.offer?.subject==='alice');return {state:job?job.type==='CALL'&&job.callEnded?'AFTER_CALL':'CALLING':offered?'RINGING':availability,availability,version:agentRevision,activeOrganizationId:activeOrg,queueCode:job?.code||offered?.code||null,attemptId:offered?.offer?.id||null};}
 beforeEach(()=>{
+  vi.mocked(prepareMicrophone).mockResolvedValue(undefined);
   HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
   HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
   sessionStorage.clear();sessionStorage.setItem('hellow_access_token','test-access-token');items=[queue()];
@@ -202,7 +205,7 @@ describe('workspace regressions',()=>{
     expect(screen.getByRole('dialog')).toBeTruthy();
     await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
     const heartbeats=fetchMock.mock.calls.filter(([p])=>p==='/api/agents/me/heartbeat');
-    expect(JSON.parse(heartbeats.at(-1)?.[1]?.body as string)).toEqual({receivedAttemptId:'offer-one'});
+    expect(JSON.parse(heartbeats.at(-1)?.[1]?.body as string)).toEqual({receivedAttemptId:'offer-one',mediaReady:true});
     fireEvent.click(screen.getByRole('button',{name:'대기열에서 확인'}));await flush();
     await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});expect(screen.queryByRole('dialog')).toBeNull();
     items=[waiting('queue-1','alice','offer-two')];await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
@@ -234,6 +237,13 @@ describe('workspace regressions',()=>{
     fireEvent.change(screen.getByLabelText('수신 상태 선택'),{target:{value:'AVAILABLE'}});await flush();
     expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).value).toBe('AWAY');expect(screen.getByText('A unique draft')).toBeTruthy();
     expect(JSON.parse(fetchMock.mock.calls.find(([p])=>p==='/api/agents/me/status')?.[1]?.body as string)).toEqual({state:'AVAILABLE',expectedVersion:1});
+  });
+  it('does not change server availability when microphone permission is denied',async()=>{
+    items=[];availability='AWAY';vi.mocked(prepareMicrophone).mockRejectedValue(new Error('마이크 권한을 허용해 주세요.'));
+    render(<Workspace/>);await flush();
+    fireEvent.change(screen.getByLabelText('수신 상태 선택'),{target:{value:'AVAILABLE'}});await flush();
+    expect(fetchMock.mock.calls.some(([p])=>p==='/api/agents/me/status')).toBe(false);
+    expect((screen.getByLabelText('수신 상태 선택') as HTMLSelectElement).value).toBe('AWAY');
   });
   it('uses explicit customer ID and latest profile instead of queue-keyed mock data',async()=>{
     render(<Workspace/>);await flush();expect(await screen.findByText('cust-1:Latest server name')).toBeTruthy();

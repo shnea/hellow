@@ -22,7 +22,7 @@ export function AgentStatusControl({view,state,organizationId,busy,error,onChang
         <option value="AVAILABLE" disabled={working}>대기 · 상담 가능</option><option value="AWAY">자리비움</option><option value="OFFLINE">오프라인</option>
       </select></label></>}
     {working&&<span>{state==='TRANSFER_PENDING'?'이관 요청 응답까지 새 상담 수신 차단':state==='FOLLOW_UP'?'후속 업무 종료까지 새 상담 수신 차단':'기록 완료까지 새 상담 수신 차단'}</span>}
-    {!working&&!elsewhere&&state==='OFFLINE'&&!error&&<span>대기를 선택하면 상담 요청을 받습니다.</span>}
+    {!working&&!elsewhere&&(state==='OFFLINE'||state==='AWAY')&&!error&&<span>대기를 선택하면 마이크를 확인한 뒤 상담 요청을 받습니다.</span>}
     {error&&<p role="alert">{error}<button disabled={busy} onClick={onRetry}>상태 다시 확인</button></p>}
   </section>;
 }

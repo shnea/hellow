@@ -10,6 +10,7 @@ import { consultationDraftKey, readConsultationDrafts, writeConsultationDrafts }
 import { documentText, readDocument } from '@/lib/editor-document';
 import { customerProfile, queueItem, requestProfile, timelineItem, type ConsultationDraft, type ServerCustomer, type ServerQueue, type ServerTimeline } from '@/lib/workspace-data';
 import { useCall } from '@/hooks/use-call';
+import {prepareMicrophone,microphoneReady} from '@/lib/microphone-readiness';
 import { CustomerRecordsWorkspace } from '@/components/CustomerRecordsWorkspace';
 import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 import { savedClassification } from '@/lib/consultation-content';
@@ -180,7 +181,7 @@ export default function ConsultationWorkspacePage() {
         }catch(error){followUpError=(error as Error).message;}
         let state:AgentView|null=null;let stateError='';
         if(permitted('queue:read')&&permitted('queue:accept'))try{
-          state=await apiJson<AgentView>('/api/agents/me/heartbeat',{...jsonBody({receivedAttemptId:receivedOffer.current}),signal:abort.signal});
+          state=await apiJson<AgentView>('/api/agents/me/heartbeat',{...jsonBody({receivedAttemptId:receivedOffer.current,mediaReady:await microphoneReady()}),signal:abort.signal});
         }catch(error){
           if(error instanceof ApiError&&error.status===401)throw error;
           stateError=(error as Error).message;
@@ -345,6 +346,7 @@ export default function ConsultationWorkspacePage() {
     });}catch{/* run reports the failure while retaining the current organization. */}
   };
   const changeAgent=(state:Availability)=>{void run(async()=>{
+    if(state==='AVAILABLE')await prepareMicrophone();
     const current=agentRef.current||await apiJson<AgentView>('/api/agents/me');
     const saved=await apiJson<AgentView>('/api/agents/me/status',jsonBody({state,expectedVersion:current.version},'PUT'));
     storeAgent(saved);setAgentError('');receivedOffer.current=null;
@@ -352,6 +354,11 @@ export default function ConsultationWorkspacePage() {
   }).catch(()=>{});};
   const accept = (q: QueueItem) => { void run(async () => {
     if(q.canAccept!==true||receivingBlocked||agentError)throw new Error('대기 상태와 본인 수신 배정을 먼저 확인해 주세요.');
+    if(q.type==='call'&&!await microphoneReady()){
+      const state=await apiJson<AgentView>('/api/agents/me/heartbeat',jsonBody({mediaReady:false}));
+      storeAgent(state);receivedOffer.current=null;
+      throw new Error('마이크 준비 상태가 해제되어 배정을 반납했습니다. 마이크를 확인한 뒤 대기를 다시 선택해 주세요.');
+    }
     const accepted = queueItem(await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`,jsonBody({attemptId:q.offer?.id??null})));
     setQueue(previous => previous.map(item => item.id === accepted.id ? accepted : item));
     queueRef.current = queueRef.current.map(item => item.id === accepted.id ? accepted : item);

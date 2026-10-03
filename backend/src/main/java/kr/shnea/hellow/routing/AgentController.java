@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.*;
 public class AgentController {
   private final WorkspaceAccess access;private final RoutingService routing;
   public AgentController(WorkspaceAccess access,RoutingService routing){this.access=access;this.routing=routing;}
-  public record Heartbeat(@Size(max=64) String receivedAttemptId){}
+  public record Heartbeat(@Size(max=64) String receivedAttemptId,Boolean mediaReady){}
   public record Change(@NotNull AgentPresence.Availability state,@NotNull @Min(0) Long expectedVersion){}
   @GetMapping public RoutingService.AgentView current(){return routing.current(access.require("queue:accept"));}
-  @PostMapping("/heartbeat") public RoutingService.AgentView heartbeat(@RequestBody(required=false) @Valid Heartbeat request){return routing.heartbeat(access.require("queue:accept"),request==null?null:request.receivedAttemptId());}
+  @PostMapping("/heartbeat") public RoutingService.AgentView heartbeat(@RequestBody(required=false) @Valid Heartbeat request){return routing.heartbeat(access.require("queue:accept"),request==null?null:request.receivedAttemptId(),request==null?null:request.mediaReady());}
   @PutMapping("/status") public RoutingService.AgentView change(@RequestBody @Valid Change request){return routing.change(access.require("queue:accept"),request.state(),request.expectedVersion());}
 }
