@@ -1,0 +1,47 @@
+# 콜백·방문 일정 계약
+
+요구사항 30장의 Callback/Reservation을 기존 `follow_up_actions`에 이어 구현한다. 원래 상담·고객 관계와 접수 내용을 보존하며, 콜백을 실제 전화 발신이나 Media 통화 이관으로 표시하지 않는다. 이 문서는 서버 계약이며 화면 연결·개발 배포·사용자 수락 상태는 [진행표](mvp-progress.md)와 [인계](handoff.md)에 구분한다.
+
+## 상태와 일정
+
+- `PENDING`: 요청 접수, 확정 일정 없음. 기존 자유 문장 속 날짜·엔지니어 이름은 자동 해석하지 않는다.
+- `SCHEDULED`: 활성 담당자와 시작 시각·소요 시간·시간대를 확정했다. 생성 시의 `proposedAt`은 고객 희망 시각이며 확정 일정과 별개다.
+- `IN_PROGRESS`: 현재 담당자가 예정 시각 이후 명시적으로 시작했다. 다른 조직의 상담·후처리·후속 업무 또는 유효 수신 제안이 있으면 시작할 수 없다.
+- `COMPLETED` / `FAILED`: 진행 중 업무의 담당자가 처리 결과를 기록한다. 실패한 업무는 이유/이력을 유지한 채 미래 시각으로 재예약할 수 있다.
+- `CANCELLED`: 요청/예약/진행 업무 취소. 완료·취소한 업무는 이 계약에서 재개하지 않으며 새 요청을 생성한다. 진행 중 업무를 타인이 취소하려면 재배정 권한도 필요하다.
+
+확정/변경 시각은 현재 이후 10년 이내, 소요 시간은 5~480분이다. 시각은 offset을 포함한 ISO 8601 `Instant`로 받고 PostgreSQL `timestamptz`에 저장한다. IANA `timeZone`(예: `Asia/Seoul`)을 함께 보관한다. 시간대 없는 지역 시각이나 자유 문장을 확정값으로 받지 않는다. 같은 `(issuer, subject)`는 다른 조직에서도 확정/진행 일정의 `[시작, 종료)`가 겹칠 수 없다. 연속 일정은 허용하며 충돌 응답에는 다른 조직·고객·내용을 노출하지 않는다. 예정 종료 시각이 지나도 진행 업무를 자동 완료하거나 수신 가능 상태로 바꾸지 않는다.
+
+예정 시각 도달만으로 고객에게 발신하거나 대기열을 복제하지 않는다. `IN_PROGRESS` 동안 ACD/수동 수락과 대기 선택·업무 조직 변경을 막고 상담사 상태를 `FOLLOW_UP`으로 반환한다. 완료/실패/취소하면 기존 선택한 AWAY/OFFLINE을 유지한다. 수신 상태 조회의 `followUpId`는 현재 조직에 해당하는 경우에만 반환한다.
+
+## 권한과 담당 변경
+
+- 조회는 `followup:read`, 수정·등록·처리는 `followup:write`, 다른 Identity로의 담당 변경은 별도 `followup:assign`이다. 변경/중복 복원의 응답에도 조회 범위를 함께 확인한다. 모든 목록/상세/이력에 현재 조직과 각 기능의 SELF/TEAM/ORGANIZATION 범위를 적용한다. 이력은 현재 후속 업무의 범위로 검사한다.
+- 등록 원본은 본인이 수락한 PROCESSING 상담 또는 범위 안의 COMPLETED 상담이다. `followup:write`와 `consultation:read`의 원본 범위를 확인하고 PROCESSING은 issuer·subject의 정확한 담당 일치를 요구한다. WAITING/CANCELLED에서 생성하지 않는다.
+- 담당자는 같은 조직의 활성 Membership과 현재 실효 후속 조회·처리 권한이 필요하다. 담당 변경은 원래 업무와 새 담당자의 저장 팀 모두 재배정 범위에 있어야 한다. 동적 역할/직원/조직 회수는 다음 요청부터 반영한다. 담당자를 변경해 후속 업무의 현재 소유권·팀은 갱신하되 원본 접수·상담·타임라인의 소유권/작성 당시 팀은 바꾸지 않는다. 원본 상담 내용의 별도 열람권을 주지 않는다.
+- V12는 기존 후속 작성자에게 같은 범위의 조회 권한을 추가하고 기존 조직 전체 관리자에게만 재배정 권한을 추가한다. 일반 작성자의 범위를 넓히거나 최고관리자에게 업무 내용 권한을 자동 부여하지 않는다. 최초 관리자 생성에는 세 권한을 포함한다. 역할/직원 버전도 갱신하여 이전 관리 화면의 저장으로 새 권한을 덮어쓰지 못하게 한다.
+
+## 중복·충돌·이력
+
+새 화면은 UUID v4 `requestId`를 생성하고 전송 전 원래 본문과 함께 보관해야 한다. 조직·작성 Identity·요청 ID를 기준으로 동일 본문은 같은 업무를 반환하며 내용 변경은 409다. 응답 불명 시 같은 ID/본문을 재전송한다. 이전 화면 호환을 위해 ID 없는 요청도 당분간 허용하지만 이 호출에는 중복 보장이 없다. 동일 요청 복원은 희망 시각이 과거가 되었더라도 가능하며 현재 범위를 벗어난 업무는 반환하지 않는다.
+
+모든 변경은 조회한 `expectedVersion`을 요구하며 오래된 버전은 409다. 서버 실패 시 트랜잭션 전체를 롤백하므로 기존 일정·담당·상태·원문을 유지한다. 화면은 실패 시 입력을 보존하고 최신 값 재조회 후 명시적으로 다시 적용해야 한다. 변경 사유, 전후 일정/담당/본문 스냅샷과 수행자·시각을 `follow_up_events`에 남긴다. 일반 관리자 감사에는 본문·처리 사유를 넣지 않는다. 기존 요청의 과거 수행자를 추정하거나 가짜 이력을 생성하지 않는다.
+
+잠금 순서는 기존 ACD의 전역 `routing_lock` → 조직 → 원본 접수 또는 후속 업무다. 조직 잠금을 획득한 뒤 현재 Membership/역할을 처음 해석한다. 전역 잠금은 여러 조직의 같은 Identity 일정 충돌 및 예약 시작/수신 경합을 함께 직렬화한다. PostgreSQL은 IN_PROGRESS Identity당 부분 unique index와 확정 일정의 필수 값 CHECK를 추가한다. 후속 고객 연결에도 JPA 버전을 적용한다.
+
+## API
+
+`X-Organization-ID`와 플랫폼 직원 access token을 사용한다.
+
+| 경로 | 내용 |
+| --- | --- |
+| `POST /api/followup` | 기존 queueCode/actionType/title/details, 추가 requestId와 선택 proposedAt/timeZone 쌍. PENDING 접수·원본 타임라인 1건 |
+| `GET /api/followup` | queueCode/customerCode/actionType/status 및 확정 시각 from(포함)/until(미포함) 필터, 50건 page/items/hasMore |
+| `GET /api/followup/{id}` | 범위 안의 현재 업무와 version |
+| `GET /api/followup/{id}/history?page=0` | 현재 범위로 제한한 최근 변경 이력, 페이지당 50건 |
+| `GET /api/followup/assignees` | 현재 선택 가능한 활성 직원 memberId/name/teamId. 재배정 권한 없는 직원은 본인만 |
+| `PUT /api/followup/{id}` | expectedVersion/title/details/reason, 미확정·확정·실패 업무의 목적/메모 보완 |
+| `POST /api/followup/{id}/schedule` | expectedVersion/scheduledAt/durationMinutes/timeZone/assignedMemberId/reason, 확정·시각 변경·재배정·실패 후 재예약 |
+| `POST /api/followup/{id}/status` | expectedVersion/status/reason, 시작·완료·실패·취소 |
+
+통화 이관은 대상 수락·실제 Media 연결 확인·실패 복구의 별도 Contact Center 계약이 필요하다. Consultation 업무 이관의 수락/거절/회수 처리도 별도 후속 구현이며 예약 재배정만으로 이관 전체를 완료 처리하지 않는다.

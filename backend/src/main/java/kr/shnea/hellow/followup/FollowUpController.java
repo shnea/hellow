@@ -1,69 +1,39 @@
 package kr.shnea.hellow.followup;
 
-import static org.springframework.http.HttpStatus.*;
-
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import kr.shnea.hellow.queue.*;
-import kr.shnea.hellow.security.*;
-import kr.shnea.hellow.timeline.*;
-import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.List;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
-@RestController
-@RequestMapping("/api/followup")
+@RestController @RequestMapping("/api/followup") @Validated
 public class FollowUpController {
-  private final FollowUpRepository followups;
-  private final QueueItemRepository queues;
-  private final TimelineRepository timelines;
-  private final WorkspaceAccess access;
-
-  public FollowUpController(
-      FollowUpRepository followups,
-      QueueItemRepository queues,
-      TimelineRepository timelines,
-      WorkspaceAccess access) {
-    this.followups = followups;
-    this.queues = queues;
-    this.timelines = timelines;
-    this.access = access;
-  }
-
-  public record Request(
-      @NotBlank String queueCode,
-      @NotBlank @Pattern(regexp = "VISIT|CALLBACK") String actionType,
-      @NotBlank @Size(max = 200) String title,
-      @NotBlank @Size(max = 10000) String details) {}
-
-  @PostMapping
-  @Transactional
-  public FollowUpAction create(@Valid @RequestBody Request r) {
-    var actor = access.require("followup:write");
-    var q =
-        queues
-            .lockByCode(actor.organizationId(), r.queueCode())
-            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
-    q.requireOwner(actor.subject());
-    var action = new FollowUpAction(q.getCustomerCode(), r.actionType(), r.title(), r.details());
-    action.setOrganizationId(actor.organizationId());
-    action.setQueueCode(q.getCode());
-    action.copyOwner(q);
-    followups.save(action);
-    var item =
-        new TimelineItem(
-            q.getCustomerCode(),
-            TimelineItem.ChannelType.TICKET,
-            actor.name(),
-            "[접수·미확정] " + r.title(),
-            r.details(),
-            false,
-            null,
-            "후속조치,PENDING");
-    item.setOrganizationId(actor.organizationId());
-    item.setQueueCode(q.getCode());
-    item.copyOwner(q);
-    timelines.save(item);
-    return action;
-  }
+  private final FollowUpService service;
+  public FollowUpController(FollowUpService service){this.service=service;}
+  public record Request(@NotBlank @Size(max=64) String queueCode,
+      @NotBlank @Pattern(regexp="VISIT|CALLBACK") String actionType,
+      @NotBlank @Size(max=200) String title,@NotBlank @Size(max=10000) String details,
+      @Pattern(regexp="(?i)[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}") String requestId,
+      Instant proposedAt,@Size(max=100) String timeZone){}
+  public record Edit(@NotNull @Min(0) Long expectedVersion,@NotBlank @Size(max=200) String title,
+      @NotBlank @Size(max=10000) String details,@NotBlank @Size(max=2000) String reason){}
+  public record Schedule(@NotNull @Min(0) Long expectedVersion,@NotNull Instant scheduledAt,
+      @NotNull @Min(5) @Max(480) Integer durationMinutes,@NotBlank @Size(max=100) String timeZone,
+      @NotNull @Positive Long assignedMemberId,@NotBlank @Size(max=2000) String reason){}
+  public record Transition(@NotNull @Min(0) Long expectedVersion,
+      @NotBlank @Pattern(regexp="IN_PROGRESS|COMPLETED|FAILED|CANCELLED") String status,
+      @NotBlank @Size(max=2000) String reason){}
+  @PostMapping public FollowUpAction create(@Valid @RequestBody Request r){return service.create(r);}
+  @GetMapping public FollowUpService.Page list(@RequestParam(required=false) @Size(max=64) String queueCode,
+      @RequestParam(required=false) @Size(max=64) String customerCode,@RequestParam(required=false) @Pattern(regexp="VISIT|CALLBACK") String actionType,
+      @RequestParam(required=false) @Pattern(regexp="PENDING|SCHEDULED|IN_PROGRESS|COMPLETED|FAILED|CANCELLED") String status,
+      @RequestParam(required=false) Instant from,@RequestParam(required=false) Instant until,
+      @RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.list(queueCode,customerCode,actionType,status,from,until,page);}
+  @GetMapping("/{id}") public FollowUpAction get(@PathVariable Long id){return service.get(id);}
+  @GetMapping("/{id}/history") public List<FollowUpEvent> history(@PathVariable Long id,@RequestParam(defaultValue="0") @Min(0) @Max(100000) int page){return service.history(id,page);}
+  @GetMapping("/assignees") public List<FollowUpService.Assignee> assignees(){return service.assignees();}
+  @PutMapping("/{id}") public FollowUpAction edit(@PathVariable Long id,@Valid @RequestBody Edit r){return service.edit(id,r);}
+  @PostMapping("/{id}/schedule") public FollowUpAction schedule(@PathVariable Long id,@Valid @RequestBody Schedule r){return service.schedule(id,r);}
+  @PostMapping("/{id}/status") public FollowUpAction transition(@PathVariable Long id,@Valid @RequestBody Transition r){return service.transition(id,r);}
 }

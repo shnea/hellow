@@ -27,11 +27,16 @@ public class WorkspaceAccess {
     return jwt;
   }
 
-  public Actor require(String permission) {
+  public String organizationId() {
     var request =
         ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
     String organizationId = request.getHeader("X-Organization-ID");
     if (organizationId == null) throw new ResponseStatusException(FORBIDDEN, "업무 조직을 선택해 주세요.");
+    return organizationId;
+  }
+
+  public Actor require(String permission) {
+    String organizationId = organizationId();
     Jwt jwt = identity();
     var member =
         memberships

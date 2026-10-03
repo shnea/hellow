@@ -8,6 +8,7 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 import java.time.*;
 import java.util.*;
 import kr.shnea.hellow.queue.*;
+import kr.shnea.hellow.followup.FollowUpRepository;
 import kr.shnea.hellow.security.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,15 +27,16 @@ public class RoutingService {
   private final MembershipAccess authority;
   private final Clock clock;
   private final AuditEventRepository audits;
+  private final FollowUpRepository followups;
   public RoutingService(RoutingLockRepository lock,AgentPresenceRepository presence,AssignmentAttemptRepository attempts,
-      QueueItemRepository queues,OrganizationRepository organizations,MembershipRepository members,MembershipAccess authority,Clock clock,AuditEventRepository audits){
+      QueueItemRepository queues,OrganizationRepository organizations,MembershipRepository members,MembershipAccess authority,Clock clock,AuditEventRepository audits,FollowUpRepository followups){
     this.lock=lock;this.presence=presence;this.attempts=attempts;this.queues=queues;
-    this.organizations=organizations;this.members=members;this.authority=authority;this.clock=clock;this.audits=audits;
+    this.organizations=organizations;this.members=members;this.authority=authority;this.clock=clock;this.audits=audits;this.followups=followups;
   }
 
   public record AgentView(String state,AgentPresence.Availability availability,long version,
       String activeOrganizationId,Instant heartbeatExpiresAt,Instant availableSince,
-      String queueCode,String attemptId,Instant offerExpiresAt){}
+      String queueCode,String attemptId,Instant offerExpiresAt,Long followUpId){}
   public record OfferView(String id,String subject,String name,Instant expiresAt,boolean received){}
   public record QueueView(@com.fasterxml.jackson.annotation.JsonUnwrapped QueueItem item,OfferView offer,boolean canAccept,boolean routingPaused,int attemptCount){}
   public record AttemptView(String id,String agentSubject,String agentName,Instant offeredAt,
@@ -58,7 +60,7 @@ public class RoutingService {
   public AgentView current(WorkspaceAccess.Actor actor){
     var p=presence.findByIssuerAndSubject(actor.issuer(),actor.subject());
     return p.map(row->view(row,actor.organizationId(),clock.instant())).orElseGet(()->
-      new AgentView("OFFLINE",AgentPresence.Availability.OFFLINE,0,actor.organizationId(),null,null,null,null,null));
+      withoutPresence(actor));
   }
 
   @Transactional
@@ -66,7 +68,8 @@ public class RoutingService {
     acquire(original.organizationId());var actor=authorize(original);var now=clock.instant();var p=getOrCreate(actor,now);
     if(p.getStateRevision()!=expectedVersion)throw conflict("다른 창에서 상담 상태를 변경했습니다. 현재 상태를 확인한 뒤 다시 선택해 주세요.");
     var work=work(p);
-    if(!work.isEmpty()&&(!p.getOrganizationId().equals(actor.organizationId())||state==AgentPresence.Availability.AVAILABLE))
+    if(busy(p)&&(!p.getOrganizationId().equals(actor.organizationId())||work.stream().anyMatch(q->!q.getOrganizationId().equals(actor.organizationId()))
+        ||followups.activeForIdentity(p.getIssuer(),p.getSubject()).stream().anyMatch(f->!f.getOrganizationId().equals(actor.organizationId()))||state==AgentPresence.Availability.AVAILABLE))
       throw conflict("진행 중인 상담과 후처리를 완료한 뒤 대기 또는 조직 변경이 가능합니다.");
     // Changing organization or choosing away/offline gives up a reservation, but never an accepted interaction.
     var offered=attempts.activeForPresence(p.getId());
@@ -89,7 +92,7 @@ public class RoutingService {
     if(q.getStatus()!=QueueItem.QueueStatus.WAITING)throw conflict("이미 처리 중이거나 종료된 요청입니다.");
     if(!eligibleQueue(actor,q))throw new ResponseStatusException(NOT_FOUND);
     var p=presence.findByIssuerAndSubject(actor.issuer(),actor.subject()).orElseThrow(()->conflict("상담 상태를 대기로 변경해 주세요."));
-    if(!p.getOrganizationId().equals(actor.organizationId())||!p.live(now)||p.getAvailability()!=AgentPresence.Availability.AVAILABLE||!work(p).isEmpty())
+    if(!p.getOrganizationId().equals(actor.organizationId())||!p.live(now)||p.getAvailability()!=AgentPresence.Availability.AVAILABLE||busy(p))
       throw conflict("대기 상태에서만 수락할 수 있습니다. 진행 중인 상담과 후처리를 먼저 완료해 주세요.");
     var offer=attempts.activeForQueue(actor.organizationId(),code);
     AssignmentAttempt a;
@@ -150,7 +153,8 @@ public class RoutingService {
     reconcile(org,now);attempts.flush();
     if(!organizations.findById(org).map(Organization::isActive).orElse(false))return;
     var agents=presence.findByOrganizationId(org);
-    for(var p:agents){var jobs=work(p);p.observeWork(jobs.isEmpty()?null:jobs.getFirst().getCode(),now);}
+    for(var p:agents){var jobs=work(p);var followUp=followups.activeForIdentity(p.getIssuer(),p.getSubject());
+      p.observeWork(!jobs.isEmpty()?jobs.getFirst().getCode():followUp.isEmpty()?null:"followup-"+followUp.getFirst().getId(),now);}
     agents.sort(Comparator.comparing(AgentPresence::getAvailableSince).thenComparing(AgentPresence::getId));
     var waiting=queues.findByOrganizationIdAndStatusOrderByCreatedAtAsc(org,QueueItem.QueueStatus.WAITING);
     waiting.sort(Comparator.comparingInt((QueueItem q)->"urgent".equals(q.getPriority())?0:"low".equals(q.getPriority())?2:1).thenComparing(QueueItem::getCreatedAt).thenComparing(QueueItem::getCode));
@@ -162,7 +166,7 @@ public class RoutingService {
       var previous=history(q);if(previous.size()>=MAX_ATTEMPTS)continue;
       var tried=new HashSet<String>();previous.forEach(a->tried.add(a.getPresenceId()));
       for(var p:agents){
-        if(!p.live(now)||p.getAvailability()!=AgentPresence.Availability.AVAILABLE||tried.contains(p.getId())||!work(p).isEmpty()||attempts.activeForPresence(p.getId()).isPresent())continue;
+        if(!p.live(now)||p.getAvailability()!=AgentPresence.Availability.AVAILABLE||tried.contains(p.getId())||busy(p)||attempts.activeForPresence(p.getId()).isPresent())continue;
         var actor=agentActor(p);if(actor.isEmpty()||!eligibleQueue(actor.get(),q))continue;
         attempts.saveAndFlush(new AssignmentAttempt(org,q.getCode(),q.getRoutingCycle(),p,now));
         break;
@@ -188,6 +192,7 @@ public class RoutingService {
   private void finish(AssignmentAttempt a,AgentPresence p,AssignmentAttempt.Outcome result,Instant now){a.finish(result,now);p.released(now);}
   private void audit(WorkspaceAccess.Actor actor,String action,String target,String details){audits.save(new AuditEvent(actor.organizationId(),actor.issuer(),actor.subject(),action,target,details));}
   private List<AssignmentAttempt> history(QueueItem q){return attempts.findByOrganizationIdAndQueueCodeAndRoutingCycle(q.getOrganizationId(),q.getCode(),q.getRoutingCycle());}
+  private boolean busy(AgentPresence p){return !work(p).isEmpty()||!followups.activeForIdentity(p.getIssuer(),p.getSubject()).isEmpty();}
   private List<QueueItem> work(AgentPresence p){return queues.activeForIdentity(p.getIssuer(),p.getSubject());}
   private AgentPresence getOrCreate(WorkspaceAccess.Actor actor,Instant now){return presence.findByIssuerAndSubject(actor.issuer(),actor.subject()).orElseGet(()->presence.saveAndFlush(new AgentPresence(actor.issuer(),actor.subject(),actor.organizationId(),actor.name(),now)));}
   private WorkspaceAccess.Actor authorize(WorkspaceAccess.Actor original){
@@ -212,17 +217,25 @@ public class RoutingService {
     if(!jobs.isEmpty()){
       var q=jobs.getFirst();state=q.getType()==QueueItem.ItemType.CALL&&q.isCallEnded()?"AFTER_CALL":"CALLING";
       if(org.equals(q.getOrganizationId()))code=q.getCode();
-    }else if(offer.isPresent()&&p.live(now)&&p.getAvailability()==AgentPresence.Availability.AVAILABLE){state=offer.get().getReceivedAt()==null?"RESERVED":"RINGING";}
+    }else if(!followups.activeForIdentity(p.getIssuer(),p.getSubject()).isEmpty()){state="FOLLOW_UP";}
+    else if(offer.isPresent()&&p.live(now)&&p.getAvailability()==AgentPresence.Availability.AVAILABLE){state=offer.get().getReceivedAt()==null?"RESERVED":"RINGING";}
     else state=p.live(now)?p.getAvailability().name():"OFFLINE";
     var visible=offer.filter(a->org.equals(a.getOrganizationId()));
     return new AgentView(state,p.getAvailability(),p.getStateRevision(),p.getOrganizationId(),p.getHeartbeatAt()==null?null:p.getHeartbeatAt().plusSeconds(45),p.getAvailableSince(),
-      code==null?visible.map(AssignmentAttempt::getQueueCode).orElse(null):code,visible.map(AssignmentAttempt::getId).orElse(null),visible.map(AssignmentAttempt::getExpiresAt).orElse(null));
+      code==null?visible.map(AssignmentAttempt::getQueueCode).orElse(null):code,visible.map(AssignmentAttempt::getId).orElse(null),visible.map(AssignmentAttempt::getExpiresAt).orElse(null),
+      followups.activeForIdentity(p.getIssuer(),p.getSubject()).stream().filter(f->org.equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null));
+  }
+
+  private AgentView withoutPresence(WorkspaceAccess.Actor actor){
+    var work=followups.activeForIdentity(actor.issuer(),actor.subject());
+    return new AgentView(work.isEmpty()?"OFFLINE":"FOLLOW_UP",AgentPresence.Availability.OFFLINE,0,actor.organizationId(),null,null,null,null,null,
+      work.stream().filter(f->actor.organizationId().equals(f.getOrganizationId())).map(f->f.getId()).findFirst().orElse(null));
   }
 
   @Transactional(readOnly=true)
   public List<QueueView> decorate(List<QueueItem> rows,WorkspaceAccess.Actor actor){
     var p=presence.findByIssuerAndSubject(actor.issuer(),actor.subject());var now=clock.instant();
-    boolean ready=p.filter(row->row.getOrganizationId().equals(actor.organizationId())&&row.live(now)&&row.getAvailability()==AgentPresence.Availability.AVAILABLE&&work(row).isEmpty()).isPresent();
+    boolean ready=p.filter(row->row.getOrganizationId().equals(actor.organizationId())&&row.live(now)&&row.getAvailability()==AgentPresence.Availability.AVAILABLE&&!busy(row)).isPresent();
     var ownOffer=p.flatMap(row->attempts.activeForPresence(row.getId()));
     var grants=actor.grants();
     return rows.stream().map(q->{

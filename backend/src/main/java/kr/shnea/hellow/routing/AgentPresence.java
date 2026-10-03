@@ -41,4 +41,9 @@ public class AgentPresence {
   void missed(Instant now){availability=Availability.AWAY;availableSince=now;stateRevision++;}
   void released(Instant now){availableSince=now;}
   void observeWork(String code,Instant now){if(workQueueCode!=null&&code==null)availableSince=now;workQueueCode=code;}
+  public void observeFollowUp(Long id,Instant now){observeWork(id==null?null:"followup-"+id,now);}
+  public void beginFollowUp(String org,Long id,Instant now){
+    if(!organizationId.equals(org)){organizationId=org;stateRevision++;}
+    observeFollowUp(id,now);
+  }
 }
