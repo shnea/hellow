@@ -78,12 +78,23 @@ public class PlatformClient {
   public FileUploadResult uploadFile(
       org.springframework.web.multipart.MultipartFile file, String requestId)
       throws java.io.IOException {
+    return uploadFile(file, file.getOriginalFilename() == null ? "attachment" : file.getOriginalFilename(),
+        file.getSize(), requestId);
+  }
+
+  /** 녹음 파일도 전체 내용을 메모리에 올리지 않고 같은 재개 가능한 업로드를 사용한다. */
+  public FileUploadResult uploadFile(java.nio.file.Path file, String requestId)
+      throws java.io.IOException {
+    return uploadFile(new org.springframework.core.io.FileSystemResource(file),
+        file.getFileName().toString(), java.nio.file.Files.size(file), requestId);
+  }
+
+  private FileUploadResult uploadFile(org.springframework.core.io.InputStreamSource file,
+      String originalName, long size, String requestId) throws java.io.IOException {
     if (!properties.isConfigured()) {
       throw new IllegalStateException("PLATFORM_API_KEY가 설정되지 않아 플랫폼 파일 업로드를 수행할 수 없습니다.");
     }
 
-    String originalName =
-        file.getOriginalFilename() == null ? "attachment" : file.getOriginalFilename();
     String sha256Hex;
     try (var input = file.getInputStream()) {
       var digest = java.security.MessageDigest.getInstance("SHA-256");
@@ -94,7 +105,6 @@ public class PlatformClient {
     } catch (java.security.NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
-    long size = file.getSize();
     String vis = "PRIVATE";
     String ret = properties.getAttachmentRetentionCode();
 
@@ -124,10 +134,22 @@ public class PlatformClient {
       }
 
       String uploadId = session.uploadId();
+      if (session.size() != null && session.size() != size)
+        throw new IllegalStateException("업로드 세션의 파일 크기가 다릅니다.");
+      if ("READY".equals(session.state())) {
+        if (session.fileId() == null || session.fileId().isBlank())
+          throw new IllegalStateException("완료된 업로드의 fileId가 없습니다.");
+        return uploadedFile(session.fileId(), originalName, size, sha256Hex);
+      }
+      if (session.state() != null && !"UPLOADING".equals(session.state()))
+        throw new IllegalStateException("다시 사용할 수 없는 업로드 세션입니다.");
 
       // 2. 청크 업로드 (PATCH /api/v1/files/uploads/{id})
-      long offset = 0;
+      long offset = session.receivedBytes() == null ? 0 : session.receivedBytes();
+      if (offset < 0 || offset > size)
+        throw new IllegalStateException("업로드 재개 위치가 파일 범위를 벗어났습니다.");
       try (var input = file.getInputStream()) {
+        input.skipNBytes(offset);
         while (offset < size) {
           byte[] chunk = input.readNBytes((int) Math.min(CHUNK_SIZE, size - offset));
           int currentChunkSize = chunk.length;
@@ -159,19 +181,22 @@ public class PlatformClient {
               .body(UploadCompleteResponse.class);
 
       String fileId = completed != null ? completed.fileId() : null;
-      if (fileId == null) {
+      if (fileId == null || fileId.isBlank()) {
         throw new IllegalStateException("업로드 완료 응답에 fileId가 누락되었습니다.");
       }
 
-      String viewUrl = properties.getApiUrl() + "/api/v1/files/" + fileId + "/content/original";
-
-      return new FileUploadResult(fileId, originalName, size, sha256Hex, viewUrl, "COMPLETED");
+      return uploadedFile(fileId, originalName, size, sha256Hex);
     } catch (Exception e) {
       log.warn("Platform file upload failed: {}", e.getClass().getSimpleName());
       throw new org.springframework.web.server.ResponseStatusException(
           org.springframework.http.HttpStatus.BAD_GATEWAY,
           "첨부파일 업로드에 실패했습니다. 입력을 보존하고 다시 시도해 주세요.");
     }
+  }
+
+  private FileUploadResult uploadedFile(String fileId, String name, long size, String sha256) {
+    return new FileUploadResult(fileId, name, size, sha256,
+        properties.getApiUrl() + "/api/v1/files/" + fileId + "/content/original", "COMPLETED");
   }
 
   /** 파일 보기 티켓 발급 */

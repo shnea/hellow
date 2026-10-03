@@ -43,6 +43,7 @@ class WorkTransferIntegrationTest {
   @Autowired ConsultationRevisionRepository revisions;
   @Autowired AttachmentRepository attachments;@Autowired FollowUpRepository followups;
   @Autowired FollowUpEventRepository followupEvents;@Autowired RoutingService routing;
+  @Autowired PlatformProperties platformProperties;@Autowired MembershipAccess authority;
   @MockitoBean JwtDecoder decoder;@MockitoBean Clock clock;
   @MockitoBean PlatformClient platform;@MockitoBean LiveKitService media;
   Instant now;
@@ -79,6 +80,18 @@ class WorkTransferIntegrationTest {
   ResultActions connection(JsonNode t,String who,String action,long version)throws Exception{return send(post("/api/transfers/"+t.path("id").asText()+"/"+action),who,"a",Map.of("expectedVersion",version));}
   ResultActions connection(JsonNode t,String who,String action)throws Exception{return connection(t,who,action,t.path("version").asLong());}
   void connectedMedia(){when(media.participantConnection(anyString(),anyString())).thenReturn(new LiveKitService.ParticipantConnection(true,true,"PA-confirmed"));}
+  @Test void providerConnectionReadsDoNotHoldDatabaseTransactionsAndTerminationIsRechecked()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));
+    when(media.participantConnection(anyString(),anyString())).thenAnswer(invocation->{
+      assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+      if(invocation.getArgument(1).equals("customer-call")){
+        var queue=queues.findByCode("call").orElseThrow();queue.endCall();queues.saveAndFlush(queue);
+      }
+      return new LiveKitService.ParticipantConnection(true,true,"PA-ready");
+    });
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("FAILED");
+    assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+  }
 
   @Test void workRequestKeepsV14FingerprintAndCanBeRetriedAfterMigration()throws Exception{
     var c=source(null,QueueItem.ItemType.TICKET,true);var body=request(c,"bob");
@@ -162,13 +175,13 @@ class WorkTransferIntegrationTest {
     }finally{pool.shutdownNow();}
   }
   @Test void cleanupRetriesPastTokenDeadlineAndNeverRemovesRetainedSourceOnFailure()throws Exception{
-    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));ok(command(connecting,"alice","cancel"));var worker=new TransferMediaCleanupWorker(queues,requests,media,clock);
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));ok(command(connecting,"alice","cancel"));var worker=new TransferMediaCleanupWorker(requests,media,clock);
     String preview=connecting.path("targetMediaIdentity").asText();doThrow(new IllegalStateException("provider unavailable")).when(media).removeParticipant("a-call",preview);
     now=now.plusSeconds(181);worker.cleanup();assertThat(requests.callCleanupPending()).hasSize(1);verify(media,never()).removeParticipant("a-call","agent-alice");
     doNothing().when(media).removeParticipant("a-call",preview);worker.cleanup();assertThat(requests.callCleanupPending()).isEmpty();assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
   }
   @Test void acceptedCleanupRemovesFormerIdentityAndKeepsNewConnectionForRefresh()throws Exception{
-    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();ok(connection(connecting,"bob","confirm-media"));var worker=new TransferMediaCleanupWorker(queues,requests,media,clock);
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();ok(connection(connecting,"bob","confirm-media"));var worker=new TransferMediaCleanupWorker(requests,media,clock);
     worker.cleanup();verify(media).removeParticipant("a-call","agent-alice");verify(media,never()).removeParticipant("a-call",connecting.path("targetMediaIdentity").asText());assertThat(requests.callCleanupPending()).hasSize(1);
     now=now.plusSeconds(181);worker.cleanup();assertThat(requests.callCleanupPending()).isEmpty();assertThat(queues.findByCode("call").orElseThrow().getMediaAgentIdentity()).isEqualTo(connecting.path("targetMediaIdentity").asText());
   }
@@ -293,7 +306,9 @@ class WorkTransferIntegrationTest {
   @Test void activeVoiceRequiresActualCallTransferAndAfterCallKeepsFormerMediaCleanup()throws Exception{
     var c=source("voice",QueueItem.ItemType.CALL,false);ready("bob");send(post("/api/transfers/work"),"alice","a",request(c,"bob")).andExpect(status().isConflict());
     var q=queues.findByCode("voice").orElseThrow();q.endCall();queues.saveAndFlush(q);var t=offer(c);ok(command(t,"bob","accept"));assertThat(current("bob","a").path("state").asText()).isEqualTo("AFTER_CALL");
-    var cleaner=new TransferMediaCleanupWorker(queues,requests,media,clock);doThrow(new IllegalStateException("provider offline")).doNothing().when(media).removeParticipant("a-voice","agent-alice");cleaner.cleanup();cleaner.cleanup();verify(media,times(2)).removeParticipant("a-voice","agent-alice");assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");
+    var cleaner=new kr.shnea.hellow.livekit.MediaCleanupWorker(queues,members,organizations,platformProperties,media,authority,requests,clock);doThrow(new IllegalStateException("provider offline")).doNothing().when(media).removeParticipant("a-voice","agent-alice");
+    now=q.getMediaCleanupUntil().plusSeconds(1);cleaner.cleanup();assertThat(queues.findByCode("voice").orElseThrow().getMediaCleanupUntil()).isNotNull();
+    cleaner.cleanup();verify(media,times(2)).removeParticipant("a-voice","agent-alice");assertThat(queues.findByCode("voice").orElseThrow().getMediaCleanupUntil()).isNull();assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");
   }
   @Test void concurrentDuplicateRequestAndAcceptCancelHaveOnePersistentOutcome()throws Exception{
     var c=source(null,QueueItem.ItemType.TICKET,true);var body=request(c,"bob");var pool=Executors.newFixedThreadPool(2);

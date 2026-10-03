@@ -1,6 +1,5 @@
 package kr.shnea.hellow.livekit;
 
-import java.time.Instant;
 import kr.shnea.hellow.platform.PlatformProperties;
 import kr.shnea.hellow.queue.*;
 import kr.shnea.hellow.security.*;
@@ -25,48 +24,70 @@ public class MediaCleanupWorker {
   private final PlatformProperties platform;
   private final LiveKitService media;
   private final MembershipAccess authority;
+  private final kr.shnea.hellow.transfer.WorkTransferRepository transfers;
+  private final java.time.Clock clock;
 
   public MediaCleanupWorker(
       QueueItemRepository queues,
       MembershipRepository members,
       OrganizationRepository organizations,
       PlatformProperties platform,
-      LiveKitService media, MembershipAccess authority) {
+      LiveKitService media, MembershipAccess authority,
+      kr.shnea.hellow.transfer.WorkTransferRepository transfers, java.time.Clock clock) {
     this.queues = queues;
     this.members = members;
     this.organizations = organizations;
     this.platform = platform;
     this.media = media;
     this.authority=authority;
+    this.transfers=transfers;
+    this.clock=clock;
   }
 
   @Scheduled(fixedDelay = 2000)
   public void cleanup() {
     for (var q : queues.findByStatusAndCallEndedFalse(QueueItem.QueueStatus.PROCESSING)) {
-      if (q.getOrganizationId() == null || q.getAssignedSubject() == null) continue;
+      if (q.getType() != QueueItem.ItemType.CALL || q.getOrganizationId() == null || q.getAssignedSubject() == null) continue;
       boolean permitted =
           organizations.findById(q.getOrganizationId()).map(Organization::isActive).orElse(false)
               && members
                   .findByOrganizationIdAndIssuerAndSubjectAndActiveTrue(
-                      q.getOrganizationId(), platform.getOidcIssuer(), q.getAssignedSubject())
+                      q.getOrganizationId(), q.getOwnerIssuer() == null ? platform.getOidcIssuer() : q.getOwnerIssuer(), q.getAssignedSubject())
                   .map(
                       m ->
                           authority.grants(m).containsKey("queue:accept"))
                   .orElse(false);
       if (!permitted) {
-        q.endCall();
-        queues.save(q);
+        try {
+          q.endCall();
+          queues.save(q);
+        } catch (org.springframework.dao.OptimisticLockingFailureException changed) {
+          // Recheck the new owner and grants on the next pass after a concurrent handoff.
+        }
       }
     }
     // Self-hosted revocation support depends on LiveKit version. Retry removals
     // through the short token lifetime so an old token cannot sustain a room.
-    for (var q : queues.findByCallEndedTrueAndMediaCleanupUntilAfter(Instant.now())) {
-      if (q.getOrganizationId() == null) continue;
+    for (var q : queues.findByCallEndedTrueAndMediaCleanupUntilIsNotNull()) {
+      if (q.getType() != QueueItem.ItemType.CALL || q.getOrganizationId() == null) continue;
       String room = q.getOrganizationId() + "-" + q.getCode();
       try {
-        if (q.getAssignedSubject() != null)
-          media.removeParticipant(room, q.getMediaAgentIdentity());
-        media.removeParticipant(room, "customer-" + q.getCode());
+        var identities = new java.util.LinkedHashSet<String>();
+        if (q.getAssignedSubject() != null) identities.add(q.getMediaAgentIdentity());
+        identities.add("customer-" + q.getCode());
+        for (var transfer : transfers.findByOrganizationIdAndQueueCodeAndStatus(
+            q.getOrganizationId(), q.getCode(), kr.shnea.hellow.transfer.WorkTransfer.Status.ACCEPTED))
+          identities.add(transfer.getFromMediaIdentity() == null
+              ? "agent-" + transfer.getFromSubject() : transfer.getFromMediaIdentity());
+        boolean succeeded = true;
+        for (String identity : identities) {
+          try { media.removeParticipant(room, identity); }
+          catch (Exception unavailable) { succeeded = false; }
+        }
+        if (!succeeded) throw new IllegalStateException("Participant cleanup pending");
+        // An expired deadline means retry until success, never abandon the persisted intent.
+        q.mediaCleanupSucceeded(clock.instant());
+        if (q.getMediaCleanupUntil() == null) queues.save(q);
       } catch (Exception e) {
         LoggerFactory.getLogger(getClass()).warn("Media cleanup pending for queue {}", q.getCode());
       }

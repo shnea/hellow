@@ -38,7 +38,7 @@ public interface QueueItemRepository extends JpaRepository<QueueItem, Long>, org
       "select q from QueueItem q where q.sessionId=:sessionId")
   Optional<QueueItem> lockSession(String sessionId);
 
-  List<QueueItem> findByCallEndedTrueAndMediaCleanupUntilAfter(java.time.Instant now);
+  List<QueueItem> findByCallEndedTrueAndMediaCleanupUntilIsNotNull();
 
   List<QueueItem> findByStatusAndCallEndedFalse(QueueItem.QueueStatus status);
 

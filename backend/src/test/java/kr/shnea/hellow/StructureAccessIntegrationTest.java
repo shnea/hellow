@@ -35,6 +35,7 @@ class StructureAccessIntegrationTest {
   @Autowired CustomerRepository customers;@Autowired ConsultationRepository records;@Autowired ConsultationRevisionRepository revisions;
   @Autowired QueueItemRepository queues;@Autowired TimelineRepository timelines;@Autowired AttachmentRepository files;
   @Autowired AuditEventRepository audits;@Autowired PlatformProperties properties;
+  @Autowired kr.shnea.hellow.transfer.WorkTransferRepository transfers;
   @MockitoBean JwtDecoder decoder;@MockitoBean PlatformClient platform;@MockitoBean LiveKitService media;
   Consultation aliceRecord,bobRecord,otherRecord;
   @Autowired kr.shnea.hellow.routing.AgentPresenceRepository presence;
@@ -172,7 +173,7 @@ class StructureAccessIntegrationTest {
   }
   @Test void revokingRoleQueuePermissionTerminatesTheExistingMediaParticipant() throws Exception {
     var q=new QueueItem("media",QueueItem.ItemType.CALL,Customer.CustomerType.INDIVIDUAL,"접수",null,"010","waiting","normal","request",true,false,false);q.setOrganizationId("a");q.acceptBy("bob","Bob");q.assignOwner(owner("bob","child-team"));queues.save(q);
-    var worker=new MediaCleanupWorker(queues,members,organizations,properties,media,authority);worker.cleanup();
+    var worker=new MediaCleanupWorker(queues,members,organizations,properties,media,authority,transfers,java.time.Clock.systemUTC());worker.cleanup();
     assertThat(queues.findByCode("media").orElseThrow().isCallEnded()).isFalse();
     var role=roles.findById("self").orElseThrow();var reduced=new HashMap<>(role.getGrants());reduced.remove("queue:accept");
     putJson("/api/admin/roles/self","admin",Map.of("name",role.getName(),"grants",reduced,"active",true,"expectedVersion",role.getVersion()),200);

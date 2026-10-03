@@ -136,6 +136,11 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
     return mediaCleanupUntil;
   }
 
+  public void mediaCleanupSucceeded(java.time.Instant now) {
+    if (callEnded && mediaCleanupUntil != null && !mediaCleanupUntil.isAfter(now))
+      mediaCleanupUntil = null;
+  }
+
   /** Called under the source queue lock after a work transfer's recipient is verified. */
   public void handoff(kr.shnea.hellow.security.WorkspaceAccess.Actor recipient) {
     if(status!=QueueStatus.PROCESSING)

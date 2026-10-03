@@ -28,13 +28,15 @@ public class WorkTransferService {
   private final AgentPresenceRepository presence;private final AssignmentAttemptRepository attempts;private final FollowUpRepository followups;
   private final AuditEventRepository audits;private final ObjectMapper json;private final Clock clock;
   private final kr.shnea.hellow.livekit.LiveKitService media;
+  private final org.springframework.transaction.support.TransactionTemplate transactions;
   public static final List<WorkTransfer.Status> PENDING=List.of(WorkTransfer.Status.OFFERED,WorkTransfer.Status.CONNECTING);
   public WorkTransferService(WorkTransferRepository transfers,WorkTransferEventRepository events,ConsultationRepository records,
       QueueItemRepository queues,WorkspaceAccess access,MembershipRepository members,MembershipAccess authority,
       OrganizationRepository organizations,RoutingLockRepository lock,AgentPresenceRepository presence,
-      AssignmentAttemptRepository attempts,FollowUpRepository followups,AuditEventRepository audits,ObjectMapper json,Clock clock,kr.shnea.hellow.livekit.LiveKitService media){
+      AssignmentAttemptRepository attempts,FollowUpRepository followups,AuditEventRepository audits,ObjectMapper json,Clock clock,kr.shnea.hellow.livekit.LiveKitService media,org.springframework.transaction.PlatformTransactionManager transactionManager){
     this.transfers=transfers;this.events=events;this.records=records;this.queues=queues;this.access=access;this.members=members;this.authority=authority;
     this.organizations=organizations;this.lock=lock;this.presence=presence;this.attempts=attempts;this.followups=followups;this.audits=audits;this.json=json;this.clock=clock;this.media=media;
+    this.transactions=new org.springframework.transaction.support.TransactionTemplate(transactionManager);
   }
   public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped WorkTransfer transfer,boolean canAccept,boolean canReject,boolean canCancel,boolean canReadRecord){}
   public record Page(List<View> items,int page,boolean hasMore){}
@@ -125,7 +127,16 @@ public class WorkTransferService {
     return members.findByOrganizationIdOrderById(actor.organizationId()).stream().filter(m->m.isActive()&&!same(m,record.getOwnerIssuer(),record.getOwnerSubject())&&eligible(m,record,live,null))
       .map(m->new Assignee(m.getId(),name(m),m.getTeamId())).toList();
   }
-  @Transactional public void reconcile(String org){acquire(org);reconcileLocked(org);}
+  public void reconcile(String org){
+    var evidence=new HashMap<String,MediaEvidence>();
+    for(var task:transfers.findByOrganizationIdAndStatusIn(org,List.of(WorkTransfer.Status.CONNECTING)))
+      evidence.put(task.getId(),connectionEvidence(task));
+    transactions.executeWithoutResult(status->{
+      acquire(org);reconcileLocked(org);
+      for(var task:transfers.findByOrganizationIdAndStatusIn(org,List.of(WorkTransfer.Status.CONNECTING)))
+        confirmLocked(task,evidence.get(task.getId()));
+    });
+  }
   public record CallMediaResponse(View transfer,kr.shnea.hellow.livekit.LiveKitService.LiveKitTokenResponse media){}
   @Transactional public CallMediaResponse callToken(String id,long expectedVersion){
     String org=access.organizationId();acquire(org);var actor=access.require("transfer:read");var t=read(actor,id);lockedRecord(org,t.getConsultationId());
@@ -136,26 +147,42 @@ public class WorkTransferService {
     var invalid=invalid(t);if(invalid!=null){finish(t,systemActor(org),invalid.status(),invalid.reason());return new CallMediaResponse(view(t,actor),null);}
     return new CallMediaResponse(view(t,actor),media.createToken(org+"-"+t.getQueueCode(),t.getTargetMediaIdentity(),actor.name(),false));
   }
-  @Transactional public View confirmCall(String id,long expectedVersion){
+  public View confirmCall(String id,long expectedVersion){
+    var actor=access.require("transfer:read");var preview=read(actor,id);requireCallRecipient(preview,actor);
+    if(!preview.pending())return view(preview,actor);
+    if(!Objects.equals(preview.getVersion(),expectedVersion))throw conflict("통화 이관 상태가 변경되었습니다. 다시 조회해 주세요.");
+    var evidence=preview.getStatus()==WorkTransfer.Status.CONNECTING?connectionEvidence(preview):null;
+    return transactions.execute(status->confirmCallLocked(id,expectedVersion,evidence));
+  }
+  private View confirmCallLocked(String id,long expectedVersion,MediaEvidence evidence){
     String org=access.organizationId();acquire(org);var actor=access.require("transfer:read");var t=read(actor,id);lockedRecord(org,t.getConsultationId());requireCallRecipient(t,actor);
     if(!t.pending())return view(t,actor);
     if(t.getStatus()!=WorkTransfer.Status.CONNECTING)throw conflict("먼저 통화 이관을 수락해 주세요.");
     if(!Objects.equals(t.getVersion(),expectedVersion))throw conflict("통화 이관 상태가 변경되었습니다. 다시 조회해 주세요.");
-    var invalid=invalid(t);if(invalid!=null)finish(t,systemActor(org),invalid.status(),invalid.reason());else confirmLocked(t);
+    var invalid=invalid(t);if(invalid!=null)finish(t,systemActor(org),invalid.status(),invalid.reason());else confirmLocked(t,evidence);
     return view(t,actor);
   }
   private void requireCallRecipient(WorkTransfer t,WorkspaceAccess.Actor actor){if(t.getKind()!=WorkTransfer.Kind.CALL||!recipient(t,actor))throw forbidden();}
-  private void confirmLocked(WorkTransfer t){
+  private record MediaEvidence(String id,Long version,String targetSid,Instant checkedAt,boolean ready){}
+  /** Provider I/O runs before taking the routing/organization/record locks. */
+  private MediaEvidence connectionEvidence(WorkTransfer t){
     String room=t.getOrganizationId()+"-"+t.getQueueCode();kr.shnea.hellow.livekit.LiveKitService.ParticipantConnection target,source,customer;
     try{target=media.participantConnection(room,t.getTargetMediaIdentity());source=media.participantConnection(room,t.getFromMediaIdentity());customer=media.participantConnection(room,"customer-"+t.getQueueCode());}
-    catch(Exception unavailable){return;} // Keep persisted CONNECTING; timeout/restart reconciliation owns recovery.
-    if(target==null||source==null||customer==null||!target.active()||!target.microphonePublished()||target.sid()==null||target.sid().isBlank()||!source.active()||!customer.active())return;
+    catch(Exception unavailable){return new MediaEvidence(t.getId(),t.getVersion(),null,clock.instant(),false);}
+    boolean ready=target!=null&&source!=null&&customer!=null&&target.active()&&target.microphonePublished()&&target.sid()!=null&&!target.sid().isBlank()&&source.active()&&customer.active();
+    return new MediaEvidence(t.getId(),t.getVersion(),target==null?null:target.sid(),clock.instant(),ready);
+  }
+  private void confirmLocked(WorkTransfer t,MediaEvidence evidence){
+    if(evidence==null||!evidence.ready()||!t.getId().equals(evidence.id())||!Objects.equals(t.getVersion(),evidence.version())
+        ||!evidence.checkedAt().plusSeconds(5).isAfter(clock.instant()))return;
+    // Locks protect a second authority, timeout, source-version and owner check.
+    var invalid=invalid(t);if(invalid!=null){finish(t,systemActor(t.getOrganizationId()),invalid.status(),invalid.reason());return;}
     var record=record(t.getOrganizationId(),t.getConsultationId());var q=sourceQueue(record,true);var recipient=actor(members.findById(t.getToMemberId()).orElseThrow());
-    t.confirmed(target.sid(),clock.instant());record.handoff(recipient);records.saveAndFlush(record);q.handoff(recipient);q.useMediaIdentity(t.getTargetMediaIdentity());queues.saveAndFlush(q);
+    t.confirmed(evidence.targetSid(),clock.instant());record.handoff(recipient);records.saveAndFlush(record);q.handoff(recipient);q.useMediaIdentity(t.getTargetMediaIdentity());queues.saveAndFlush(q);
     presence.findByIssuerAndSubject(recipient.issuer(),recipient.subject()).orElseThrow().beginWork(t.getOrganizationId(),q.getCode(),clock.instant());
     finish(t,recipient,WorkTransfer.Status.ACCEPTED,t.getOutcome());
   }
-  private void reconcileLocked(String org){for(var t:transfers.findByOrganizationIdAndStatusIn(org,PENDING)){if(records.findByOrganizationIdAndId(org,t.getConsultationId()).isPresent())lockedRecord(org,t.getConsultationId());var invalid=invalid(t);if(invalid!=null)finish(t,systemActor(org),invalid.status(),invalid.reason());else if(t.getStatus()==WorkTransfer.Status.CONNECTING)confirmLocked(t);}transfers.flush();}
+  private void reconcileLocked(String org){for(var t:transfers.findByOrganizationIdAndStatusIn(org,PENDING)){if(records.findByOrganizationIdAndId(org,t.getConsultationId()).isPresent())lockedRecord(org,t.getConsultationId());var invalid=invalid(t);if(invalid!=null)finish(t,systemActor(org),invalid.status(),invalid.reason());}transfers.flush();}
   private Invalid invalid(WorkTransfer t){
     if(!t.getExpiresAt().isAfter(clock.instant()))return new Invalid(WorkTransfer.Status.EXPIRED,"수락 기한이 만료되었습니다.");
     if(!organizations.findById(t.getOrganizationId()).map(Organization::isActive).orElse(false))return new Invalid(WorkTransfer.Status.REVOKED,"조직이 비활성화되었습니다.");

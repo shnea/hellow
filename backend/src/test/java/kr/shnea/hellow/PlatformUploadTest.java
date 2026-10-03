@@ -12,6 +12,55 @@ import org.springframework.mock.web.MockMultipartFile;
 
 class PlatformUploadTest {
   @Test
+  void resumesAcknowledgedBytesAndRecoversLostCompletionResponse() throws Exception {
+    var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    var requests = new ArrayList<String>();
+    var received = new ArrayList<byte[]>();
+    var ready = new java.util.concurrent.atomic.AtomicBoolean(false);
+    server.createContext("/api/v1/files/uploads", exchange -> {
+      requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+      byte[] body = exchange.getRequestBody().readAllBytes();
+      String result;
+      if (exchange.getRequestMethod().equals("PATCH")) {
+        requests.add("offset=" + exchange.getRequestHeaders().getFirst("Upload-Offset"));
+        received.add(body);
+        result = "{}";
+      } else if (exchange.getRequestURI().getPath().endsWith("/complete")) {
+        ready.set(true);
+        result = "{\"fileId\":\"saved-audio\"}";
+      } else result = ready.get()
+          ? "{\"uploadId\":\"audio\",\"state\":\"READY\",\"size\":6,\"receivedBytes\":6,\"fileId\":\"saved-audio\"}"
+          : "{\"uploadId\":\"audio\",\"state\":\"UPLOADING\",\"size\":6,\"receivedBytes\":3}";
+      byte[] bytes = result.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Content-Type", "application/json");
+      exchange.sendResponseHeaders(200, bytes.length);
+      exchange.getResponseBody().write(bytes);
+      exchange.close();
+    });
+    server.start();
+    var audio = java.nio.file.Files.createTempFile("recording-resume-", ".ogg");
+    try {
+      java.nio.file.Files.write(audio, new byte[]{1, 2, 3, 4, 5, 6});
+      var properties = mock(PlatformProperties.class);
+      when(properties.getApiUrl()).thenReturn("http://127.0.0.1:" + server.getAddress().getPort());
+      when(properties.isConfigured()).thenReturn(true);
+      when(properties.getApiKey()).thenReturn("test-key");
+      when(properties.getAttachmentRetentionCode()).thenReturn("test-policy");
+      var client = new PlatformClient(properties);
+      assertThat(client.uploadFile(audio, "same-request").fileId()).isEqualTo("saved-audio");
+      assertThat(received).hasSize(1);
+      assertThat(received.getFirst()).containsExactly(4, 5, 6);
+      assertThat(requests).contains("offset=3");
+      requests.clear();
+      assertThat(client.uploadFile(audio, "same-request").fileId()).isEqualTo("saved-audio");
+      assertThat(requests).containsExactly("POST /api/v1/files/uploads");
+    } finally {
+      server.stop(0);
+      java.nio.file.Files.deleteIfExists(audio);
+    }
+  }
+
+  @Test
   void streamsPrivateFileInBoundedChunksWithoutGetBytes() throws Exception {
     var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     var lengths = new ArrayList<Integer>();
