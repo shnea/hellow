@@ -80,11 +80,12 @@ export function CustomerRecordsWorkspace({customers,organizationId,canWrite,canE
         <span className="block text-xs text-slate-300 mt-1">{r.status==='COMPLETED'?'완료':r.status==='ESCALATED'?'에스컬레이션':'작성 중'}</span></button>)}{!loading&&!records.length&&<p className="p-3 text-sm text-slate-300">이 고객의 기록이 없습니다. 새 기록을 작성할 수 있습니다.</p>}</div>
     </aside>
     <div className={`records-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
-      <div className="records-mobile-tabs p-2 flex gap-2 border-b border-slate-800"><button className="p-2 bg-slate-800 rounded" onClick={()=>setMobilePanel(mobilePanel==='list'?'editor':'list')}>{mobilePanel==='list'?'편집기로':'고객·기록 목록'}</button></div>
       {error&&<p role="alert" className="p-3 text-amber-200">{error}<button className="ml-3 underline" onClick={()=>setRefresh(v=>v+1)}>최신 기록 다시 조회</button></p>}
       {notice&&<p role="status" className="p-3 text-emerald-200">{notice}</p>}
-      {record&&<div className="p-2 flex flex-wrap gap-2 justify-between bg-slate-800 text-sm"><span>{customer?.name} · {ongoing?'대기열에서 처리 중인 기록':'저장된 상담 기록 편집'}</span>
-        <button className="underline p-1" onClick={()=>void loadRevisions()}>변경 이력</button></div>}
+      <div className="records-toolbar p-2 flex gap-2 items-center justify-between bg-slate-800 text-sm">
+        <button className="records-mobile-tabs px-2 rounded bg-slate-700" onClick={()=>setMobilePanel('list')}>고객·기록 목록</button>
+        <span className="truncate">{customer?.name}{record?ongoing?' · 처리 중':' · 기록 편집':''}</span>
+        {record&&<button className="underline p-1 shrink-0" onClick={()=>void loadRevisions()}>변경 이력</button>}</div>
       {revisions&&<div className="p-3 bg-slate-950 max-h-64 overflow-auto text-sm"><button className="underline mb-2" onClick={()=>setRevisions(null)}>변경 이력 닫기</button>{!revisions.length&&<p>변경 이력이 없습니다.</p>}{revisions.map(r=><details key={r.id} className="py-2"><summary>{new Date(r.changedAt).toLocaleString('ko-KR')} · {r.actorName}</summary><p className="whitespace-pre-wrap mt-2">{JSON.parse(r.beforeDocument).memo}</p></details>)}</div>}
       {record&&customer?<ActiveWorkspace key={`${organizationId}:${record.id}`} customer={customer} queueCode={`record-${record.id}`} organizationId={organizationId} initialDraft={drafts[record.id]} onDraftChange={d=>setDrafts(prev=>({...prev,[record.id]:d}))}
         readOnly={!canWrite||Boolean(ongoing)} customerReadOnly={!canEditCustomer} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}

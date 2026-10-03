@@ -133,7 +133,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   // Consultation memo form state
   const [mainCategory, setMainCategory] = useState(initialDraft?.categoryMain || consultationCategories[0].main);
   const [subCategory, setSubCategory] = useState(initialDraft?.categorySub || consultationCategories[0].subs[0]);
-  const [status, setStatus] = useState<'in_progress' | 'completed' | 'escalated'>('in_progress');
+  const [status, setStatus] = useState<'in_progress' | 'completed' | 'escalated'>(initialDraft?.status==='completed'?'completed':initialDraft?.status==='escalated'?'escalated':'in_progress');
   const [selectedTags, setSelectedTags] = useState<string[]>(initialDraft?.selectedTags || []);
   const [memoText, setMemoText] = useState<string>(initialDraft?.memo || '');
   const [lastSavedTime, setLastSavedTime] = useState('이번 접속에서 저장하지 않음');
@@ -185,6 +185,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
     setActionError('');
     try {
       await onSaveConsultation({categoryMain:mainCategory,categorySub:subCategory,status,selectedTags,memo:memoText,isComplete});
+      if(isComplete)setStatus('completed');
       setLastSavedTime(new Date().toLocaleTimeString('ko-KR'));
     } catch(error) { setActionError((error as Error).message); }
   };
@@ -393,9 +394,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       </div>}
 
       {/* 2. 고객 정보 영역 (기업/개인 구분, 등록 조회 / 미등록 표시 / 상담 중 즉시 등록) */}
-      <div className="border-b border-slate-800/80 bg-slate-950/40 transition-all">
+      <div className="customer-info-section border-b border-slate-800/80 bg-slate-950/40 transition-all">
         {/* Header / Bar */}
-        <div className="px-4 py-2 bg-slate-900/90 border-b border-slate-800/60 flex items-center justify-between text-xs">
+        <div className="customer-info-header px-4 py-2 bg-slate-900/90 border-b border-slate-800/60 flex items-center justify-between text-xs">
           <div className="flex items-center space-x-2">
             <span className="font-bold text-slate-200 flex items-center gap-1.5">
               {customer.isRegistered ? (
@@ -873,7 +874,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
       {/* 3. 확장형 실시간 상담 메모 작성기 (핵심 워크스페이스) */}
       <div className="flex-1 flex flex-col p-3 overflow-hidden min-h-0">
         {/* Compact Integrated Category, Tags & Status Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 p-1.5 px-3 bg-slate-950/70 border border-slate-800 rounded-xl shrink-0">
+        <div className="classification-bar flex flex-wrap items-center justify-between gap-2 mb-2 p-1.5 px-3 bg-slate-950/70 border border-slate-800 rounded-xl shrink-0">
           {/* 좌측: 대분류 > 중분류 */}
           <div className="flex items-center space-x-2 text-xs">
             <span className="font-semibold text-slate-400 text-[11px] shrink-0">상담 분류:</span>
@@ -913,7 +914,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
 
           {/* 중앙: 빠른 태그 칩 */}
-          <div className="flex items-center space-x-1 overflow-x-auto text-xs py-0.5">
+          <div className="quick-tags flex items-center space-x-1 overflow-x-auto text-xs py-0.5">
             <Tag className="w-3 h-3 text-slate-400 shrink-0 mr-0.5" />
             {quickTags.map((tag) => {
               const isSelected = selectedTags.includes(tag);
@@ -938,9 +939,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
 
           {/* 우측: 처리 상태 세그먼트 */}
-          <div className="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 shrink-0">
+          <div className="record-status-controls flex items-center space-x-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 shrink-0">
             <button
-                disabled={readOnly || busy}
+                disabled={readOnly || busy || (recordMode&&status==='completed')}
               type="button"
               onClick={() => setStatus('in_progress')}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
@@ -988,7 +989,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
 
           {/* Quick Template Inserts */}
-          <div className="flex items-center space-x-1.5">
+          <div className="template-controls flex items-center space-x-1.5">
             <span className="text-[11px] text-slate-400">자주 쓰는 템플릿:</span>
             <button
                 disabled={readOnly || busy}
@@ -1025,6 +1026,13 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
           </div>
         </div>
 
+        <details className="mobile-editor-tools shrink-0 bg-slate-800 text-sm">
+          <summary className="px-3 py-3 cursor-pointer">태그·템플릿 추가</summary>
+          <div className="p-2 flex flex-wrap gap-2 max-h-36 overflow-auto">
+            {quickTags.map(tag=><button key={tag} aria-pressed={selectedTags.includes(tag)} disabled={readOnly||busy} className={`px-3 rounded ${selectedTags.includes(tag)?'bg-indigo-700':'bg-slate-700'}`} onClick={()=>toggleTag(tag)}>{tag}</button>)}
+            {['컴플레인','견적','기술','콜백'].map(name=><button key={name} className="px-3 rounded bg-slate-700" disabled={readOnly||busy} onClick={()=>insertTemplate(name)}>{name} 템플릿</button>)}
+          </div>
+        </details>
         {/* Editor Body: SHNEA 단일 공식 에디터 (다크 테마 & full-height) */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <ShneaConsultationEditor

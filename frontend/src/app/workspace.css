@@ -1,5 +1,5 @@
-.workspace-mobile-tabs,.records-mobile-tabs { display:none; }
-.incoming-request { width:min(600px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; }
+.workspace-mobile-tabs,.records-mobile-tabs,.mobile-editor-tools { display:none; }
+.incoming-request { width:min(600px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; margin:auto; }
 .incoming-request::backdrop { background:rgb(2 6 23 / .8); }
 .queue-pane.records-active { display:none; }
 .crm-shell button:disabled { opacity:.5; cursor:not-allowed; }
@@ -18,19 +18,42 @@
   .workspace-mobile-tabs { display:flex; }
   .workspace-mobile-tabs button { min-height:44px;padding:8px; }
 }
+@media (max-width:1023px) {
+  .active-workspace .quick-tags,.active-workspace .template-controls,.active-workspace .record-status-controls { display:none; }
+  .mobile-editor-tools { display:block; }
+  .active-workspace .classification-bar { padding:4px; }
+  .active-workspace .classification-bar > div:first-child { min-width:0;width:100%;gap:4px; }
+  .active-workspace .classification-bar > div:first-child > span:first-child { display:none; }
+  .active-workspace .classification-bar select { min-width:0;max-width:47%;flex:1; }
+  .active-workspace button,.active-workspace select { min-height:44px; }
+  .active-workspace > div:last-child button[disabled][title="관리자 에스컬레이션 미연동"] { display:none; }
+}
 @media (max-width:767px) {
   .crm-shell > aside { display:none; }
   .workspace-mobile-tabs { display:flex;overflow-x:auto;flex-shrink:0; }
+  .workspace-mobile-tabs { scrollbar-width:none; }
+  .workspace-mobile-tabs::-webkit-scrollbar { display:none; }
   .workspace-mobile-tabs button { white-space:nowrap;min-height:44px;padding:8px 12px;background:#1e293b;border-radius:8px; }
   .queue-pane,.interaction-editor,.interaction-history,.records-directory,.records-editor { display:none; }
   .queue-pane.mobile-visible,.interaction-editor.mobile-visible,.interaction-history.mobile-visible,
   .records-directory.mobile-visible,.records-editor.mobile-visible { display:flex;width:100%; }
   .queue-panel,.interaction-history > aside { width:100%; }
   .interaction-workspace { min-width:0; }
+  .interaction-editor { overflow-y:auto; }
+  .interaction-editor .active-workspace { height:auto;min-height:640px;flex-shrink:0; }
   .customer-records { flex-direction:column; }
   .records-directory { flex:1; }
   .records-mobile-tabs { display:flex;flex-shrink:0; }
-  .active-workspace > div:nth-child(2) { max-height:40dvh;overflow:auto; }
+  .records-toolbar { padding:4px 8px;flex-shrink:0; }
+  .customer-info-header > div:first-child > span:first-child { display:none; }
+  .active-workspace .customer-info-header { flex-wrap:nowrap!important;padding:4px 12px; }
+  .active-workspace .customer-info-section { max-height:40dvh;overflow:auto; }
+  .active-workspace .classification-bar { padding:4px; }
+  .active-workspace .classification-bar > div:first-child { min-width:0;width:100%;gap:4px; }
+  .active-workspace .classification-bar > div:first-child > span:first-child { display:none; }
+  .active-workspace .classification-bar select { min-width:0;max-width:47%;flex:1; }
+  .active-workspace .quick-tags,.active-workspace .template-controls,.active-workspace .record-status-controls { display:none; }
+  .mobile-editor-tools { display:block; }
   .active-workspace > div:first-child > div,.active-workspace > div:nth-child(2) > div:first-child { flex-wrap:wrap;gap:8px; }
   .active-workspace button,.active-workspace select,.records-directory button,.records-editor button { min-height:44px; }
   .active-workspace input,.active-workspace textarea,.records-directory input { font-size:16px;max-width:100%; }
@@ -40,4 +63,8 @@
   .active-workspace .grid-cols-3 { grid-template-columns:1fr; }
   .active-workspace .grid-cols-2 { grid-template-columns:1fr; }
   .shnea-editor .se-hint { font-size:11px; }
+}
+@media (max-width:767px) and (max-height:600px) {
+  .records-editor,.interaction-editor { overflow-y:auto; }
+  .active-workspace { flex-shrink:0;min-height:500px; }
 }
