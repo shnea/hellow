@@ -246,7 +246,7 @@ export default function ConsultationWorkspacePage() {
           {writable && !can('consultation:write') && <p role="status" className="px-4 py-3 text-sm bg-slate-800">상담 기록 작성 권한이 없습니다. 조직 관리자에게 권한을 요청해 주세요.</p>}
           {draftError && <p role="alert" className="p-3 text-amber-300">{draftError}<button className="ml-2 underline" onClick={() => {setDraftReady({});setRefresh(v=>v+1);}}>초안 다시 조회</button></p>}
           {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId}
-            initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} customerReadOnly={!can('customer:write')||Boolean(queueError)} busy={busy}
+            initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} customerReadOnly={!can('customer:write')||customer.canEdit===false||Boolean(queueError)} busy={busy}
             callDuration={activeCall === item.id ? call.duration : 0} isCallActive={activeCall === item.id} mediaStatus={call.status} onMute={call.setMuted} onEndCall={endCall}
             onStartCall={() => notify('info', '발신 미지원', '현재는 고객이 요청한 웹 음성 상담을 수락할 수 있습니다.')} onOpenTransfer={() => setFollowupTab('transfer')}
             onSaveConsultation={save} onRegisterCustomer={data => changeCustomer(data, true)} onUpdateCustomer={data => changeCustomer(data, false)} quotedText={quotedText} onClearQuotedText={() => setQuotedText('')} />}

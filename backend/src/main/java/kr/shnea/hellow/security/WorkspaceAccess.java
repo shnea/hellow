@@ -49,6 +49,11 @@ public class WorkspaceAccess {
 
   public record Actor(String organizationId, String subject, String name, String issuer,
       String teamId, DataScope dataScope, java.util.Set<String> teamIds, java.util.Map<String,DataScope> grants) {
+    public java.util.Optional<Actor> forPermission(String permission) {
+      var scope=grants.get(permission);
+      return scope==null?java.util.Optional.empty():java.util.Optional.of(new Actor(organizationId,subject,name,issuer,teamId,scope,teamIds,grants));
+    }
+    public boolean can(String permission,OrganizationOwned row) {return forPermission(permission).map(a->a.allows(row)).orElse(false);}
     public boolean allows(OrganizationOwned row) {
       return organizationId.equals(row.getOrganizationId()) && (dataScope==DataScope.ORGANIZATION
         || issuer.equals(row.getOwnerIssuer())&&subject.equals(row.getOwnerSubject())

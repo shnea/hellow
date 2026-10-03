@@ -25,6 +25,7 @@ export interface QueueItem {
 }
 
 export interface CustomerProfile {
+  canEdit?:boolean;
   id: string;
   isRegistered: boolean;
   customerType: CustomerType; // 'corporate': 기업 고객, 'individual': 일반/개인 고객

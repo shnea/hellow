@@ -31,10 +31,13 @@ public class CustomerConsultationController {
     this.attachments=attachments;this.access=access;this.json=json;
   }
   @GetMapping("/customer/{code}")
-  public List<Consultation> list(@PathVariable String code) {
+  public List<Map<String,Object>> list(@PathVariable String code) {
     var actor=access.require("consultation:read"); requireCustomer(actor,code);
     return records.findAll(BusinessScope.<Consultation>rows(actor).and(BusinessScope.equal("customerCode",code)),
-        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt"));
+        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt")).stream().map(record->{
+          Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
+          view.put("editable",actor.can("consultation:write",record));return view;
+        }).toList();
   }
   public record CreateRequest(@NotBlank String customerCode,@NotNull UUID requestId) {}
   @PostMapping

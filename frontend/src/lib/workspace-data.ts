@@ -13,6 +13,7 @@ export interface ServerCustomer {
   company: string; department: string; tier: CustomerProfile['tier']; phoneNumber: string;
   email: string; lastContactAt: string | null; totalCalls: number; managerName: string;
   customerNotes: string; complainant: boolean;
+  editable?:boolean;
 }
 export function queueItem(q: ServerQueue): QueueItem {
   return { id: q.code, customerCode: q.customerCode, type: q.type.toLowerCase() as QueueItem['type'],
@@ -26,7 +27,7 @@ export function customerProfile(c: ServerCustomer): CustomerProfile {
   return { id: c.code, isRegistered: c.registered, customerType: c.customerType === 'CORPORATE' ? 'corporate' : 'individual',
     name: c.name, title: c.title, company: c.company, department: c.department, tier: c.tier,
     phoneNumber: c.phoneNumber, email: c.email || '', lastContactDate: c.lastContactAt?.slice(0, 10) || '이력 없음',
-    totalCalls: c.totalCalls, managerName: c.managerName, customerNotes: c.customerNotes, isComplainant: c.complainant };
+    totalCalls: c.totalCalls, managerName: c.managerName, customerNotes: c.customerNotes, isComplainant: c.complainant,canEdit:c.editable };
 }
 export function requestProfile(q: QueueItem): CustomerProfile {
   return { id: `request:${q.id}`, isRegistered: false, customerType: q.customerType || 'individual', name: q.customerName,

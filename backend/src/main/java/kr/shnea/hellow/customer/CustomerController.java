@@ -17,17 +17,25 @@ public class CustomerController {
   private final CustomerRepository customers;
   private final QueueItemRepository queues;
   private final WorkspaceAccess access;
+  private final com.fasterxml.jackson.databind.ObjectMapper json;
 
   public CustomerController(
-      CustomerRepository customers, QueueItemRepository queues, WorkspaceAccess access) {
+      CustomerRepository customers, QueueItemRepository queues, WorkspaceAccess access,com.fasterxml.jackson.databind.ObjectMapper json) {
     this.customers = customers;
     this.queues = queues;
     this.access = access;
+    this.json=json;
   }
 
   @GetMapping
-  public List<Customer> all() {
-    return customers.findAll(BusinessScope.customers(access.require("customer:read")));
+  public List<Map<String,Object>> all() {
+    var actor=access.require("customer:read");
+    var editable=actor.forPermission("customer:write").map(writer->customers.findAll(BusinessScope.customers(writer)).stream()
+        .map(Customer::getCode).collect(java.util.stream.Collectors.toSet())).orElseGet(Set::of);
+    return customers.findAll(BusinessScope.customers(actor)).stream().map(c->{
+      Map<String,Object> view=json.convertValue(c,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
+      view.put("editable",editable.contains(c.getCode()));return view;
+    }).toList();
   }
 
   @GetMapping("/{code}")

@@ -105,6 +105,16 @@ describe('workspace regressions',()=>{
     expect((screen.getByRole('button',{name:'통화 수락'}) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('후처리 중 · 새 통화 수신 차단')).toBeTruthy();
   });
+  it('opens a team-visible record read-only when its write scope belongs to another employee',async()=>{
+    items=[];const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
+      if(path==='/api/consultations/customer/cust-1')return response([{id:10,version:0,customerCode:'cust-1',queueCode:null,categoryMain:'Support',categorySub:'Product',status:'COMPLETED',memo:'Team-visible record',tags:'',agentName:'Bob',createdAt:'2026-10-02T12:00:00',editable:false}]);
+      return original(path,options);
+    });
+    render(<Workspace/>);await flush();
+    expect(screen.getByText('Team-visible record')).toBeTruthy();
+    expect(screen.getByText('editor-readonly')).toBeTruthy();
+  });
   it('does not overlap slow polls and aborts outstanding reads on unmount',async()=>{
     vi.useFakeTimers();let signal:AbortSignal|undefined;
     const original=fetchMock.getMockImplementation()!;

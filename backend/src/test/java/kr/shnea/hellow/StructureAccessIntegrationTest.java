@@ -101,6 +101,15 @@ class StructureAccessIntegrationTest {
     mvc.perform(actor(get("/api/consultations/customer/customer-a"),"alice","a")).andExpect(status().isForbidden());
     assertThat(getJson("/api/me","alice").get("organizations").get(0).get("permissions").toString()).doesNotContain("consultation:read");
   }
+  @Test void teamReadAndSelfWriteAreReportedAsReadOnlyForOtherEmployeesRecords() throws Exception {
+    var role=roles.findById("lead").orElseThrow();var mixed=new HashMap<>(role.getGrants());mixed.put("consultation:write",DataScope.SELF);mixed.put("customer:write",DataScope.SELF);
+    putJson("/api/admin/roles/lead","admin",Map.of("name",role.getName(),"grants",mixed,"active",true,"expectedVersion",role.getVersion()),200);
+    var rows=getJson("/api/consultations/customer/customer-a","lead");assertThat(rows.size()).isEqualTo(2);
+    for(var row:rows)assertThat(row.get("editable").asBoolean()).isFalse();
+    assertThat(getJson("/api/customers","lead").get(0).get("editable").asBoolean()).isFalse();
+    assertThat(getJson("/api/consultations/customer/customer-a","alice").get(0).get("editable").asBoolean()).isTrue();
+    putJson("/api/consultations/"+aliceRecord.getId(),"lead",save(aliceRecord.getVersion()),404);
+  }
   @Test void scopedWritesRevisionsAndFileTicketsDoNotExposeAnotherAgentsRecord() throws Exception {
     putJson("/api/consultations/"+bobRecord.getId(),"alice",save(bobRecord.getVersion()),404);
     mvc.perform(actor(get("/api/consultations/"+bobRecord.getId()+"/revisions"),"alice","a")).andExpect(status().isNotFound());
