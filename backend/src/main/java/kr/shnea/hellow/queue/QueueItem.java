@@ -92,6 +92,7 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   private java.time.Instant callStartedAt;
   private java.time.Instant callEndedAt;
   private java.time.Instant mediaMissingSince;
+  public java.time.Instant getMediaMissingSince(){return mediaMissingSince;}
   public java.time.Instant getCallStartedAt(){return callStartedAt;}
   public java.time.Instant getCallEndedAt(){return callEndedAt;}
   public void requestMedia(java.time.Instant now){if(mediaRequestedAt==null)mediaRequestedAt=now;}
@@ -106,7 +107,7 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
     if(mediaRequestedAt==null)return false;
     if(callStartedAt==null){if(!now.isBefore(mediaRequestedAt.plusSeconds(60))){endCall(now);return true;}return false;}
     if(mediaMissingSince==null){mediaMissingSince=now;return true;}
-    if(!now.isBefore(mediaMissingSince.plusSeconds(15))){endCall(now);return true;}
+    if(!now.isBefore(mediaMissingSince.plusSeconds(30))){endCall(now);return true;}
     return false;
   }
   private java.time.Instant mediaCleanupUntil;

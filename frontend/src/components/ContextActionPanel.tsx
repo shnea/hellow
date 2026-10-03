@@ -178,17 +178,17 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                 </div>
 
                 {/* Quote button */}
-                {canQuote&&<button
+                <button disabled={!canQuote}
                   onClick={(e) => {
                     e.stopPropagation();
                     onQuoteTimeline(item);
                   }}
                   className="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 hover:bg-indigo-900 text-[11px] font-medium flex items-center gap-1 transition-all"
-                  title="중앙 상담 메모장에 인용문으로 추가"
+                  title={canQuote?'현재 상담에 인용':'작성 가능한 상담을 선택하면 인용할 수 있습니다.'}
                 >
                   <Quote className="w-3 h-3" />
                   <span>인용</span>
-                </button>}
+                </button>
               </div>
             </div>
           ))

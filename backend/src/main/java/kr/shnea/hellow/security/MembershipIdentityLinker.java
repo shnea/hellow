@@ -20,6 +20,6 @@ public class MembershipIdentityLinker {
       locked.get().bindIdentity(jwt.getSubject());members.saveAndFlush(locked.get());
       audit.record(candidate.getOrganizationId(),"member.identity.link",String.valueOf(candidate.getId()),"verified issuer login bound to immutable subject");
     }
-    for(var member:members.findByIssuerAndSubjectAndActiveTrue(issuer,jwt.getSubject()))member.profile(login,StaffNames.identity(jwt));
+    for(var member:members.findByIssuerAndSubjectAndActiveTrue(issuer,jwt.getSubject()))member.profile(login,StaffNames.label(jwt.getClaimAsString("nickname"),jwt.getClaimAsString("name"),login));
   }
 }

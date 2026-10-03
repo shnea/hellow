@@ -254,7 +254,7 @@ public class WorkTransferService {
   private boolean recipient(WorkTransfer t,WorkspaceAccess.Actor actor){return same(actor,t.getToIssuer(),t.getToSubject());}
   private boolean same(WorkspaceAccess.Actor actor,String issuer,String subject){return Objects.equals(actor.issuer(),issuer)&&Objects.equals(actor.subject(),subject);}
   private boolean same(Membership m,String issuer,String subject){return Objects.equals(m.getIssuer(),issuer)&&Objects.equals(m.getSubject(),subject);}
-  private String name(Membership m){return m.getDisplayName()==null?m.getSubject():m.getDisplayName();}
+  private String name(Membership m){return StaffNames.display(m.getDisplayName(),m.getLoginId());}
   private String key(WorkspaceAccess.Actor actor,String uuid){if(uuid==null||!uuid.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"))throw bad("유효한 요청 ID를 지정해 주세요.");return hash(Arrays.asList(actor.organizationId(),actor.issuer(),actor.subject(),UUID.fromString(uuid).toString()));}
   private String hash(Object value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsBytes(value)));}catch(Exception e){throw new IllegalStateException(e);}}
   private void page(int page){if(page<0||page>10000)throw bad("조회 페이지를 확인해 주세요.");}

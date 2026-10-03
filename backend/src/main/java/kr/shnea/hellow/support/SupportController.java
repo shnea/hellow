@@ -170,7 +170,7 @@ public class SupportController {
         "channel",q.getType()==QueueItem.ItemType.CALL?"CALL":"CHAT",
         "waitingCount",count));
     result.put("expiresAt",q.getSupportExpiresAt());
-    result.put("callStartedAt",q.getCallStartedAt());result.put("callEndedAt",q.getCallEndedAt());
+    result.put("mediaMissingSince",q.getMediaMissingSince());result.put("callStartedAt",q.getCallStartedAt());result.put("callEndedAt",q.getCallEndedAt());
     return result;
   }
 

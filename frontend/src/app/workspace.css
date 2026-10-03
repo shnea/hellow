@@ -15,6 +15,15 @@
 .active-workspace > div:last-child > div { flex-wrap:wrap;gap:6px; }
 .active-workspace > div:nth-last-child(2) > div:first-child { flex-wrap:wrap;gap:8px; }
 @media (min-width:768px) and (max-width:1279px) {
+  .queue-pane,.interaction-editor,.interaction-history { display:none; }
+  .queue-pane.mobile-visible,.interaction-editor.mobile-visible,.interaction-history.mobile-visible { display:flex;width:100%; }
+  .queue-pane.mobile-visible ~ .interaction-workspace { display:none; }
+  .queue-pane.mobile-visible .queue-panel { width:100%; }
+  .interaction-editor { overflow-y:auto; }
+  .current-consultation { min-height:100%;flex:0 0 auto; }
+  .current-consultation > .active-workspace { height:auto;min-height:100%;overflow:visible;flex:0 0 auto; }
+  .active-workspace > .consultation-editor-area { min-height:480px;flex:1 0 auto; }
+  .consultation-document-area { min-height:280px;flex-shrink:0; }
   .queue-panel { width:240px; }
   .interaction-history { display:none; }
   .interaction-history.mobile-visible { display:flex;width:100%; }

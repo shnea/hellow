@@ -216,7 +216,7 @@ public class FollowUpService {
   private String requestKey(WorkspaceAccess.Actor actor,String requestId){
     return UUID.nameUUIDFromBytes((actor.organizationId()+"\n"+actor.issuer()+"\n"+actor.subject()+"\n"+requestId.toLowerCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8)).toString();
   }
-  private String name(Membership m){return m.getDisplayName()==null?m.getSubject():m.getDisplayName();}
+  private String name(Membership m){return StaffNames.display(m.getDisplayName(),m.getLoginId());}
   private boolean owned(OrganizationOwned task,WorkspaceAccess.Actor actor){return Objects.equals(task.getOwnerIssuer(),actor.issuer())&&Objects.equals(task.getOwnerSubject(),actor.subject());}
   private String zone(String value){if(!ZoneId.getAvailableZoneIds().contains(value))throw bad("유효한 IANA 시간대를 지정해 주세요.");return ZoneId.of(value).getId();}
   private void future(Instant value,Instant now){if(!value.isAfter(now)||value.isAfter(now.plus(3650,java.time.temporal.ChronoUnit.DAYS)))throw bad("현재 이후 10년 이내의 시각을 지정해 주세요.");}

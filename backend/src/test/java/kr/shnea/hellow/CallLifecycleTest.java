@@ -11,9 +11,9 @@ class CallLifecycleTest {
     q.observeMedia(now.plusSeconds(2),true);var start=q.getCallStartedAt();
     q.observeMedia(now.plusSeconds(5),false);q.observeMedia(now.plusSeconds(12),true);
     q.useMediaIdentity("new-agent");q.observeMedia(now.plusSeconds(15),true);assertThat(q.getCallStartedAt()).isEqualTo(start);assertThat(q.isCallEnded()).isFalse();
-    q.observeMedia(now.plusSeconds(20),false);q.observeMedia(now.plusSeconds(34),false);assertThat(q.isCallEnded()).isFalse();
-    q.observeMedia(now.plusSeconds(35),false);assertThat(q.isCallEnded()).isTrue();assertThat(q.getCallEndedAt()).isEqualTo(now.plusSeconds(35));
-    q.endCall(now.plusSeconds(40));assertThat(q.getCallEndedAt()).isEqualTo(now.plusSeconds(35));
+    q.observeMedia(now.plusSeconds(20),false);q.observeMedia(now.plusSeconds(49),false);assertThat(q.isCallEnded()).isFalse();
+    q.observeMedia(now.plusSeconds(50),false);assertThat(q.isCallEnded()).isTrue();assertThat(q.getCallEndedAt()).isEqualTo(now.plusSeconds(50));
+    q.endCall(now.plusSeconds(55));assertThat(q.getCallEndedAt()).isEqualTo(now.plusSeconds(50));
   }
   @Test void abandonedInitialConnectionIsTerminatedWithoutInventingTalkTime(){
     var q=call();var now=Instant.parse("2026-10-04T00:00:00Z");q.requestMedia(now);

@@ -24,6 +24,7 @@ import { AgentStatusControl } from '@/components/AgentStatusControl';
 import {FollowUpWorkspace} from '@/components/followup/FollowUpWorkspace';
 import {followUpJson,type FollowUp,type ActiveFollowUp} from '@/lib/followup';
 import {agentStateLabels,type AgentView,type Availability,type AgentState} from '@/lib/agent-state';
+import {CallReconnectNotice} from '@/components/CallReconnectNotice';
 import {WorkTransferWorkspace,IncomingWorkTransfer} from '@/components/transfer/WorkTransferWorkspace';
 import {WorkTransferRequestDialog,type TransferSource} from '@/components/transfer/WorkTransferRequestDialog';
 import {sameConsultationDraft,transferJson,transferLabels,type TransferDirection,type TransferPage,type WorkTransfer} from '@/lib/work-transfer';
@@ -92,9 +93,12 @@ export default function ConsultationWorkspacePage() {
   const [draftStorageError,setDraftStorageError]=useState('');
   const draftCacheKey=useRef('');
   const [draftConflicts,setDraftConflicts]=useState<Record<string,SavedConsultation>>({});
+  const [acceptedTransfer,setAcceptedTransfer]=useState<WorkTransfer|null>(null);
+  const openedTransfer=useRef<string|null>(null);
   const [activeCall, setActiveCall] = useState<string | null>(null);
   const updateCallTransfer=useCallback((task:WorkTransfer)=>{
     if(task.kind!=='CALL'||task.toSubject!==identity?.subject||task.toIssuer!==identity?.issuer)return;
+    if(task.status==='ACCEPTED'&&openedTransfer.current!==task.id)setAcceptedTransfer(task);
     setCallHandoff(prior=>task.status==='CONNECTING'||task.status==='ACCEPTED'
       ?prior?.id===task.id&&prior.version===task.version&&prior.status===task.status?prior:task:null);
     if(task.status!=='CONNECTING')setRefresh(value=>value+1);
@@ -290,7 +294,7 @@ export default function ConsultationWorkspacePage() {
     // Drop context from the previous selection before loading this interaction.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTimeline([]); setTimelineError(''); setQuotedText('');
-    if (!selectedQueueCode || !canReadConsultation) return;
+    if (!selectedQueueCode || !canReadConsultation || (!customerCode && selectedQueueCode.startsWith('record:'))) return;
     const abort = new AbortController();
     const path = customerCode ? `customer/${customerCode}` : `queue/${selectedQueueCode}`;
     apiJson<ServerTimeline[]>(`/api/timeline/${path}`, { signal: abort.signal })
@@ -436,7 +440,7 @@ export default function ConsultationWorkspacePage() {
   const openFollowUp=(id:number)=>{setFollowUpFocus({id,revision:++followUpRevision.current});setCurrentTab('followups');};
   const followUpCreated=(task:FollowUp)=>{setFollowUpSource(null);followUpChanged(task);};
   const openTransfer=(id:string,direction?:TransferDirection)=>{setTransferFocus({id,revision:++transferRevision.current,direction});setDismissedTransfers(prev=>[...prev,id]);};
-  const transferChanged=(task:WorkTransfer)=>{updateCallTransfer(task);setRefresh(v=>v+1);setTimelineRefresh(v=>v+1);setReceivedTransfers(prev=>prev.filter(t=>t.id!==task.id||task.status==='OFFERED'));};
+  const transferChanged=(task:WorkTransfer)=>{updateCallTransfer(task);if(task.status==='ACCEPTED'&&task.toSubject===identity?.subject&&task.toIssuer===identity?.issuer&&openedTransfer.current!==task.id)setAcceptedTransfer(task);setRefresh(v=>v+1);setTimelineRefresh(v=>v+1);setReceivedTransfers(prev=>prev.filter(t=>t.id!==task.id||task.status==='OFFERED'));};
   const transferCreated=(task:WorkTransfer)=>{setTransferSource(null);openTransfer(task.id,'SENT');transferChanged(task);notify(task.status==='OFFERED'?'success':'info','이관 접수 확인',transferLabels[task.status]);};
   const requestQueueTransfer=()=>{void run(async()=>{
     if(!item||!writable||!can('consultation:transfer')||!can('transfer:read'))throw new Error('본인 상담과 이관 권한을 확인해 주세요.');
@@ -456,6 +460,35 @@ export default function ConsultationWorkspacePage() {
     if(live){setQueue(scoped);queueRef.current=scoped;setDraftReady(prev=>({...prev,[live.id]:false}));setTransferFocus(null);selectQueue(live.id);}
     else setTransferRecordFocus({id:task.consultationId,revision:++transferRevision.current});
   }).catch(()=>{});};
+  useEffect(()=>{
+    if(!acceptedTransfer||acceptedTransfer.organizationId!==organizationId||openedTransfer.current===acceptedTransfer.id)return;
+    const target=acceptedTransfer.queueCode?queue.find(q=>q.id===acceptedTransfer.queueCode&&q.assignedSubject===identity?.subject):null;
+    if(acceptedTransfer.liveWork&&!target)return;
+    if(!target){
+      const abort=new AbortController();
+      type ReceivedRecord=SavedConsultation&{queueCode:string|null;customerCode:string|null;customerName?:string;phoneNumber?:string;companyName?:string;customerType?:string};
+      void apiJson<ReceivedRecord>(`/api/consultations/${acceptedTransfer.consultationId}`,{signal:abort.signal}).then(record=>{
+        if(abort.signal.aborted)return;
+        const context:QueueItem={id:record.queueCode||`record:${record.id}`,customerCode:record.customerCode,status:'COMPLETED',type:'ticket',
+          customerName:record.customerName||'상담 고객',phoneNumber:record.phoneNumber||'',companyName:record.companyName||'',
+          customerType:record.customerType==='CORPORATE'?'corporate':'individual',waitTimeOrSchedule:'',priority:'normal',summary:'이관받은 상담 기록'};
+        openedTransfer.current=acceptedTransfer.id;
+        setDismissedTransfers(prev=>[...prev,acceptedTransfer.id]);setReceivedTransfers(prev=>prev.filter(task=>task.id!==acceptedTransfer.id));
+        setTransferFocus(null);setTransferSource(null);setTransferRecordFocus(null);setMobilePanel('editor');
+        setHistorySelection(context);setSelected(context.id);setInlineRecordFocus({id:record.id,revision:++transferRevision.current});
+        setCurrentTab('workspace');setAcceptedTransfer(null);
+      }).catch(error=>{if(!abort.signal.aborted)setTransferStateError(`이관은 수락되었지만 상담을 열지 못했습니다. 다시 조회해 주세요. ${(error as Error).message}`);});
+      return()=>abort.abort();
+    }
+    openedTransfer.current=acceptedTransfer.id;
+    // Server-confirmed ownership arrival completes the pending navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDismissedTransfers(prev=>prev.includes(acceptedTransfer.id)?prev:[...prev,acceptedTransfer.id]);
+    setReceivedTransfers(prev=>prev.filter(task=>task.id!==acceptedTransfer.id));
+    setTransferFocus(null);setTransferSource(null);setTransferRecordFocus(null);setMobilePanel('editor');
+    setSelected(target.id);setHistorySelection(null);setInlineRecordFocus(null);setCurrentTab('workspace');
+    setAcceptedTransfer(null);
+  },[acceptedTransfer,organizationId,queue,identity?.subject]);
   const quoteTimeline=async(entry:TimelineItem)=>{
     if(!item||!writable||!can('consultation:write')||quoteBusy)return;
     setQuoteBusy(true);setQuoteError('');
@@ -485,6 +518,7 @@ export default function ConsultationWorkspacePage() {
       {mediaCode&&call.audioBlocked&&<div className="transfer-record-header" role="status"><p>{call.audioError||'브라우저가 상대방 소리의 자동 재생을 차단했습니다.'}</p><button onClick={()=>void call.startAudio()}>상대방 소리 켜기</button></div>}
       {followUpStateError&&<p role="alert" className="p-3 text-amber-200">{followUpStateError}<button className="ml-2 underline" onClick={()=>setRefresh(v=>v+1)}>후속 업무 상태 다시 조회</button></p>}
       {transferStateError&&<p role="alert" className="p-3 text-amber-200">이관 요청을 확인하지 못했습니다. {transferStateError}<button className="ml-2 underline" onClick={()=>setRefresh(v=>v+1)}>이관 요청 다시 조회</button></p>}
+      <CallReconnectNotice since={callQueue?.mediaMissingSince} ended={callQueue?.callEnded}/>
       <nav className="workspace-mobile-tabs flex gap-2 p-2 border-b border-slate-800" aria-label="상담 화면 전환">
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('queue');}}>대기열 {queue.length}</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('editor');}}>편집기</button>

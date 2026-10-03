@@ -128,7 +128,7 @@ class CustomerHistoryIntegrationTest {
     String subject="aa1ebd8d-7c6a-469c-be55-109a82555529";
     var m=members.saveAndFlush(new Membership("a",ISSUER,subject,Set.of("queue:read")));
     mvc.perform(get("/api/me").with(jwt().jwt(j->j.issuer(ISSUER).subject(subject).claim("preferred_username","login-id").claim("nickname","저장된 닉네임"))))
-      .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("저장된 닉네임"));
+      .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("저장된 닉네임(login-id)"));
     var updated=members.findById(m.getId()).orElseThrow();assertThat(updated.getLoginId()).isEqualTo("login-id");assertThat(updated.getDisplayName()).isEqualTo("저장된 닉네임");
   }
   @Test void administratorEnteredLoginBindsVerifiedIdentityOnceWithoutChangingGrants()throws Exception{

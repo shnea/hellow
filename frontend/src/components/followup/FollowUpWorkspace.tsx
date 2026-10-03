@@ -21,6 +21,8 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
   const [requestType,setRequestType]=useState<'VISIT'|'CALLBACK'>('CALLBACK');
   const flight=useRef(false);const detailRead=useRef<AbortController|null>(null);const listRead=useRef<AbortController|null>(null);const historyRead=useRef<AbortController|null>(null);
   const focusRevision=useRef<number|null>(null);const mounted=useRef(true);
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{const el=dialog.current;if(active&&canRead&&selected!==null){if(!el?.open)el?.showModal();}else el?.close();},[active,canRead,selected]);
   const [now,setNow]=useState(()=>Date.now());
   useEffect(()=>{if(!active)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[active]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;historyRead.current?.abort();};},[]);
@@ -36,7 +38,7 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
     setLoading(true);setListError('');
     const params=new URLSearchParams({page:String(page)});if(type)params.set('actionType',type);if(status)params.set('status',status);
     followUpJson<FollowUpPage>(`/api/followup?${params}`,organizationId,{signal:abort.signal}).then(result=>{
-      if(abort.signal.aborted)return;setRows(result.items);setHasMore(result.hasMore);setSelected(id=>id??result.items[0]?.id??null);
+      if(abort.signal.aborted)return;setRows(result.items);setHasMore(result.hasMore);
     }).catch(e=>{if(!abort.signal.aborted){setListError(e.message);setRows([]);}}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
   },[active,canRead,organizationId,accessKey,type,status,page,refresh]);
@@ -107,10 +109,11 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
         <label>예약 상태<select value={status} disabled={busy} onChange={e=>{setStatus(e.target.value);setPage(0);}}><option value="">전체</option>{Object.entries(followUpLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
         <span>일시 표시는 한국 시간 (Asia/Seoul)</span></div>
       {listError&&<p role="alert" className="followup-error">{listError}</p>}{loading&&<p role="status">예약 목록을 조회하고 있습니다.</p>}
-      <div className="followup-columns"><div><h2>예약 목록</h2>{!rows.length&&!loading&&!listError&&<p>조건에 맞는 예약이 없습니다. 상담에서 후속 요청을 접수하면 이 목록에서 확인할 수 있습니다.</p>}
-        <ul className="followup-list">{rows.map(row=><li key={row.id}><button disabled={busy} aria-pressed={selected===row.id} onClick={()=>choose(row.id)}><strong>{row.title}</strong><span>{row.actionType==='VISIT'?'방문':'콜백'} · {followUpLabels[row.status]}</span><span>{followUpTime(row.scheduledAt)} · {row.assignedName||'담당 미확정'}</span></button></li>)}</ul>
+      <div><h2>예약 목록</h2>{!rows.length&&!loading&&!listError&&<p>조건에 맞는 예약이 없습니다. 상담에서 후속 요청을 접수하면 이 목록에서 확인할 수 있습니다.</p>}
+        <p>행을 더블 클릭하거나 상세 보기로 예약을 확인하세요.</p>
+        <div className="followup-table-scroll"><table><thead><tr><th>요청 목적</th><th>고객</th><th>종류</th><th>상태</th><th>확정 일시</th><th>담당자</th><th>상세</th></tr></thead><tbody>{rows.map(row=><tr key={row.id} onDoubleClick={()=>choose(row.id)}><td>{row.title}</td><td>{row.contactName||'이름 미확인'}</td><td>{row.actionType==='VISIT'?'방문':'콜백'}</td><td>{followUpLabels[row.status]}</td><td>{followUpTime(row.scheduledAt)}</td><td>{row.assignedName||'담당 미확정'}</td><td><button disabled={busy} aria-label={`${row.title} 상세 보기`} onClick={()=>choose(row.id)}>상세 보기</button></td></tr>)}</tbody></table></div>
         <nav className="followup-actions" aria-label="예약 목록 페이지"><button disabled={busy||loading||page===0} onClick={()=>setPage(v=>v-1)}>이전 목록</button><span>{page+1}페이지</span><button disabled={busy||loading||!hasMore} onClick={()=>setPage(v=>v+1)}>다음 목록</button></nav>
-      </div><div className="followup-detail">
+      </div><dialog ref={dialog} className="followup-detail-dialog" aria-label="콜백·방문 예약 상세" onCancel={e=>{e.preventDefault();e.stopPropagation();if(!busy)setSelected(null);}}><header><h2>콜백·방문 예약 상세</h2><button disabled={busy} onClick={()=>setSelected(null)}>닫기</button></header><div className="followup-detail">
         {detailLoading&&<p role="status">선택한 업무를 확인하고 있습니다.</p>}{error&&<p role="alert" className="followup-error">{error}</p>}{notice&&<p role="status">{notice}</p>}
         {!current&&!detailLoading&&!error&&<p>예약을 선택하면 확정 일정과 처리 이력이 표시됩니다.</p>}
         {current&&draft&&<><h2>{current.title}</h2><dl><dt>고객</dt><dd>{current.contactName||'기존 기록 · 확인되지 않음'}</dd><dt>연락처</dt><dd>{current.phoneNumber||'기존 기록 · 확인되지 않음'}</dd><dt>상태</dt><dd>{followUpLabels[current.status]}</dd><dt>담당자</dt><dd>{current.assignedName||'미확정'}</dd><dt>확정 일시</dt><dd>{followUpTime(current.scheduledAt)}{current.durationMinutes?` · ${current.durationMinutes}분`:''}</dd><dt>희망 일시</dt><dd>{followUpTime(current.proposedAt)}</dd><dt>요청자</dt><dd>{current.creatorName||'기존 기록 · 확인되지 않음'}</dd></dl>
@@ -142,7 +145,7 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
           {history&&<><ol className="followup-history">{history.map(event=><li key={event.id}><strong>{followUpEventLabels[event.action]||event.action} · {event.actorName}</strong><p>{followUpTime(event.occurredAt)}</p><p className="followup-text">{event.reason}</p><EventDetails event={event}/></li>)}</ol>{!history.length&&<p>확인된 변경 이력이 없습니다. 기존 기록의 과거 변경은 추정하지 않습니다.</p>}
             <nav className="followup-actions" aria-label="변경 이력 페이지"><button disabled={historyBusy||historyPage===0} onClick={()=>void loadHistory(historyPage-1)}>최근 이력</button><button disabled={historyBusy||history.length<50} onClick={()=>void loadHistory(historyPage+1)}>이전 이력</button></nav></>}
         </>}
-      </div></div>
+      </div></dialog>
     </>}
   </section>;
 }

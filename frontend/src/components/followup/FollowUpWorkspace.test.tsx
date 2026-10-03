@@ -1,12 +1,13 @@
 import React,{StrictMode} from 'react';
 import {act,cleanup,fireEvent,render,screen} from '@testing-library/react';
-import {afterEach,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {FollowUpWorkspace} from './FollowUpWorkspace';
 import type {FollowUp} from '@/lib/followup';
 const task:FollowUp={id:1,version:0,actionType:'CALLBACK',title:'계약 재확인',details:'분기 조건',status:'PENDING',queueCode:'q',customerCode:null,createdAt:'2026-10-03T00:00:00Z',creatorName:'Alice',assignedName:null,assignedMemberId:null,proposedAt:null,scheduledAt:null,scheduledEndAt:null,timeZone:null,durationMinutes:null,outcome:null,canWrite:true,canAssign:true,canProcess:true};
-const props={active:true,organizationId:'org-a',identityKey:'alice',accessKey:'one',canRead:true,canWrite:true,focus:null,source:null,onCreated:vi.fn(),onChanged:vi.fn(),onSourceClosed:vi.fn()};
+const props={active:true,organizationId:'org-a',identityKey:'alice',accessKey:'one',canRead:true,canWrite:true,focus:{id:1,revision:1},source:null,onCreated:vi.fn(),onChanged:vi.fn(),onSourceClosed:vi.fn()};
 const response=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status});
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();});};
+beforeEach(()=>{HTMLDialogElement.prototype.showModal=function(){this.setAttribute("open","");};HTMLDialogElement.prototype.close=function(){this.removeAttribute("open");};});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it('keeps failed edits and versions across reload and requires explicit adoption before retry',async()=>{
   let latest=task;const commands:unknown[]=[];let reject=true;

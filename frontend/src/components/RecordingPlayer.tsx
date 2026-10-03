@@ -1,5 +1,6 @@
 'use client';
 import {RecordingIcon} from './RecordingIcon';
+import {Play,RefreshCw,LoaderCircle} from 'lucide-react';
 import {useEffect,useState} from 'react';
 import {apiJson,jsonBody} from '@/lib/api';
 interface Recording {id:string;status:string;durationSeconds:number;errorCode:string|null;canPlay:boolean;canRetry:boolean;}
@@ -18,7 +19,7 @@ export function RecordingPlayer({queueCode,active,accessKey,hideEmpty=false}:{qu
   const retry=async()=>{if(!recording||busy)return;setBusy(true);setError('');try{await apiJson(`/api/recordings/${recording.id}/retry`,jsonBody({}));setRefresh(v=>v+1);}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
   if(hideEmpty&&(!loaded||!recording||recording.status==='NO_AUDIO'))return null;
   return <section className="recording-player border-b border-slate-700 px-3 py-2 text-sm" aria-label="통화 녹음"><div className="flex flex-wrap items-center gap-3"><RecordingIcon status={recording?.status}/><strong>통화 녹음</strong><span className="text-slate-300">{recording?labels[recording.status]||recording.status:loaded?'저장된 녹음 없음':'녹음 확인 중…'}</span>
-    {recording?.status==='READY'&&(recording.canPlay?<button disabled={busy} className="underline min-h-9" onClick={()=>void play()}>{busy?'준비 중…':source?'재생 주소 갱신':'녹음 듣기'}</button>:<span>이 녹음의 재생 권한이 없습니다.</span>)}
+    {recording?.status==='READY'&&(recording.canPlay?<button disabled={busy} className="inline-flex items-center justify-center min-h-11 min-w-11 rounded hover:bg-slate-700" title={busy?'준비 중':source?'재생 주소 갱신':'녹음 듣기'} aria-label={busy?'준비 중':source?'재생 주소 갱신':'녹음 듣기'} onClick={()=>void play()}>{busy?<LoaderCircle size={20} aria-hidden="true"/>:source?<RefreshCw size={20} aria-hidden="true"/>:<Play size={20} aria-hidden="true"/>}</button>:<span>이 녹음의 재생 권한이 없습니다.</span>)}
     {recording?.errorCode&&recording.canRetry&&['UPLOADING','STARTING','RECORDING'].includes(recording.status)&&<button disabled={busy} className="underline min-h-9" onClick={()=>void retry()}>저장 다시 시도</button>}</div>
     {error&&<p role="alert" className="text-amber-200 py-2">{error}<button className="ml-2 underline" onClick={()=>setRefresh(v=>v+1)}>다시 확인</button></p>}
     {active&&source&&recording?.canPlay&&<audio key={source} className="w-full mt-2" controls autoPlay preload="metadata" src={source} onError={()=>{setSource('');setError('녹음을 재생하지 못했습니다. 녹음 듣기를 다시 눌러 주세요.');}}/>}

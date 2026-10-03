@@ -17,7 +17,7 @@ export interface SupportSession {
   channel: 'CALL' | 'CHAT';
   assignedAgent: string;
   waitingCount: number;
-  callStartedAt?:string|null;callEndedAt?:string|null;
+  callStartedAt?:string|null;callEndedAt?:string|null;mediaMissingSince?:string|null;
   expiresAt: string;
 }
 
@@ -27,6 +27,33 @@ export class SupportHttpError extends Error {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const supportStorageKey = (code: string) => `hellow_support_request:${code}`;
+const resumeKey = (code:string) => `hellow_support_resume:${code}`;
+export function rememberSupportResume(code:string, sessionId:string) {
+  try {localStorage.setItem(resumeKey(code), JSON.stringify({sessionId, until:Date.now()+30000}));}
+  catch {/* The original tab can still restore its session storage. */}
+}
+export function loadSupportResume(code:string):string|null {
+  try {
+    const key = resumeKey(code);
+    const restored = sessionStorage.getItem(key);
+    if (restored) return restored;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (typeof value.sessionId !== 'string' || !value.sessionId || !(value.until > Date.now())) {
+      localStorage.removeItem(key); return null;
+    }
+    // Keep the capability in this tab before consuming the short-lived handoff.
+    // Effect replay and a subsequent reload must recover the same call.
+    sessionStorage.setItem(key, value.sessionId);
+    localStorage.removeItem(key);
+    return value.sessionId;
+  } catch {return null;}
+}
+export function clearSupportResume(code:string) {
+  sessionStorage.removeItem(resumeKey(code));
+  localStorage.removeItem(resumeKey(code));
+}
 
 // Store before sending: an unknown POST result must retain its exact original body.
 export function storeSupportRequest(request: SupportRequest) {

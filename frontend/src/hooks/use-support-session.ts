@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {loadSupportRequest, prepareSupportMicrophone, storeSupportRequest, supportJson, SupportHttpError,
+  clearSupportResume, loadSupportResume,
   supportStorageKey, validateSupportSession, type SupportRequest, type SupportSession} from '@/lib/support-session';
 
 export type SupportStep = 'RESTORING' | 'FORM' | 'PENDING' | 'WAITING' | 'PROCESSING' | 'FINISHED' | 'CANCELLED' | 'EXPIRED' | 'UNAVAILABLE';
@@ -44,6 +45,12 @@ export function useSupportSession(code: string) {
         const saved = loadSupportRequest(code);
         if (abort.signal.aborted) return;
         pending.current = saved; setRequest(saved);
+        const resume = loadSupportResume(code);
+        if (!saved && resume) {
+          const restored = await supportJson<SupportSession>(`/api/support/session/${encodeURIComponent(resume)}`, {signal:abort.signal});
+          if (!abort.signal.aborted && generation.current === current) apply(restored);
+          return;
+        }
         if (!saved) {setStep('FORM'); return;}
         const data = await supportJson<SupportSession>(`/api/support/request/${encodeURIComponent(code)}/${saved.requestId}`, {signal:abort.signal});
         if (!abort.signal.aborted && generation.current === current) apply(data);
@@ -125,7 +132,7 @@ export function useSupportSession(code: string) {
 
   const newRequest = () => {
     if (inFlight.current || !['FINISHED','CANCELLED','EXPIRED'].includes(step)) return;
-    try {sessionStorage.removeItem(supportStorageKey(code));}
+    try {sessionStorage.removeItem(supportStorageKey(code)); clearSupportResume(code);}
     catch {setError('이전 접수 정보를 정리하지 못했습니다. 브라우저 저장소 사용 설정을 확인해 주세요.'); return;}
     ++generation.current; pollAbort.current?.abort(); pending.current = null;
     setRequest(null); setSession(null); setError(''); setStep('FORM');

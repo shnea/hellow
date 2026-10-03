@@ -5,9 +5,9 @@ import Image from 'next/image';
 import {Headphones, PhoneCall, PhoneOff, Mic, MicOff, CheckCircle2, AlertCircle, Building2, User, MessageSquare, ChevronRight, RefreshCw} from 'lucide-react';
 import {LiveKitCallSession} from '@/lib/livekit';
 import {useSupportSession} from '@/hooks/use-support-session';
-import {supportJson} from '@/lib/support-session';
+import {supportJson,rememberSupportResume} from '@/lib/support-session';
+import {CallReconnectNotice} from '@/components/CallReconnectNotice';
 import {useCallClock} from '@/hooks/use-call-clock';
-import {endCallOnPageExit} from '@/lib/call-exit';
 import './support.css';
 
 const defaultBranding = {title:'상담 문의를 접수해 주세요',description:'문의 내용을 남겨주시면 담당 상담사가 확인합니다.',buttonLabel:'상담 연결 요청하기',primaryColor:'#4f46e5',logoUrl:''};
@@ -72,8 +72,10 @@ export default function CustomerSupportPage() {
       onError:()=>{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결에 실패했습니다. 마이크 권한과 네트워크를 확인한 뒤 다시 연결해 주세요.');}},
     });
     livekitRef.current=manager;
-    let connected=false;
-    const leave=()=>{if(connected)endCallOnPageExit(`/api/support/session/${sessionId}/end-call`);};
+
+    const leave=()=>{rememberSupportResume(organizationCode,sessionId);manager.disconnect();};
+    const resume=(event:PageTransitionEvent)=>{if(event.persisted)setMediaRetry(v=>v+1);};
+    window.addEventListener('pageshow',resume);
     window.addEventListener('pagehide',leave);
     void Promise.resolve().then(async()=>{
       if(abort.signal.aborted)return;
@@ -82,11 +84,11 @@ export default function CustomerSupportPage() {
       setIsMuted(mutePreference.current.muted);
       try{
         const data=await supportJson<{url:string;token:string}>(`/api/support/session/${sessionId}/token`,{method:'POST',signal:abort.signal});
-        if(!abort.signal.aborted){await manager.connect(data.url,data.token,mutePreference.current.muted);if(!abort.signal.aborted)connected=true;}
+        if(!abort.signal.aborted){await manager.connect(data.url,data.token,mutePreference.current.muted);}
       }catch{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결을 확인하지 못했습니다. 마이크 권한과 네트워크를 확인한 뒤 다시 연결해 주세요.');}}
     });
-    return()=>{window.removeEventListener('pagehide',leave);abort.abort();manager.disconnect();if(livekitRef.current===manager)livekitRef.current=null;};
-  },[isVoice,sessionId,mediaRetry]);
+    return()=>{window.removeEventListener('pageshow',resume);window.removeEventListener('pagehide',leave);abort.abort();manager.disconnect();if(livekitRef.current===manager)livekitRef.current=null;};
+  },[isVoice,sessionId,mediaRetry,organizationCode]);
 
   const handleToggleMute=async()=>{
     if(!livekitRef.current || mediaStatus!=='connected' || muting)return;
@@ -116,6 +118,7 @@ export default function CustomerSupportPage() {
     </header>
     <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 shrink-0">
       <div className="w-full max-w-xl">
+        <CallReconnectNotice since={session?.mediaMissingSince} ended={!isVoice}/>
         {errorMessage&&<p role="alert" className="mb-4 p-4 bg-amber-950 text-amber-200 rounded-xl break-words">{errorMessage}</p>}
         {organizationError&&<button onClick={()=>window.location.reload()} className={`${buttonClass} mb-4`}>접수 조직 다시 확인</button>}
           {/* STEP 1: 접수 폼 */}

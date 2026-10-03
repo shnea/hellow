@@ -18,7 +18,7 @@ class MediaLifecycleWorkerTest {
   var member=new Membership("org","issuer","agent",Set.of("queue:accept"));
   when(queues.findByStatusAndCallEndedFalse(QueueItem.QueueStatus.PROCESSING)).thenReturn(List.of(q));when(orgs.findById("org")).thenReturn(Optional.of(new Organization("org","조직","public")));
   when(members.findByOrganizationIdAndIssuerAndSubjectAndActiveTrue("org","issuer","agent")).thenReturn(Optional.of(member));when(grants.grants(member)).thenReturn(Map.of("queue:accept",DataScope.SELF));
-  var worker=new MediaCleanupWorker(queues,members,orgs,mock(PlatformProperties.class),media,grants,mock(WorkTransferRepository.class),Clock.fixed(start.plusSeconds(20),ZoneOffset.UTC));
+  var worker=new MediaCleanupWorker(queues,members,orgs,mock(PlatformProperties.class),media,grants,mock(WorkTransferRepository.class),Clock.fixed(start.plusSeconds(35),ZoneOffset.UTC));
   when(media.participantConnection(anyString(),anyString())).thenThrow(new IllegalStateException("provider unavailable"));worker.cleanup();assertThat(q.isCallEnded()).isFalse();verify(queues,never()).save(any());
   doReturn(new LiveKitService.ParticipantConnection(false,false,null)).when(media).participantConnection(anyString(),anyString());worker.cleanup();assertThat(q.isCallEnded()).isTrue();verify(queues).save(q);
  }

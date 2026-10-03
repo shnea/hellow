@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { apiJson,jsonBody } from '@/lib/api';
 import { LiveKitCallSession } from '@/lib/livekit';
 import {useCallClock} from './use-call-clock';
-import {endCallOnPageExit} from '@/lib/call-exit';
 import {confirmedTransfer,transferJson,type WorkTransfer} from '@/lib/work-transfer';
 
 interface CallOptions {organizationId?:string;mediaIdentity?:string|null;callStartedAt?:string|null;callEndedAt?:string|null;transfer?:WorkTransfer|null;onTransferChanged?:(task:WorkTransfer)=>void;}
@@ -32,13 +31,14 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
     setIsMuted(mutePreference.current.muted);
     if (!queueCode) { setStatus('idle'); return; }
     let active = true;
-    let connected=false;
-    const leave=()=>{if(active&&connected)endCallOnPageExit(`/api/queue/${queueCode}/end-call`,organizationId);};
+    const leave=()=>call.disconnect();
+    const resume=(event:PageTransitionEvent)=>{if(event.persisted)setRestart(v=>v+1);};
+    window.addEventListener('pageshow',resume);
     window.addEventListener('pagehide',leave);
     const call = new LiveKitCallSession({ onConnected: () => {if(active){setStatus('connected');setError('');}},
       onConnectionStateChanged: state=>{if(active&&state==='reconnecting')setStatus('connecting');},
       onAudioPlaybackChanged: allowed=>{if(active){setAudioBlocked(!allowed);if(allowed)setAudioError('');}},
-      onDisconnected: () => {connected=false;if(active)setStatus('idle');}, onError: err => {if(active){setError(err.message);setStatus('error');}} });
+      onDisconnected: () => {if(active)setStatus('idle');}, onError: err => {if(active){setError(err.message);setStatus('error');}} });
     session.current = call;
     setStatus('connecting');
     const abort = new AbortController();
@@ -61,7 +61,7 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
       if(!active)return;
       await call.connect(data.url,data.token,mutePreference.current.muted);
       if(!active)return;
-      connected=true;
+
       setStatus('connected');
       // Keep this exact room and its browser lease when CONNECTING becomes ACCEPTED.
       while(active&&preview?.status==='CONNECTING') {
@@ -94,7 +94,7 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
     })();
     lease.current=start;
     void start.catch(err => { if(active) { setError((err as Error).message); setStatus('error'); } });
-    return () => { window.removeEventListener('pagehide',leave);active = false; abort.abort(); release?.(); call.disconnect(); session.current = null; };
+    return () => { window.removeEventListener('pageshow',resume);window.removeEventListener('pagehide',leave);active = false; abort.abort(); release?.(); call.disconnect(); session.current = null; };
   }, [queueCode,mediaIdentity,organizationId,restart]);
   const setMuted=async(muted:boolean)=>{
     const call=session.current;if(!call)throw new Error('음성 연결을 먼저 확인해 주세요.');

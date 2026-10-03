@@ -1,15 +1,30 @@
 import {act, cleanup, renderHook, waitFor} from '@testing-library/react';
+import {StrictMode} from 'react';
 import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {useSupportSession} from './use-support-session';
-import {storeSupportRequest, supportStorageKey, type SupportRequest, type SupportSession} from '@/lib/support-session';
+import {rememberSupportResume, storeSupportRequest, supportStorageKey, type SupportRequest, type SupportSession} from '@/lib/support-session';
 
 const payload:SupportRequest = {organizationCode:'org-a', requestId:'dc77d3a9-4a6a-453e-aec9-bf6c5f34e0af', customerName:'고객',
   phoneNumber:'01000000000', customerType:'INDIVIDUAL', inquiryType:'제품 문의', message:'원래 문의', channel:'CHAT'};
 const waiting:SupportSession = {sessionId:'opaque-session', queueCode:'q-one', status:'WAITING', channel:'CHAT', assignedAgent:'', waitingCount:3, expiresAt:'2026-10-04T00:00:00Z'};
 const response = (data:unknown = waiting, status = 200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json'}});
 const flush = async () => {await act(async () => {await Promise.resolve(); await Promise.resolve();});};
-beforeEach(() => {sessionStorage.clear();});
+beforeEach(() => {sessionStorage.clear(); localStorage.clear();});
 afterEach(() => {cleanup(); vi.unstubAllGlobals();});
+
+it('reopened customer tab survives effect replay and reload without creating another request', async () => {
+  rememberSupportResume('org-a', 'opaque-session');
+  const active = {...waiting, channel:'CALL', status:'PROCESSING', callStartedAt:'2026-10-03T19:00:00Z'};
+  const fetcher = vi.fn<(url:string, options?:RequestInit)=>Promise<Response>>(async () => response(active));
+  vi.stubGlobal('fetch', fetcher);
+  const first = renderHook(() => useSupportSession('org-a'), {wrapper:StrictMode});
+  await waitFor(() => expect(first.result.current.step).toBe('PROCESSING'));
+  expect(first.result.current.session?.callStartedAt).toBe(active.callStartedAt);
+  first.unmount();
+  const second = renderHook(() => useSupportSession('org-a'), {wrapper:StrictMode});
+  await waitFor(() => expect(second.result.current.step).toBe('PROCESSING'));
+  expect(fetcher.mock.calls.every(([url, options]) => url === '/api/support/session/opaque-session' && options?.method !== 'POST')).toBe(true);
+});
 
 it('reload recovers the existing request without creating work and restores its original body', async () => {
   storeSupportRequest(payload);
