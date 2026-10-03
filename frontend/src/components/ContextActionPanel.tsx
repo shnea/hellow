@@ -25,7 +25,6 @@ interface ContextActionPanelProps {
   customerName: string;
   customerPhone: string;
   onQuoteTimeline: (content: string) => void;
-  onOpenRecord?: (item:TimelineItem)=>void;
   onAddFollowUpAction: (actionType: string, details: string) => void;
   onRequestTransfer?:()=>void;transferDisabled?:boolean;transferIsCall?:boolean;
   activeFollowUpTab?: 'visit' | 'callback' | 'transfer' | 'notification';
@@ -36,7 +35,6 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
   customerName,
   customerPhone,
   onQuoteTimeline,
-  onOpenRecord,
   onAddFollowUpAction,
   onRequestTransfer,transferDisabled=true,transferIsCall=false,
   activeFollowUpTab = 'visit',
@@ -152,10 +150,10 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
           filteredTimeline.map((item) => (
             <div
               key={item.id}
-              onClick={() => item.queueCode&&onOpenRecord?onOpenRecord(item):setSelectedDetailItem(item)}
-                tabIndex={0} role="button" onKeyDown={event => {if(event.target!==event.currentTarget)return;if(event.key === "Enter"||event.key===' '){event.preventDefault();if(item.queueCode&&onOpenRecord)onOpenRecord(item);else setSelectedDetailItem(item);}}}
+              onDoubleClick={event=>{if((event.target as HTMLElement).closest('button'))return;setSelectedDetailItem(item);}}
+                tabIndex={0} role="button" onKeyDown={event => {if(event.target!==event.currentTarget)return;if(event.key === "Enter"||event.key===' '){event.preventDefault();setSelectedDetailItem(item);}}}
               className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl relative group hover:border-slate-700 transition-colors cursor-pointer select-none"
-              title="상세 보기"
+              title="더블 클릭으로 상세 보기"
             >
               {/* Card Top */}
               <div className="flex items-center justify-between text-xs mb-1.5">
@@ -180,7 +178,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
                   <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent flex items-end justify-center pb-0.5 pointer-events-none">
                     <span className="text-[10px] text-indigo-400 font-medium tracking-tight flex items-center gap-0.5">
                       <Maximize2 className="w-2.5 h-2.5" />
-                      상세 보기
+                      더블 클릭으로 상세 보기
                     </span>
                   </div>
                 )}

@@ -267,11 +267,6 @@ export default function ConsultationWorkspacePage() {
     const saved=await apiJson<SavedConsultation|null>(`/api/consultations/intake/${item.id}`);
     if(saved){setDrafts(prev=>({...prev,[item.id]:prev[item.id]||savedDraft(saved)}));setInlineRecordFocus({id:saved.id,revision:++transferRevision.current});}
   }).catch(()=>{});};
-  const openTimelineRecord=(entry:TimelineItem)=>{if(!entry.queueCode)return;void run(async()=>{
-    const saved=await apiJson<SavedConsultation|null>(`/api/consultations/intake/${entry.queueCode}`);
-    if(!saved)throw new Error('이 이력에 연결된 상담 기록이 없습니다.');
-    setInlineRecordFocus({id:saved.id,revision:++transferRevision.current});setMobilePanel('editor');
-  }).catch(()=>{});};
   const linkCustomer = (code: string) => { if(code) void run(async () => {
     if(!item) return;
     const linked=await apiJson<ServerCustomer>(`/api/customers/queue/${item.id}/link`,jsonBody({customerCode:code}));
@@ -534,7 +529,7 @@ export default function ConsultationWorkspacePage() {
         </div><div className={`interaction-history flex flex-col w-96 shrink-0 min-h-0 ${mobilePanel==='history'?'mobile-visible':''}`}>
           {timelineError && <p role="alert" className="p-2 text-amber-300">{timelineError}<button className="ml-2 underline" onClick={() => setTimelineRefresh(v=>v+1)}>이력 다시 조회</button></p>}
           <ContextActionPanel key={item.id} organizationId={organizationId} identityKey={identity.subject} queueCode={item.id} onFollowUpCreated={followUpCreated} onOpenFollowUps={()=>setCurrentTab('followups')} timeline={timeline} customerName={customer.name} customerPhone={customer.phoneNumber} readOnly={!writable || !can('followup:read') || !can('followup:write') || busy || Boolean(queueError)}
-            onOpenRecord={canReadConsultation?openTimelineRecord:undefined} onQuoteTimeline={text=>{setInlineRecordFocus(null);setQuotedText(text);}} onAddFollowUpAction={()=>notify('info','준비 중','메시지 발송은 후속 작업입니다.')} activeFollowUpTab={followupTab}
+            onQuoteTimeline={text=>{setInlineRecordFocus(null);setQuotedText(text);}} onAddFollowUpAction={()=>notify('info','준비 중','메시지 발송은 후속 작업입니다.')} activeFollowUpTab={followupTab}
             onRequestTransfer={requestQueueTransfer} transferDisabled={!writable||!can('consultation:transfer')||!can('transfer:read')||busy||Boolean(queueError)||!draftReady[item.id]} transferIsCall={item.type==='call'&&!item.callEnded}/>
         </div></div> : null}
         {!showRecords&&!item&&<div className="interaction-workspace flex flex-1 min-w-0 min-h-0">

@@ -334,18 +334,6 @@ describe('workspace regressions',()=>{
   });
 });
 
-it('opens timeline history inside the workspace and returns to the unchanged current draft',async()=>{
- const original=fetchMock.getMockImplementation()!;
- const old={id:99,version:1,customerCode:null,queueCode:'old-queue',customerName:'이전 미등록 고객',phoneNumber:'01099998888',customerRegistered:false,categoryMain:'일반',categorySub:'문의',status:'COMPLETED',memo:'이전 상담 본문',tags:'',agentName:'Alice',createdAt:'2026-10-02T00:00:00Z',editable:true,processing:false};
- fetchMock.mockImplementation(async(p,o)=>p==='/api/consultations/intake/old-queue'||p==='/api/consultations/99'?response(old):original(p,o));
- const view=render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
- fireEvent.click(screen.getByRole('button',{name:'이전 상담 열기'}));await flush();
- expect(screen.getByText('이전 상담 본문')).toBeTruthy();expect(screen.getByRole('button',{name:'현재 상담으로 돌아가기'})).toBeTruthy();
- expect(view.container.querySelector('.current-consultation')?.hasAttribute('hidden')).toBe(true);
- expect(view.container.querySelector('.queue-pane')).not.toBeNull();
- fireEvent.click(screen.getByRole('button',{name:'현재 상담으로 돌아가기'}));await flush();
- expect(view.container.querySelector('.current-consultation')?.hasAttribute('hidden')).toBe(false);expect(screen.getByText('A unique draft')).toBeTruthy();
-});
 it('shows unregistered records in the separate history page without the processing queue',async()=>{
  const original=fetchMock.getMockImplementation()!;
  fetchMock.mockImplementation(async(p,o)=>p.startsWith('/api/consultations?page=')?response({items:[{id:99,version:1,customerCode:null,queueCode:'old',customerName:'미등록 상담자',phoneNumber:'01088889999',customerRegistered:false,categoryMain:'일반',categorySub:'문의',status:'COMPLETED',memo:'미등록 기록',tags:'',agentName:'Alice',createdAt:'2026-10-02T00:00:00Z',editable:true}],hasMore:false}):original(p,o));
