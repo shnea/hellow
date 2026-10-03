@@ -1,5 +1,15 @@
 # 작업 인계 기록
 
+## 2026-10-03 통화 이관 화면·동일 음성 연결 유지·실패 복구 검수
+
+- 기존 이관 화면에 활성 CALL의 요청/가용 직원·큰 수신 모달·CONNECTING 수락/확인 기한·원문 보호·거절/취소/수행 이력을 연결했다. 통화·업무의 UUID/입력을 분리하고 복원 응답 kind를 검사한다. 저장 전 요청은 차단하며 서버 최종 상태를 수락 성공으로 표시하지 않는다. 메뉴/수신 상태는 ‘상담 이관’으로 통일했고 기존 요청 사유·충돌 버전의 명시적 채택을 유지한다.
+- 정확한 조직·방·임시 Identity로 연결 후 서버 확인을 요청한다. ACCEPTED의 최신 본인 접수가 같은 queue/Media Identity이면 Room과 통화 lock을 유지하고, 취소/실패/회수는 임시 연결을 정리한다. 오디오를 track별로 보관해 이전 상담사 퇴장 때 고객/다른 참가자 오디오를 지우지 않는다. SDK 영문 오류는 네트워크·마이크 권한/장치별 한글 복구 안내로 바꾸고 명시적 재시도를 제공한다. 상세는 [계약](work-transfer.md)에 둔다.
+- frontend 전체99건·TypeScript noEmit·lint·Docker production 웹 build 통과. 처음 hook 테스트의 api mock/jsonBody·반환 타입 오류는 수정한 뒤 통과했다. 같은 Room/lease 유지·다른 Identity 차단·최종 실패/늦은 토큰 정리·CALL/WORK 보관 분리·이전 track 해제 후 나머지 오디오 보존·네트워크/마이크 한글 오류를 검사했다. 서버는 아래 커밋의 Java21 전체124건/이관33건/HTTP adapter2건을 유지하며 이번 UI 단위에 backend 소스 변경은 없다.
+- 별도 V15 복원 DB `hellow_call_transfer_check_20261003_192233`의 새 합성 조직/직원 두 명으로 실제 CALL 접수·수락·고객 등록/공식 version3 본문 저장 뒤 브라우저 요청→큰 수신 모달→수락 CONNECTING→실제 연결 실패→대상 거절, 새 요청 수락→요청자 취소를 확인했다. API에서 원래 담당/작성자·문서/메모 보존, 대상 원문404와 취소 후 상담 대기·임시 음성 화면 제거를 확인했다. 실제 개발 데이터와 플랫폼 설정은 바꾸지 않았다. `output/call-transfer-ui-{connecting,rejected,cancelled}-proof.json`이 증거다. 임시 검수 프록시는 Media 경로를 제공하지 않으므로 연결 실패 검수이며 실음성 성공을 증명하지 않는다. geometry 캡처 때만 CONNECTING 기한을20분으로 늘렸으며 실제20초 동작 증거와 구분한다.
+- 1280×800/사용자1280×720/768×1024/375×812의 요청/수신 모달·연결 확인 상단/하단과 모바일 처리 버튼17장을 실제 픽셀로 검수했다. 초기 다른 탭에 적용된 viewport 캡처는 폐기하고 실제 크기를 확인한 캡처로 대체했다. `output/call-transfer-ui-dimensions.json`과 Git 제외 `.impeccable/review/call-transfer/`에 증거가 있다. 제목부터 정상적으로 보이며 JSON의 일부 resize scrollTop은4/6/17px이므로 정확한0px 증거로 주장하지 않는다. 모바일16px 입력·44px 제어/가로 넘침 없음·하단 거절/이력 접근을 확인했다. 기능 실패의 영문 오류와 이관 메뉴 문구를 한 번에 고친 뒤 최종 캡처했다.
+- detector1회 변경 대상의 기존 Sidebar 로고 gradient 경고1건을 전달했다. fresh finish reviewer는 필수17장/표본 코드와 다섯 계약 절을 검토해 해당 UI 범위 material finding 없음·ship을 반환했다(`output/call-transfer-ui-finish-review.md`). 실제 두 사람 음성·실계정·실기기 제스처와 실제20초 만료 검수는 이 판정에 없다. fresh documenter는 코드/e97d2cc diff·픽셀 표본6장·리뷰를 대조해 기존 Operate의 색/Arial·글자 위계/16·24px 간격/44px 제어/모바일16px·모달 흐름 유지의 일반 확장으로 판정했다(`output/call-transfer-ui-documentation.md`). 기존 Geist/Arial·theme·로고 gradient/shadow drift와 DESIGN/sidecar 부재는 정비하지 않았다. 검수 웹/API·합성 issuer와 브라우저 탭/viewport를 정리했고 백업·DB·증거는 보존했다. 문서 검사82파일/298링크/85요구사항·64Impeccable해시와 Git whitespace 검사를 통과했다.
+- **V15 웹/API 개발 반영은 아직 하지 않았다.** 현재 개발은 `e97d2cc`·V14이며 진행 중 음성/업무 이관0건을 읽기 전용으로 확인했다. 다음은 문서 판정·커밋/push 후 새 동결 백업/V15 복원·기존 모든 열/권한 hash 보존을 확인해 웹/API를 함께 재시작하는 것이다. 그 뒤 현황/대시보드·실제 첨부/계정·미뤄 둔 두 사람 음성 수락의 전체 목표를 유지한다.
+
 ## 2026-10-03 통화 이관 서버·Media 확인·재시작 복구 검증
 
 - 기존 업무 이관에 CALL/CONNECTING과 V15를 추가했다. 본인이 처리 중인 활성 통화만 요청하고, 수락 후 임시 대상으로 연결하지만 기존 담당/문서를 유지한다. 서버 GetParticipant의 대상 ACTIVE·마이크·SID와 기존 상담사/고객 ACTIVE 확인 후 원본/접수 담당·현재 Media Identity·확인 시각/이력을 원자 저장한다. 임시 클라이언트 토큰은 2분/마이크만·Room Admin 없음이며 확정 전 전문 접근을 허용하지 않는다. 상세는 [계약](work-transfer.md)의 V15 절에 있다.

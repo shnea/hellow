@@ -13,7 +13,7 @@ export interface LiveKitCallbacks {
 
 export class LiveKitCallSession {
   private room: Room | null = null;
-  private audioElement: HTMLAudioElement | null = null;
+  private audioElements = new Map<Track,HTMLAudioElement>();
   private callbacks: LiveKitCallbacks;
   private disposed = false;
 
@@ -69,14 +69,14 @@ export class LiveKitCallSession {
         el.id = `livekit-audio-${participant.identity}`;
         el.autoplay = true;
         document.body.appendChild(el);
-        this.audioElement = el;
+        this.audioElements.set(track,el);
         this.callbacks.onRemoteAudioAttached?.(el);
       }
     });
 
     room.on(RoomEvent.TrackUnsubscribed, (track) => {
       track.detach();
-      this.cleanupAudio();
+      this.cleanupAudio(track);
     });
 
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
@@ -105,9 +105,16 @@ export class LiveKitCallSession {
 
       return room;
     } catch (err) {
-      this.callbacks.onError?.(err as Error);
+      const cause = err as Error;
+      const message = cause.name === 'NotAllowedError'
+        ? '마이크 사용이 허용되지 않았습니다. 브라우저의 마이크 권한을 확인한 뒤 다시 연결해 주세요.'
+        : cause.name === 'NotFoundError' || cause.name === 'NotReadableError'
+          ? '마이크를 사용할 수 없습니다. 연결 상태와 다른 앱의 마이크 사용을 확인한 뒤 다시 연결해 주세요.'
+          : '음성 연결을 완료하지 못했습니다. 네트워크를 확인한 뒤 다시 연결해 주세요. 상담 내용은 유지됩니다.';
+      const connectionError = new Error(message, { cause: err });
+      this.callbacks.onError?.(connectionError);
       this.disconnect();
-      throw err;
+      throw connectionError;
     }
   }
 
@@ -130,18 +137,20 @@ export class LiveKitCallSession {
     this.cleanupAudio();
   }
 
-  private cleanupAudio(): void {
-    if (this.audioElement) {
+  private cleanupAudio(track?:Track): void {
+    const elements=track?[...this.audioElements].filter(([key])=>key===track):[...this.audioElements];
+    for (const [key,element] of elements) {
       try {
-        this.audioElement.pause();
-        this.audioElement.srcObject = null;
-        if (this.audioElement.parentNode) {
-          this.audioElement.parentNode.removeChild(this.audioElement);
+        key.detach();
+        element.pause();
+        element.srcObject = null;
+        if (element.parentNode) {
+          element.parentNode.removeChild(element);
         }
       } catch (e) {
         console.error('Error cleaning up audio element:', e);
       }
-      this.audioElement = null;
+      this.audioElements.delete(key);
     }
   }
 

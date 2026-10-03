@@ -36,7 +36,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
     { id: 'customers', label: '고객·거래처 디렉터리', icon: Users },
     { id: 'tickets', label: '티켓 & 상담 이력', icon: Ticket },
     { id: 'followups', label: '콜백·방문 예약', icon: CalendarClock },
-    { id: 'transfers', label: '상담 업무 이관', icon: ArrowRightLeft },
+    { id: 'transfers', label: '상담 이관', icon: ArrowRightLeft },
     { id: 'stats', label: '상담 통계·리포트', icon: BarChart3 },
     { id: 'settings', label: '시스템 설정', icon: Settings },
   ];

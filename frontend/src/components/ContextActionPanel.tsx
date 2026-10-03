@@ -10,12 +10,10 @@ import {
   Quote,
   Send,
   Play,
-  ArrowRight,
   X,
   Maximize2,
 } from 'lucide-react';
 import { TimelineItem, TimelineChannel } from '../types';
-import { transferAgents } from '../data/mockData';
 import {FollowUpRequestForm} from './followup/FollowUpRequestForm';
 import type {FollowUp} from '@/lib/followup';
 
@@ -28,6 +26,7 @@ interface ContextActionPanelProps {
   customerPhone: string;
   onQuoteTimeline: (content: string) => void;
   onAddFollowUpAction: (actionType: string, details: string) => void;
+  onRequestTransfer?:()=>void;transferDisabled?:boolean;transferIsCall?:boolean;
   activeFollowUpTab?: 'visit' | 'callback' | 'transfer' | 'notification';
 }
 
@@ -37,6 +36,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
   customerPhone,
   onQuoteTimeline,
   onAddFollowUpAction,
+  onRequestTransfer,transferDisabled=true,transferIsCall=false,
   activeFollowUpTab = 'visit',
 }) => {
   // Timeline channel filter
@@ -92,12 +92,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
     }
   };
 
-  const handleTransfer = (agentName: string, dept: string) => {
-    onAddFollowUpAction(
-      '호전환 미연동',
-      `${dept} ${agentName} 상담사에게 통화 세션 호전환`
-    );
-  };
+
 
   const handleNotificationSend = () => {
     onAddFollowUpAction(
@@ -275,51 +270,11 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
           actionType={subTab==='visit'?'VISIT':'CALLBACK'} disabled={readOnly}
           onCreated={onFollowUpCreated} onOpenList={onOpenFollowUps}/>}
 
-        {/* Tab Content 3: 호전환 / 타 부서 이관 */}
-        {subTab === 'transfer' && (
-          <div className="p-3 space-y-2 text-xs">
-            <p className="text-[11px] text-slate-400">
-              호전환 연동을 준비 중입니다. 현재 표시된 상담사 목록은 예시이며 통화를 이관하지 않습니다.
-            </p>
-            <div className="space-y-1.5 max-h-40 overflow-y-auto">
-              {transferAgents.map((ag) => (
-                <div
-                  key={ag.id}
-                  className="p-2 bg-slate-800/80 rounded-lg border border-slate-700 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="flex items-center space-x-1.5">
-                      <span className="font-semibold text-slate-200">{ag.name}</span>
-                      <span className="text-[11px] text-slate-400">내선 {ag.ext}</span>
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          ag.status === 'available'
-                            ? 'bg-emerald-400'
-                            : ag.status === 'busy'
-                            ? 'bg-rose-400'
-                            : 'bg-amber-400'
-                        }`}
-                      />
-                    </div>
-                    <span className="text-[11px] text-slate-400">{ag.department}</span>
-                  </div>
-
-                  <button
-                    disabled title="호전환 미연동" onClick={() => handleTransfer(ag.name, ag.department)}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
-                      ag.status === 'available'
-                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
-                        : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <span>호전환</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {subTab === 'transfer' && <div className="p-4 space-y-3 text-sm">
+          <p className="text-slate-300">{transferIsCall?'현재 통화를 대기 중인 직원에게 요청합니다. 수락과 음성 연결 확인까지 기존 통화를 유지합니다.':'저장된 상담 업무를 다른 직원에게 요청합니다. 수락 전까지 현재 담당자가 계속 맡습니다.'}</p>
+          <button disabled={transferDisabled||!onRequestTransfer} onClick={onRequestTransfer} className="min-h-11 px-3 py-2 bg-indigo-700 text-white rounded-lg disabled:opacity-50">{transferIsCall?'통화 이관 직원 선택':'업무 이관 직원 선택'}</button>
+          <p className="text-slate-300">변경한 상담 내용은 먼저 저장해 주세요.</p>
+        </div>}
 
         {/* Tab Content 4: 고객 안내 발송 */}
         {subTab === 'notification' && (

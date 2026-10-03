@@ -56,3 +56,13 @@ it('keeps the frozen request after a rejected POST following successful empty re
   sessionStorage.setItem('key',JSON.stringify(frozen));const fetch=vi.fn().mockResolvedValueOnce(new Response('')).mockResolvedValueOnce(reply({detail:'원본 변경'},409));vi.stubGlobal('fetch',fetch);
   await expect(submitTransfer('a','key',12)).rejects.toBeInstanceOf(ApiError);expect(pendingTransfer('key',12)).toEqual(frozen);
 });
+it('uses a separate call request key and sends only to the CALL endpoint',async()=>{
+  const key=transferPendingKey('a','issuer','sub',12,'CALL');expect(key).not.toBe(transferPendingKey('a','issuer','sub',12));
+  sessionStorage.setItem(key,JSON.stringify(frozen));const fetch=vi.fn().mockResolvedValueOnce(new Response('')).mockResolvedValueOnce(reply({...response,kind:'CALL',status:'CONNECTING'}));vi.stubGlobal('fetch',fetch);
+  expect((await submitTransfer('a',key,12,undefined,'CALL')).status).toBe('CONNECTING');expect(fetch.mock.calls[1][0]).toBe('/api/transfers/call');
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual(frozen);expect(sessionStorage.getItem(key)).toBeNull();
+});
+it('preserves a frozen call request when recovery returns a WORK request with the same UUID',async()=>{
+  sessionStorage.setItem('key',JSON.stringify(frozen));const fetch=vi.fn(async()=>reply({...response,kind:'WORK'}));vi.stubGlobal('fetch',fetch);
+  await expect(submitTransfer('a','key',12,undefined,'CALL')).rejects.toThrow('접수 응답');expect(pendingTransfer('key',12)).toEqual(frozen);expect(fetch).toHaveBeenCalledTimes(1);
+});

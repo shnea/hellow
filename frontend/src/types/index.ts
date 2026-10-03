@@ -4,6 +4,7 @@ export type QueueItemType = 'call' | 'callback' | 'ticket';
 export type CustomerType = 'corporate' | 'individual';
 
 export interface QueueItem {
+  mediaAgentIdentity?:string|null;
   id: string;
   customerCode?: string | null;
   status?: 'WAITING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';

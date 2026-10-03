@@ -56,6 +56,7 @@ interface ActiveWorkspaceProps {
   onEndCall: () => void;
   onStartCall: () => void;
   onOpenTransfer: () => void;
+  canTransfer?:boolean;
   onSaveConsultation: (data: ConsultationDraft & {isComplete:boolean}) => Promise<ConsultationDraft|void>;
   onRegisterCustomer: (data: {
     customerType: CustomerType;
@@ -79,6 +80,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   isCallActive,
   onEndCall,
   onOpenTransfer,
+  canTransfer=false,
   onSaveConsultation,
   onRegisterCustomer,
   onUpdateCustomer,
@@ -355,9 +357,9 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
 
               {/* Transfer Forward Button */}
               <button
-                disabled
+                disabled={readOnly||busy||!canTransfer}
                 onClick={onOpenTransfer}
-                title="실시간 통화 이관은 연결 검증 후 제공됩니다. 종료 후 업무 이관을 이용해 주세요."
+                title="저장한 상담을 이관할 직원을 선택합니다."
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
               >
                 <PhoneForwarded className="w-4 h-4 text-indigo-400" />

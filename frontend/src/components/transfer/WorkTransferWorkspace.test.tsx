@@ -41,3 +41,10 @@ it('ignores late history from a previously selected request and sends direction 
   await act(async()=>{finish(Response.json([{id:1,action:'ACCEPTED',actorName:'늦은 이력',occurredAt:'2026-10-03T01:00:00Z',reason:'다른 요청의 내용'}]));});await flush();
   expect(screen.queryByText('다른 요청의 내용')).toBeNull();fireEvent.change(screen.getByLabelText('요청 구분'),{target:{value:'SENT'}});await flush();expect(paths.some(p=>p.includes('direction=SENT'))).toBe(true);
 });
+it('treats CALL acceptance as connection preparation and keeps reject available until confirmation',async()=>{
+  let task:WorkTransfer={...offered,kind:'CALL',queueCode:'call',liveWork:true};const onChanged=vi.fn();
+  vi.stubGlobal('fetch',vi.fn(async(path:string,o?:RequestInit)=>{if(o?.method==='POST')task={...task,status:'CONNECTING',version:2,canAccept:false};return Response.json(path.startsWith('/api/transfers?')?{items:[task],page:0,hasMore:false}:task);}));
+  render(<WorkTransferWorkspace {...props} onChanged={onChanged}/>);await flush();fireEvent.change(screen.getByLabelText('처리 사유'),{target:{value:'통화 인수'}});fireEvent.click(screen.getByRole('button',{name:'통화 이관 수락·연결'}));await flush();
+  expect(onChanged).toHaveBeenCalledWith(task);expect(screen.getByText('마이크와 음성 연결을 확인하고 있습니다. 확인 전까지 기존 상담사가 통화를 맡습니다.')).toBeTruthy();
+  expect(screen.queryByText('처리 결과 · 이관 완료')).toBeNull();expect(screen.getByRole('button',{name:'이관 거절'})).toBeTruthy();expect(screen.getByText('연결 확인 기한')).toBeTruthy();
+});
