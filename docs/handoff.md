@@ -6,7 +6,9 @@
 - 모바일 조회 조건 접기/열기, 이력과 같은 목록 재배치, 상세 팝업의 헤더·여백을 적용했다. 통계 차트·정확한 표·정의·갱신 시각과 업무 조작·권한·집계 계약을 유지했다. My 상담 이력 자체·태블릿 가운데 패널 보류·NAS는 변경 범위 밖이다.
 - 관련 프런트 **20건/4파일**, lint·TypeScript 포함 production build 통과. 합성 API Chrome 목록 **6폭**, 통계 **5폭**에서 기준 스타일·240px 제한·페이지 오류0·문서 가로 넘침0을 확인했다. 목록 단일 클릭/더블 클릭/닫기·이관 이유 보존, 통계 오류 시 이전 결과·SELF 연결·초안 보존을 검사했다. 실제 계정·실기기 수락과 구분한다.
 - 독립 일반 에이전트가 전용 Impeccable finish reviewer/documenter를 대신했다. 필수 캡처45장 검토 결과 **ship**, 추가 수정 요구 없음. 수동 detector는 변경 대상에서 빈 배열이다. 증거는 Git 제외 `output/work-list-ui/proof.json`, `output/reporting-style-ui/proof.json`, `output/work-list-finish-review.md`, `output/work-list-documentation.md`에 둔다. 기존 DESIGN/comp 정비는 좁은 확장 범위 밖으로 유지했다.
-- 이 구현 단위를 커밋·push한 뒤 개발 웹만 반영한다. API `aea94bf`·DB V21·기존 권한과 worker를 유지하며, 웹 반영 결과와 정확한 실행 버전을 이 항목에 갱신한다.
+- **개발 웹 반영 완료: `225d61b`, 08:51:25 KST.** API는 `aea94bf`·08:17:25 KST, DB V21을 유지했다. 통화0·미결 이관0 확인, 신규 DB 백업 후 웹만 교체하고 Nginx 검사/reload를 수행했다. API·DB·LiveKit·Redis·Egress의 이미지·시작 시각이 전후 동일하고 기존 권한·worker 설정을 변경하지 않았다. API는 변경 없는 레이어·실행 설정의 캐시 이미지로 새 태그만 준비했으며 실행 컨테이너를 교체하지 않았다.
+- API·웹·DB healthy, 외부 login/support/공개 조직 경로 HTTP200과 루트 앱 공개 CSS의 공통 목록 스타일·최대240px를 확인했다. 처음 배포 후 검증은 업무 CSS가 없는 로그인 페이지를 검사해 이전 웹으로 자동 복구했고, 루트 앱의 실제 CSS로 바로잡아 위 시각에 재반영·확인했다. 최종 증거 `output/work-list-deployment.json`, 신규 백업 `output/backups/hellow-web-style-20261004_085124.dump`를 유지한다. DB migration·복원 검사를 재실행한 작업은 아니다.
+- 구현 `225d61b` 커밋·push 완료. 이 배포 기록 커밋은 실행 이미지 SHA와 별도다. 실제 계정의 새로고침 후 화면 수락·기존 통계 권한 부여·실기기 수락은 별도이며 신규 기능/F02는 새 지시에 따른다.
 
 ## 2026-10-04 F01 개발 서버 반영
 
