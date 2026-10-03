@@ -10,7 +10,7 @@ import './admin.css';
 
 interface Identity {subject:string;name:string;platformAdmin:boolean;}
 interface Impact {organizationId:string;name:string;inherited:string[];}
-export function AdminConsole({platform=false}:{platform?:boolean}) {
+export function AdminConsole({platform=false,onWorkspace,embedded=false,fixedOrganizationId}:{platform?:boolean;onWorkspace?:()=>void;embedded?:boolean;fixedOrganizationId?:string}) {
   const [identity,setIdentity]=useState<Identity|null>(null);const [organizations,setOrganizations]=useState<AdminOrganization[]>([]);
   const [organizationId,setOrganizationId]=useState('');const selected=useRef('');
   const [tab,setTab]=useState<'members'|'structure'|'settings'|'audit'>(platform?'settings':'members');
@@ -24,11 +24,11 @@ export function AdminConsole({platform=false}:{platform?:boolean}) {
     Promise.all([apiJson<Identity>('/api/me',{signal:abort.signal}),apiJson<AdminOrganization[]>('/api/admin/organizations',{signal:abort.signal})])
       .then(([me,orgs])=>{if(abort.signal.aborted)return;setIdentity(me);setAdminSubject(me.subject);setOrganizations(orgs);
         const prior=sessionStorage.getItem('hellow_organization_id');
-        selected.current=orgs.find(o=>o.id===prior)?.id||orgs[0]?.id||'';setOrganizationId(selected.current);
+        selected.current=fixedOrganizationId?(orgs.find(o=>o.id===fixedOrganizationId)?.id||''):orgs.find(o=>o.id===prior)?.id||orgs[0]?.id||'';setOrganizationId(selected.current);
         if(platform&&!me.platformAdmin)setError('최고관리자 권한이 없습니다. 조직 관리 화면을 이용해 주세요.');
       }).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
-  },[platform]);
+  },[platform,fixedOrganizationId]);
   const reload=useCallback(async(signal?:AbortSignal)=>{
     if(!identity || platform&&!identity.platformAdmin || !platform&&!organizationId)return;
     const id=organizationId;
@@ -56,8 +56,9 @@ export function AdminConsole({platform=false}:{platform?:boolean}) {
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   };
   const org=organizations.find(o=>o.id===organizationId);
-  return <main className="admin-shell"><header className="admin-header"><div><h1>{platform?'최고관리자':'조직 관리'}</h1><p>{identity?.name||'계정 확인 중'}{!platform&&org?` · ${org.name}`:''}</p></div>
-    <nav aria-label="관리 화면 이동"><Link href="/">상담 화면</Link><Link href="/admin/organization">조직 관리</Link>{identity?.platformAdmin&&<Link href="/admin/platform">최고관리자</Link>}</nav></header>
+  const Shell=embedded?'section':'main';const Heading=embedded?'h2':'h1';
+  return <Shell className="admin-shell"><header className="admin-header"><div><Heading>{platform?'최고관리자':'조직 관리'}</Heading><p>{identity?.name||'계정 확인 중'}{!platform&&org?` · ${org.name}`:''}</p></div>
+    {!embedded&&<nav aria-label="관리 화면 이동">{onWorkspace?<button onClick={onWorkspace}>상담 화면으로 돌아가기</button>:<Link href="/">상담 화면</Link>}{!onWorkspace&&<Link href="/admin/organization">조직 관리</Link>}{identity?.platformAdmin&&<Link href="/admin/platform">최고관리자</Link>}</nav>}</header>
     {!identity?<section className="admin-section"><p role="status">{error||'로그인과 관리 권한을 확인하고 있습니다.'}</p><Link href="/login">로그인</Link></section>:
       platform&&!identity.platformAdmin?<p role="alert" className="admin-error">{error}</p>:<>
       {platform&&<section className="admin-section"><h2>조직 생성</h2><form className="admin-form" onSubmit={e=>{e.preventDefault();void createOrganization();}}>
@@ -67,8 +68,8 @@ export function AdminConsole({platform=false}:{platform?:boolean}) {
         <button className="admin-primary" disabled={busy}>{busy?'생성 중…':'조직 생성'}</button></form>{message&&<p role="status" className="admin-success">{message}</p>}
         <h3>등록된 조직</h3><ul className="admin-organization-list">{organizations.map(o=><li key={o.id}><strong>{o.name}</strong><span>{o.active?'활성':'중지'}</span><code>{o.id}</code></li>)}</ul>
       </section>}
-      {!platform&&<section className="admin-toolbar"><label>대상 조직<select value={organizationId} disabled={loading||busy} onChange={e=>{selected.current=e.target.value;setSettings(null);setLoading(true);setOrganizationId(e.target.value);}}>
-        {!organizations.length&&<option value="">관리할 조직 없음</option>}{organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+      {!platform&&<section className="admin-toolbar">{fixedOrganizationId?<p>관리 대상 · {org?.name||'조직 확인 중'}</p>:<label>대상 조직<select value={organizationId} disabled={loading||busy} onChange={e=>{selected.current=e.target.value;setSettings(null);setLoading(true);setOrganizationId(e.target.value);}}>
+        {!organizations.length&&<option value="">관리할 조직 없음</option>}{organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>}
         {org&&<a href={`/support?org=${encodeURIComponent(org.publicCode)}`} target="_blank" rel="noopener noreferrer">고객 접수 화면 열기</a>}
       </section>}
       {(!platform&&!organizations.length)?<p className="admin-section">관리 가능한 조직이 없습니다. 조직 관리자에게 관리 권한을 요청해 주세요.</p>:<>
@@ -88,5 +89,5 @@ export function AdminConsole({platform=false}:{platform?:boolean}) {
           </tbody></table></div>}</section>}
       </>}
     </>}
-  </main>;
+  </Shell>;
 }

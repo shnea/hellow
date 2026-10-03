@@ -11,6 +11,7 @@ import { customerProfile, queueItem, requestProfile, timelineItem, type Consulta
 import { useCall } from '@/hooks/use-call';
 import { CustomerRecordsWorkspace } from '@/components/CustomerRecordsWorkspace';
 import { IncomingRequestModal } from '@/components/IncomingRequestModal';
+import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import './workspace.css';
 import type { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
@@ -20,6 +21,11 @@ interface SavedConsultation { version: number; categoryMain: string; categorySub
 export default function ConsultationWorkspacePage() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [organizationId, setOrganizationId] = useState('');
+  const organizationRef=useRef('');
+  const [identityRefresh,setIdentityRefresh]=useState(0);
+  const identityGeneration=useRef(0);
+  const [checkingIdentity,setCheckingIdentity]=useState(true);
+  const refreshIdentity=useCallback(()=>{setCheckingIdentity(true);setIdentityRefresh(value=>value+1);},[]);
   const [authError, setAuthError] = useState('');
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const queueRef = useRef<QueueItem[]>([]);
@@ -38,6 +44,7 @@ export default function ConsultationWorkspacePage() {
   const generation = useRef(0);
   const [drafts, setDrafts] = useState<Record<string, ConsultationDraft>>({});
   const versions = useRef<Record<string, number>>({});
+  const organizationDrafts=useRef<Record<string,{drafts:Record<string,ConsultationDraft>;versions:Record<string,number>;ready:Record<string,boolean>;selected:string}>>({});
   const [draftReady, setDraftReady] = useState<Record<string, boolean>>({});
   const [draftError, setDraftError] = useState('');
   const [activeCall, setActiveCall] = useState<string | null>(null);
@@ -55,17 +62,29 @@ export default function ConsultationWorkspacePage() {
   }, []);
   useEffect(() => {
     const abort = new AbortController();
+    const current=++identityGeneration.current;
     apiJson<Identity>('/api/me', { signal: abort.signal }).then(me => {
-      if(abort.signal.aborted) return;
+      if(abort.signal.aborted||identityGeneration.current!==current) return;
       setIdentity(me); sessionStorage.setItem('hellow_agent_name', me.name);
       const prior = sessionStorage.getItem('hellow_organization_id');
       const org = me.organizations.find(o => o.id === prior) || me.organizations[0];
-      if (org) { sessionStorage.setItem('hellow_organization_id', org.id); setOrganizationId(org.id);
+      if(org?.id!==organizationRef.current){
+        setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);setSelected('');
+        setDrafts({});versions.current={};setDraftReady({});synchronized.current=false;
+      }
+      organizationRef.current=org?.id||'';
+      if (org) { sessionStorage.setItem('hellow_organization_id', org.id); setOrganizationId(org.id);setAuthError('');
         void apiJson('/api/session/organization',{method:'POST',signal:abort.signal}).catch(()=>{}); }
-      else setAuthError('로그인은 확인됐지만 활성 조직 권한이 없습니다. 조직 관리자에게 가입·권한 배정을 요청해 주세요.');
-    }).catch(error => { if (!abort.signal.aborted) setAuthError(error.message); });
+      else {setOrganizationId('');setAuthError('로그인은 확인됐지만 활성 조직 권한이 없습니다. 조직을 등록했거나 권한을 배정받았다면 다시 확인해 주세요.');}
+    }).catch(error => { if (!abort.signal.aborted&&identityGeneration.current===current) setAuthError(error.message); })
+      .finally(()=>{if(!abort.signal.aborted&&identityGeneration.current===current)setCheckingIdentity(false);});
     return () => abort.abort();
-  }, []);
+  }, [identityRefresh]);
+  useEffect(()=>{
+    const visible=()=>{if(document.visibilityState==='visible')refreshIdentity();};
+    window.addEventListener('focus',refreshIdentity);document.addEventListener('visibilitychange',visible);
+    return()=>{window.removeEventListener('focus',refreshIdentity);document.removeEventListener('visibilitychange',visible);};
+  },[refreshIdentity]);
   useEffect(() => {
     if (!organizationId) return;
     const current = ++generation.current;
@@ -161,6 +180,25 @@ export default function ConsultationWorkspacePage() {
     catch (error) { notify('warning', '작업 실패 · 입력 보존', (error as Error).message); throw error; }
     finally { busyRef.current = false; setBusy(false); setRefresh(value => value + 1); }
   };
+  const switchOrganization=async(id:string)=>{
+    if(id===organizationId)return;
+    try{await run(async()=>{
+      const unfinished=queueRef.current.some(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
+      if(unfinished)throw new Error('현재 통화와 후처리를 완료한 뒤 조직을 변경해 주세요.');
+      const me=await apiJson<Identity>('/api/me');
+      const org=me.organizations.find(o=>o.id===id);
+      if(!org)throw new Error('이 조직의 활성 권한이 없습니다. 조직 권한을 다시 확인해 주세요.');
+      identityGeneration.current++;setCheckingIdentity(false);
+      organizationDrafts.current[organizationId]={drafts,versions:{...versions.current},ready:draftReady,selected};
+      const saved=organizationDrafts.current[id];
+      // Invalidate old reads before changing the header used by all workspace requests.
+      generation.current++;setActiveCall(null);setQueue([]);queueRef.current=[];setCustomers({});setTimeline([]);synchronized.current=false;
+      setDrafts(saved?.drafts||{});versions.current=saved?.versions||{};setDraftReady(saved?.ready||{});setSelected(saved?.selected||'');
+      organizationRef.current=id;sessionStorage.setItem('hellow_organization_id',id);setIdentity(me);setOrganizationId(id);setAuthError('');
+      setTimelineRefresh(value=>value+1);setAgentStatus('online');
+      notify('success','작업 조직 변경',`${org.name}의 권한과 데이터를 사용합니다.`);
+    });}catch{/* run reports the failure while retaining the current organization. */}
+  };
   const accept = (q: QueueItem) => { void run(async () => {
     const accepted = queueItem(await apiJson<ServerQueue>(`/api/queue/${q.id}/accept`, { method: 'POST' }));
     setQueue(previous => previous.map(item => item.id === accepted.id ? accepted : item));
@@ -201,12 +239,15 @@ export default function ConsultationWorkspacePage() {
   if (!identity || authError || !organizationId) return <main className="min-h-screen bg-slate-950 text-slate-200 grid place-content-center gap-4 p-6">
     <h1 className="text-xl font-semibold">상담 워크스페이스</h1><p role="status" className="max-w-xl">{authError || '서버에서 로그인·조직 권한을 확인하고 있습니다.'}</p>
     {authError && <a href="/login" className="text-indigo-300 underline">로그인으로 돌아가기</a>}
+    {identity&&<button disabled={checkingIdentity} onClick={refreshIdentity} className="text-left text-indigo-300 underline">{checkingIdentity?'권한 확인 중…':'조직 권한 다시 확인'}</button>}
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
+  if(currentTab==='settings')return <><WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
+    blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}}/><ToastContainer toasts={toasts} onDismiss={id=>setToasts(prev=>prev.filter(t=>t.id!==id))}/></>;
   return <div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
-    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings={Boolean(identity.platformAdmin)||can('organization:admin')}
+    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
-      onTabChange={tab=>{if(tab==='settings')window.open('/admin/organization','_blank','noopener,noreferrer');else if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
+      onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
       agentStatus={unfinishedCall?'busy':agentStatus} onAgentStatusChange={setAgentStatus} />
     <div className="flex flex-1 flex-col min-w-0">
       <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
@@ -218,7 +259,7 @@ export default function ConsultationWorkspacePage() {
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('editor');}}>편집기</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('history');}}>이력·후속 요청</button>
         <button onClick={()=>setCurrentTab('customers')}>고객·기록</button>
-        {(identity.platformAdmin||can('organization:admin'))&&<button onClick={()=>window.open('/admin/organization','_blank','noopener,noreferrer')}>설정</button>}
+        <button onClick={()=>setCurrentTab('settings')}>설정</button>
       </nav>
       {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
       <div className="workspace-layout flex flex-1 min-h-0">

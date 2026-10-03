@@ -1,4 +1,4 @@
-.admin-shell { min-height:100dvh; background:#0f172a; color:#f1f5f9; padding:24px; font-size:14px; line-height:1.6; }
+.admin-shell { height:100dvh; overflow-y:auto; overscroll-behavior:contain; background:#0f172a; color:#f1f5f9; padding:24px; font-size:14px; line-height:1.6; }
 .admin-shell > * { max-width:1120px; margin-left:auto; margin-right:auto; }
 .admin-header { display:flex; align-items:center; justify-content:space-between; gap:24px; padding-bottom:24px; border-bottom:1px solid #334155; }
 .admin-header h1 { font-size:24px; font-weight:650; }
@@ -48,6 +48,23 @@
 .admin-shell h4 { font-size:16px; font-weight:600; }
 .admin-shell summary { padding:12px 0; cursor:pointer; }
 .admin-shell section[id] { scroll-margin-top:24px; }
+.admin-shell .admin-shell { height:auto; min-height:0; overflow:visible; padding:0; }
+.admin-team-tree { overflow-x:auto; margin:16px 0; }
+.admin-team-tree > ul { min-width:260px; }
+.admin-team-tree ul ul { margin-left:20px; padding-left:16px; border-left:1px solid #475569; }
+.admin-team-row { display:flex; align-items:center; gap:12px; padding:8px 0; }
+.admin-team-name { flex:1; min-width:120px; overflow-wrap:anywhere; }
+.admin-team-toggle,.admin-team-leaf { width:44px; min-width:44px; height:44px; display:grid; place-items:center; }
+.admin-team-row button.admin-team-toggle { padding:0; background:transparent; }
+.admin-team-row button[aria-pressed=true] { background:#4f46e5; }
+.admin-team-inactive strong { color:#cbd5e1; }
+.admin-team-row button.admin-team-name { padding:8px; text-align:left; background:transparent; }
+.admin-team-row button.admin-team-name[aria-expanded=true] { background:#1e293b; }
+.admin-team-row[data-drop-target=true] { background:#312e81; border-radius:8px; }
+.admin-team-members { margin:4px 0 12px 44px; }
+.admin-team-members li { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #334155; }
+.admin-team-members [draggable=true] { cursor:grab; }
+.admin-team-members [draggable=true]:active { cursor:grabbing; }
 @media(max-width:640px) {
  .admin-shell { padding:16px; }
  .admin-header { align-items:flex-start; flex-direction:column; gap:12px; }
@@ -56,6 +73,7 @@
  .admin-effective div { grid-template-columns:1fr; gap:4px; }
  .admin-shell td,.admin-shell th { min-width:100px; padding:8px; }
  .admin-scope-grid { grid-template-columns:1fr; }
+ .admin-team-tree ul ul { margin-left:12px; padding-left:12px; }
  .admin-shell button,.admin-shell input:not([type=checkbox]),.admin-shell select,.admin-shell summary { min-height:44px; }
  .admin-shell input:not([type=checkbox]),.admin-shell select { font-size:16px; }
 }

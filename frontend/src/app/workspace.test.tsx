@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Workspace from './page';
 import type { ConsultationDraft } from '@/lib/workspace-data';
 
-vi.mock('@/components/SidebarGNB', () => ({ SidebarGNB: () => <nav>Navigation</nav> }));
+vi.mock('@/components/SidebarGNB', () => ({ SidebarGNB: ({onTabChange}:{onTabChange:(tab:string)=>void}) => <nav>Navigation<button onClick={()=>onTabChange('settings')}>시스템 설정</button></nav> }));
+vi.mock('@/components/admin/AdminConsole',()=>({AdminConsole:({fixedOrganizationId}:{fixedOrganizationId:string})=><section>관리 대상:{fixedOrganizationId}</section>}));
 vi.mock('@/hooks/use-call', () => ({ useCall: () => ({status:'idle',duration:0,setMuted:vi.fn()}) }));
 vi.mock('@/components/QueuePanel', () => ({ QueuePanel: ({queueItems,onSelectQueueItem,onAcceptCall}: {queueItems:{id:string}[];onSelectQueueItem:(id:string)=>void;onAcceptCall:(q:unknown)=>void}) => <div>{queueItems.map(q=><div key={q.id}><button onClick={()=>onSelectQueueItem(q.id)}>{q.id}</button><button onClick={()=>onAcceptCall?.(q)}>accept-{q.id}</button></div>)}</div> }));
 vi.mock('@/components/ActiveWorkspace', () => ({ ActiveWorkspace: ({customer,initialDraft,onDraftChange,onSaveConsultation,readOnly}: {customer:{id:string;name:string};initialDraft:ConsultationDraft;readOnly:boolean;onDraftChange:(d:ConsultationDraft)=>void;onSaveConsultation:(d:ConsultationDraft & {isComplete:boolean})=>Promise<void>}) => <section><p>{customer.id}:{customer.name}</p><p>{readOnly?'editor-readonly':'editor-editable'}</p><p>{initialDraft?.memo || 'empty-draft'}</p>
@@ -36,6 +37,48 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('opens settings in the same workspace and restores an unsaved draft on return',async()=>{
+    const open=vi.spyOn(window,'open').mockImplementation(()=>null);
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
+    expect(screen.getByRole('heading',{name:'시스템 설정'})).toBeTruthy();expect(open).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('hellow_access_token')).toBe('test-access-token');
+    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();expect(screen.getByText('A unique draft')).toBeTruthy();open.mockRestore();
+  });
+  it('recovers after membership is created without requiring another login',async()=>{
+    let joined=false;const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>path==='/api/me'&&!joined?response({subject:'alice',name:'Alice',organizations:[]}):original(path,options));
+    render(<Workspace/>);await flush();expect(screen.getByText(/활성 조직 권한이 없습니다/)).toBeTruthy();
+    joined=true;fireEvent.click(screen.getByRole('button',{name:'조직 권한 다시 확인'}));await flush();
+    expect(screen.getByText('cust-1:Latest server name')).toBeTruthy();expect(screen.queryByText(/활성 조직 권한이 없습니다/)).toBeNull();
+  });
+  it('switches an ordinary employee between memberships with the selected organization header and separate drafts',async()=>{
+    const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>{
+      if(path==='/api/me')return response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions},{id:'org-b',name:'B',permissions:['queue:read','queue:accept','consultation:write','consultation:read']}]});
+      if(path==='/api/queue')return response([queue(new Headers(options?.headers).get('X-Organization-ID')==='org-b'?'queue-b':'queue-1')]);
+      return original(path,options);
+    });
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
+    expect(screen.queryByText('관리 대상:org-a')).toBeNull();
+    fireEvent.change(screen.getByLabelText('현재 작업 조직'),{target:{value:'org-b'}});await flush();
+    expect(sessionStorage.getItem('hellow_organization_id')).toBe('org-b');
+    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();
+    expect(screen.getByText('queue-b')).toBeTruthy();expect(screen.queryByText('A unique draft')).toBeNull();
+    expect(fetchMock.mock.calls.some(([path,o])=>path==='/api/queue'&&new Headers(o?.headers).get('X-Organization-ID')==='org-b')).toBe(true);
+    expect(fetchMock.mock.calls.filter(([path,o])=>path==='/api/customers'&&new Headers(o?.headers).get('X-Organization-ID')==='org-b')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();fireEvent.change(screen.getByLabelText('현재 작업 조직'),{target:{value:'org-a'}});await flush();
+    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();expect(screen.getByText('A unique draft')).toBeTruthy();
+  });
+  it('blocks an organization switch throughout after-call processing',async()=>{
+    items=[{...queue(),type:'CALL',callEnded:true}];
+    const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>path==='/api/me'?response({subject:'alice',name:'Alice',organizations:[{id:'org-a',name:'A',permissions},{id:'org-b',name:'B',permissions}]}):original(path,options));
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
+    expect((screen.getByLabelText('현재 작업 조직') as HTMLSelectElement).disabled).toBe(true);
+    expect(sessionStorage.getItem('hellow_organization_id')).toBe('org-a');
+  });
   it('keeps permitted queues usable when customer and record permissions are absent',async()=>{
     const original=fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async(path:string,options?:RequestInit)=>path==='/api/me'

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { adminJson, permissionLabels, scopeLabels, type AdminMember, type AdminRole, type AdminTeam, type DataScope } from '@/lib/admin';
 import { jsonBody } from '@/lib/api';
 import { PermissionsField } from './PermissionsField';
+import { TeamTree } from './TeamTree';
 
 interface Props {organizationId:string;teams:AdminTeam[];roles:AdminRole[];members:AdminMember[];reload:()=>Promise<void>;}
 export function StructureManagement({organizationId,teams,roles,members,reload}:Props) {
@@ -13,7 +14,11 @@ export function StructureManagement({organizationId,teams,roles,members,reload}:
   const chooseTeam=(value:AdminTeam|null)=>{setTeam(value);setTeamName(value?.name||'');setParentId(value?.parentId||'');setTeamActive(value?.active??true);};
   const chooseRole=(value:AdminRole|null)=>{setRole(value);setRoleName(value?.name||'');setGrants(value?.grants||{});setRoleActive(value?.active??true);};
   const chooseMember=(value:AdminMember|null)=>{setMember(value);setMemberTeam(value?.teamId||'');setRoleIds(value?.roleIds||[]);setDirect(value?.permissions||[]);setScope(value?.dataScope||'SELF');};
-  const run=async(action:()=>Promise<void>)=>{if(busy)return;setBusy(true);setError('');setMessage('');try{await action();await reload();}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
+  const run=async(action:()=>Promise<void>)=>{if(busy)return false;setBusy(true);setError('');setMessage('');try{await action();await reload();return true;}catch(e){setError((e as Error).message);return false;}finally{setBusy(false);}};
+  const moveMember=(person:AdminMember,teamId:string|null)=>run(async()=>{
+    await adminJson(`/api/admin/memberships/${person.id}/access`,organizationId,jsonBody({expectedVersion:person.version,teamId,roleIds:person.roleIds,dataScope:person.dataScope,permissions:person.permissions},'PUT'));
+    setMessage(`${person.displayName||person.subject} 직원을 ${teams.find(t=>t.id===teamId)?.name||'팀 미지정'}으로 이동했습니다. 역할과 직접 권한은 유지됩니다.`);
+  });
   const saveTeam=()=>run(async()=>{
     const saved=await adminJson<AdminTeam>(`/api/admin/teams${team?`/${team.id}`:''}`,organizationId,jsonBody({name:teamName,parentId:parentId||null,active:teamActive,expectedVersion:team?.version},team?'PUT':'POST'));
     chooseTeam(saved);setMessage('팀 정보를 저장했습니다.');
@@ -31,7 +36,7 @@ export function StructureManagement({organizationId,teams,roles,members,reload}:
     {error&&<p role="alert" className="admin-error">{error} 입력은 유지됩니다.</p>}{message&&<p role="status" className="admin-success">{message}</p>}
     <nav className="admin-actions" aria-label="팀·역할 설정 이동"><a href="#structure-teams">팀 관리</a><a href="#structure-roles">역할 관리</a><a href="#structure-members">직원 배치</a></nav>
     <section id="structure-teams"><h3>팀 관리</h3><p>소속 팀과 하위 팀의 기록을 함께 조회할 수 있습니다. 비활성화하기 전에 직원과 하위 팀을 이동하세요.</p>
-      {!teams.length?<p>등록된 팀이 없습니다. 아래에서 첫 팀을 만드세요.</p>:<ul className="admin-structure-list">{teams.map(t=><li key={t.id}><div><strong>{t.name}</strong><small>{t.parentId?`상위 팀: ${teams.find(p=>p.id===t.parentId)?.name||'미확인'}`:'최상위 팀'} · {t.active?'활성':'비활성'}</small></div><button disabled={busy} onClick={()=>chooseTeam(t)} aria-label={`${t.name} 팀 편집`}>편집</button></li>)}</ul>}
+      {!teams.length?<p>등록된 팀이 없습니다. 아래에서 첫 팀을 만드세요.</p>:<TeamTree teams={teams} members={members} busy={busy} selectedId={team?.id} onEdit={chooseTeam} onMove={moveMember}/>}
       <form className="admin-form" onSubmit={e=>{e.preventDefault();void saveTeam();}}><h4>{team?'팀 변경':'새 팀'}</h4><div className="admin-form-grid">
         <label>팀 이름<input required maxLength={100} disabled={busy} value={teamName} onChange={e=>setTeamName(e.target.value)}/></label>
         <label>상위 팀<select aria-label="상위 팀" disabled={busy} value={parentId} onChange={e=>setParentId(e.target.value)}><option value="">최상위 팀</option>{teams.filter(t=>t.active&&t.id!==team?.id).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
