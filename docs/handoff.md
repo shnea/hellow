@@ -1,5 +1,10 @@
 # 작업 인계 기록
 
+## 2026-10-03 현재 개발 버전의 관리자 하단 접근 재확인
+
+- 사용자 제보에 따라 실제 개발 웹/API `3a0a7ba` 이미지를 기존 격리 복원 DB·합성 관리자 계정으로 다시 검수했다. 시스템 설정 내부 관리자 화면의 바깥 `.admin-shell`은 `height:100dvh; overflow-y:auto`, 내부 관리자 영역은 높이 자동으로 동작한다. 데스크톱 1280×720·모바일 375×812·태블릿 768×1024 모두 하단 초대 입력/버튼으로 스크롤 접근했다. 모바일 내용 높이 2155px·초대 버튼 top609.53/bottom653.53·44px, 태블릿 내용 높이 1704px·버튼 bottom879.94이며 두 크기 가로 넘침 없음 확인. 기존 수정이 현재 이미지에도 적용되어 있어 추가 UI 소스 변경은 하지 않았다. 빈 이메일에 따른 버튼 비활성은 정상이며 실제 직원 등록/초대 전송은 실행하지 않았다.
+- 진행 중 음성 통화 0건 확인 후 개발 웹을 같은 이미지로 재시작했다(14:54:13 KST). 웹 healthy·외부 `/login` HTTP 200·Nginx 설정 검사/reload 통과, API 시작 시각 유지. Git 제외 `output/admin-scroll-current.json`과 `output/review/admin-scroll-current-mobile.jpg`에 증거를 보관했다. 임시 웹/API·합성 issuer·검수 탭을 정리했다. 실제 사용자 화면 수락 및 예약/이관 등 전체 남은 일은 기존 진행표를 유지한다.
+
 ## 2026-10-03 고객 접수 복원·티켓/음성 상태 화면 연결
 
 - 검증한 `3a0a7ba` 웹/API를 개발에 함께 반영하고 실제 재시작했다(API 14:41:53·웹 14:42:04 KST). 두 서비스 healthy, Flyway V11·CANCELLED CHECK, Nginx 검사/reload와 외부 `/login`·`/support?org=hellow-dev`·공개 조직 API HTTP 200 확인. 반영 직전 쓰기 중지 후 새 백업을 `hellow_support_frozen_20261003_144139`에 복원해 V11/API health·상태 CHECK와 고객 6/접수 21/상담 45/타임라인 14/Membership 4건 보존을 검증했고 실제 DB도 같은 건수를 유지했다. 백업 SHA-256 `8c994c31429640d9868922cd3e18fc07eef3fe5226a065668a6d4c3bf52f77ee`와 경로는 Git 제외 `output/support-deployment.json`에 있다. 실제 개발 모바일 375×812에서 하단 접수 버튼 top665.84/bottom709.84·44px·enabled 및 가로 넘침 없음 확인(`output/review/support-deployed-mobile.jpg`). 첫 캡처는 다른 탭의 viewport override로 실제1280px여서 새 탭의375px 캡처로 보정했다. 공개 페이지 검수는 실제 개발 접수를 만들지 않았고 임시 웹/API·프록시·검수 탭을 종료했다. 실제 사용자 로그인/사용 수락·두 사람 음성·운영 NAS는 미검수다. 다음 구현은 콜백/방문 일정 확정·변경/취소·재배정과 업무/통화 이관이며 실음성 수락은 사용자 요청대로 후속 진행한다.
