@@ -32,6 +32,7 @@ services:
       DB_NAME: hellow
       DB_USER: hellow
       DB_PASSWORD: hellow_dev_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       HELLOW_RECORDING_ENABLED: ${HELLOW_RECORDING_ENABLED:-true}
     volumes:
       - recordings:/recordings

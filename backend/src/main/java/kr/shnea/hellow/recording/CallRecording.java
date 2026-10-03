@@ -6,7 +6,7 @@ import kr.shnea.hellow.queue.QueueItem;
 import kr.shnea.hellow.security.OrganizationOwned;
 
 /** One durable capture/upload job per call. File capabilities are never serialized from this entity. */
-@Entity @Table(name="call_recordings",uniqueConstraints=@UniqueConstraint(columnNames={"organizationId","queueCode"}))
+@Entity @Table(name="call_recordings",uniqueConstraints=@UniqueConstraint(name="call_recordings_organization_id_queue_code_key",columnNames={"organizationId","queueCode"}))
 public class CallRecording extends OrganizationOwned {
   public enum State { PENDING, STARTING, RECORDING, UPLOADING, READY, FAILED, NO_AUDIO }
   @Id @Column(length=64) private String id;

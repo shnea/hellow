@@ -21,7 +21,7 @@
 ## 환경과 검증
 
 - 개발 Compose: LiveKit 1.13.7 + Redis 7.4 + Egress 1.14.1. 내부 Redis와 녹음 공유 볼륨을 사용하며 새 외부 포트를 열지 않는다. API와 Egress는 group 2000으로 볼륨을 공유한다. 녹음 네트워크 작업은 업무 라우팅 scheduler와 분리한다. `HELLOW_RECORDING_ENABLED=false`로 worker를 중단할 수 있다.
-- V16은 `call_recordings` 테이블/인덱스만 추가하며 기존 데이터와 권한을 바꾸지 않는다. 배포 시 기존 DB를 백업·복원하고 worker를 멈춘 상태에서 기존 전 행/열 hash를 비교한다. 개발 적용 결과는 [인계 기록](handoff.md)에 둔다. 운영 NAS에는 이 구성을 적용하지 않았다.
+- V16은 `call_recordings` 테이블/인덱스만 추가하며 기존 데이터와 권한을 바꾸지 않는다. V17은 개발 Hibernate update가 추가한 중복 유일 제약만 정리한다. 개발 API도 Hibernate validate로 실행해 스키마 변경을 Flyway에 한정한다. 배포 시 기존 DB를 백업·복원하고 worker를 멈춘 상태에서 기존 전 행/열 hash를 비교한다. 개발 적용 결과는 [인계 기록](handoff.md)에 둔다. 운영 NAS에는 이 구성을 적용하지 않았다.
 - 격리된 복원 DB에서 실제 Egress → CRM worker → 플랫폼 PRIVATE 저장 → 보기 주소 발급/원본 재생을 검사했다. 36.249초/196,849바이트 OGG에서 서로 다른 두 합성 음성 주파수를 확인했다. 업로드 실패 후 같은 작업으로 READY까지 복구했다. 증거 `output/recording-worker-proof.json`; 실제 고객 통화 녹음은 아니다.
 - 서버 통합 검사: 녹음 시작 응답 유실/업로드 재시도/동시 claim/음성 미연결/상담 권한과 녹음 권한 분리/다른 담당·조직 차단. UI: 4개 viewport에서 목록·상세·설정, 명시적 열기, 저장 후 필터·스크롤 보존, 스크롤로 저장 버튼 접근을 확인했다. 증거 `output/history-list-ui/`, `output/history-finish-review.md`, `output/history-documentation.md`.
 
