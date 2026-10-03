@@ -2,6 +2,8 @@
 
 ## 2026-10-03 상담 대기 전 마이크 준비 확인
 
+- **개발 반영 완료: `1fe0ef4`**, API22:57:48·웹22:57:33 KST. 이전 두 번째 롤백의 차이는 접수37건의 `version`/`media_cleanup_until`뿐으로 종료 Media 정리 worker에 의한 변경이었다. 최종 배포는 Nginx와 자동 worker를 멈춘 검증 구간에서 복원 DB 및 실제 DB의 모든 기존 행·열 hash를 확인하고, 정상 worker 설정을 복원해 API를 재시작한 뒤 외부 요청을 열었다. 고객6/접수37/상담61/타임라인30/Membership4/직접 권한52/역할 연결1/역할1/grant13 보존·V15·웹/API health·외부 login/support/공개 조직 HTTP200 통과. 백업·복원 DB·이미지 증거는 `output/workspace-repair-deployment.json`에 보존한다. 이전 a18194f의 PC 마이크 선확보와 앞선 복구 변경도 함께 반영됐다. 실제 삼성 브라우저/LTE 수락·운영 NAS 반영은 완료하지 않았다.
+
 - 상담 대기 클릭/선택에서 실제 마이크를 먼저 확인하고 성공한 경우만 AVAILABLE을 저장한다. 확인용 스트림은 송출·녹음하지 않고 즉시 stop한다. 거부 시 사이트 권한 안내, 장치 오류 안내, 20초 무응답 중단과 늦은 허용 스트림 정리를 추가했다. 로그인/백그라운드 폴링에서는 권한 팝업을 띄우지 않는다. 새로고침 후에는 다시 대기를 선택해야 한다.
 - 준비 여부를 heartbeat에 전달한다. 권한 해제/입력 장치 제거가 폴링에서 확인되면 서버 라우팅 잠금 안에서 미수락 배정을 반납하고 AWAY로 전환·다음 상담사 배정을 시도한다. 수락한 통화와 기록은 회수하지 않고 이후 자동 수신만 차단한다. 수락 직전에도 준비 여부를 확인한다. Permissions API 미지원 브라우저는 이 탭의 허용 성공과 장치 목록을 기준으로 하므로 OS의 모든 장치 장애를 즉시 탐지한다는 보장은 없다. 구버전 heartbeat의 필드 생략은 호환을 유지한다.
 - frontend 전체121건·lint·production 웹 build, Java21 전체 Gradle build를 통과했다. 추가 서버 통합 검사는 배정 회수/다음 상담사 재배정/수락한 통화 보존을 확인했다. 별도 Chrome의 실제 마이크 권한 denied/granted와 합성 장치로 대기 클릭을 확인해 거부 시 상태 변경0회·AWAY, 허용 시1회·AVAILABLE, page 오류0건을 확인했다(`output/microphone-ready-ui/proof.json`). 테스트의 최초 CDP descriptor/context 설정 오류는 수정 후 통과했다. 좁은 기존 안내 문구 수정에 Impeccable 기준을 유지하고 수동 detect를 실행했다.
