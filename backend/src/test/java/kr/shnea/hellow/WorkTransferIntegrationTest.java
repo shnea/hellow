@@ -84,6 +84,35 @@ class WorkTransferIntegrationTest {
     assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");assertThat(saved(c).getCurrentAssigneeName()).isEqualTo("bob");preserved(c,saved(c));
     ok(command(t,"bob","accept"));assertThat(events.count()).isEqualTo(2);assertThat(audits.findAll()).allMatch(e->!e.getDetails().contains("대상에게 전달할 메모"));
   }
+  @Test void standaloneRecordReadFollowsCurrentOwnerAndAuthorityWithoutCustomerGrant()throws Exception{
+    var c=source(null,QueueItem.ItemType.TICKET,true);var t=offer(c);
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isNotFound());
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","b")).andExpect(status().isNotFound());
+    ok(command(t,"bob","accept"));
+    var bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("consultation:read","consultation:write","transfer:read"),true);members.save(bob);
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.memo").value("원문 메모")).andExpect(jsonPath("$.editable").value(true));
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isNotFound());
+    bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("consultation:read","transfer:read"),true);members.save(bob);
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.editable").value(false));
+    bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("transfer:read"),true);members.save(bob);
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isForbidden());
+  }
+  @Test void directionIsFilteredBeforePaginationAndNeverMatchesSubjectAlone()throws Exception{
+    // A recipient has 51 incoming and one outgoing request, so post-page filtering would be incomplete.
+    for(int i=0;i<51;i++)offer(source(null,QueueItem.ItemType.TICKET,true));
+    var own=source(null,QueueItem.ItemType.TICKET,true);own.assignOwner(owner("bob","a"));records.saveAndFlush(own);own=saved(own);
+    var sent=ok(send(post("/api/transfers/work"),"bob","a",request(own,"carol")));
+    var first=ok(mvc.perform(actor(get("/api/transfers?direction=RECEIVED&status=OFFERED&page=0"),"bob","a")));
+    var second=ok(mvc.perform(actor(get("/api/transfers?direction=RECEIVED&status=OFFERED&page=1"),"bob","a")));
+    assertThat(first.path("items").size()).isEqualTo(50);assertThat(first.path("hasMore").asBoolean()).isTrue();
+    assertThat(second.path("items").size()).isEqualTo(1);assertThat(second.path("hasMore").asBoolean()).isFalse();
+    var outgoing=ok(mvc.perform(actor(get("/api/transfers?direction=SENT"),"bob","a")));
+    assertThat(outgoing.path("items").size()).isEqualTo(1);assertThat(outgoing.path("items").get(0).path("id")).isEqualTo(sent.path("id"));
+    String other="https://other.example/realm";var impersonator=new Membership("a",other,"bob",OrganizationAdminController.PERMISSIONS);impersonator.assignAccess(null,Set.of(),DataScope.ORGANIZATION);members.save(impersonator);
+    for(String direction:List.of("SENT","RECEIVED"))mvc.perform(get("/api/transfers?direction="+direction).with(jwt().jwt(j->j.issuer(other).subject("bob"))).header("X-Organization-ID","a")).andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
+    mvc.perform(actor(get("/api/transfers?direction=INVALID"),"bob","a")).andExpect(status().isBadRequest());
+    mvc.perform(actor(get("/api/transfers?direction=RECEIVED"),"bob","b")).andExpect(jsonPath("$.items.length()").value(0));
+  }
   @Test void completedQueueGetsCurrentRecordScopeAndOriginalFilesRemainBound()throws Exception{
     var c=source("done",QueueItem.ItemType.TICKET,true);var file=new Attachment("a","done","file-one","request-one","test.png","image",1L,"sha");file.assignOwner(owner("alice","a"));attachments.save(file);
     mvc.perform(actor(get("/api/editor/files/file-one/views"),"bob","a")).andExpect(status().isNotFound());

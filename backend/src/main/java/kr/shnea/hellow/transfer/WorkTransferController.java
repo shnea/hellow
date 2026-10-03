@@ -13,7 +13,8 @@ public class WorkTransferController {
       @NotBlank @Pattern(regexp="(?i)[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}") String requestId){}
   public record Command(@NotNull @Min(0) Long expectedVersion,@NotBlank @Size(max=2000) String reason){}
   @PostMapping("/work") public WorkTransferService.View create(@Valid @RequestBody Request request){return service.create(request);}
-  @GetMapping public WorkTransferService.Page list(@RequestParam(defaultValue="0") int page,@RequestParam(required=false) WorkTransfer.Status status){return service.list(page,status);}
+  @GetMapping public WorkTransferService.Page list(@RequestParam(defaultValue="0") int page,@RequestParam(required=false) WorkTransfer.Status status,
+      @RequestParam(defaultValue="ALL") WorkTransferService.Direction direction){return service.list(page,status,direction);}
   @GetMapping("/request/{requestId}") public WorkTransferService.View requested(@PathVariable String requestId){return service.requested(requestId);}
   @GetMapping("/assignees") public java.util.List<WorkTransferService.Assignee> assignees(@RequestParam Long consultationId){return service.assignees(consultationId);}
   @GetMapping("/{id}") public WorkTransferService.View get(@PathVariable String id){return service.get(id);}

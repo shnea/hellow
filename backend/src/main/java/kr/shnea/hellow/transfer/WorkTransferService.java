@@ -36,6 +36,7 @@ public class WorkTransferService {
   }
   public record View(@com.fasterxml.jackson.annotation.JsonUnwrapped WorkTransfer transfer,boolean canAccept,boolean canReject,boolean canCancel,boolean canReadRecord){}
   public record Page(List<View> items,int page,boolean hasMore){}
+  public enum Direction {ALL,SENT,RECEIVED}
   public record Assignee(Long memberId,String name,String teamId){}
   private record Invalid(WorkTransfer.Status status,String reason){}
   @Transactional public View create(WorkTransferController.Request r){
@@ -86,8 +87,13 @@ public class WorkTransferService {
   @Transactional(readOnly=true) public View requested(String uuid){
     var actor=access.require("transfer:read");var t=transfers.findByRequestKey(key(actor,uuid));return t.map(row->view(read(actor,row.getId()),actor)).orElse(null);
   }
-  @Transactional(readOnly=true) public Page list(int page,WorkTransfer.Status state){
+  @Transactional(readOnly=true) public Page list(int page,WorkTransfer.Status state,Direction direction){
     page(page);var actor=access.require("transfer:read");var scope=scope(actor);if(state!=null)scope=scope.and(BusinessScope.equal("status",state));
+    // Filter before pagination, with both issuer and subject. Team/organization readers retain ALL.
+    if(direction!=Direction.ALL) {
+      String prefix=direction==Direction.RECEIVED?"to":"requester";
+      scope=scope.and(BusinessScope.equal(prefix+"Issuer",actor.issuer())).and(BusinessScope.equal(prefix+"Subject",actor.subject()));
+    }
     var result=transfers.findAll(scope,PageRequest.of(page,50,Sort.by(Sort.Direction.DESC,"requestedAt").and(Sort.by("id"))));
     return new Page(result.getContent().stream().map(t->view(t,actor)).toList(),page,result.hasNext());
   }

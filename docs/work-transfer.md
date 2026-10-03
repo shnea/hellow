@@ -28,13 +28,14 @@
 | --- | --- |
 | `POST /api/transfers/work` | consultationId/expectedRecordVersion/toMemberId/reason/memo/requestId(UUID v4). 원본을 유지한 OFFERED 생성·같은 요청 복원 |
 | `GET /api/transfers/request/{requestId}` | 현재 조직·요청 Identity의 기존 요청 또는 빈 성공 응답. 쓰기 없음 |
-| `GET /api/transfers?status=OFFERED&page=0` | 현재 본인/팀/조직 범위 안의 요청, 50건 items/page/hasMore |
+| `GET /api/transfers?status=OFFERED&direction=RECEIVED&page=0` | direction=ALL(기본)/SENT/RECEIVED. 현재 조회 범위 안에서 요청자/수신자의 issuer·subject로 제한한 뒤 50건 items/page/hasMore 반환 |
 | `GET /api/transfers/{id}` | 현재 요청과 version/canAccept/canReject/canCancel/canReadRecord |
 | `GET /api/transfers/{id}/history?page=0` | 현재 조회 범위로 제한한 수행 이력, 페이지당 50건 |
 | `GET /api/transfers/assignees?consultationId=…` | 현재 원본을 이관할 수 있는 직원만 조회. 실제 선택 가능한 활성 memberId/name/teamId |
 | `POST /api/transfers/{id}/accept` | expectedVersion/reason. 대상만 수락, 현재 원본/권한 재검사 후 담당 원자 변경 |
 | `POST /api/transfers/{id}/reject` | expectedVersion/reason. 대상만 거절, 원본 담당 유지 |
 | `POST /api/transfers/{id}/cancel` | expectedVersion/reason. 현재 원본 이관 권한이 있는 요청자/기존 담당/조직 관리자 취소 |
+| `GET /api/consultations/{id}` | 현재 상담 읽기 범위의 원본과 editable 반환. 독립 기록도 직접 열 수 있으며 제안 수신이나 고객 조회 권한으로 본문 접근을 확대하지 않음 |
 
 - 표시한 요청 version이 다르면 409다. 처리 시점에 원본 변경·권한 회수·만료를 발견하면 기존 담당을 유지하며 FAILED/REVOKED/EXPIRED를 저장하고 해당 최종 상태를 성공 응답으로 반환한다. 클라이언트는 HTTP 성공만으로 수락 성공을 표시하지 않고 반환 status를 확인해야 한다.
 - 같은 수행자가 이미 성공한 같은 명령을 다시 보내면 기록된 결과를 반환한다. 다른 종료 명령은 409이며 수락 뒤 원본을 다시 넘기는 동작은 새 UUID 요청으로 수행한다.
@@ -43,5 +44,7 @@
 - 기한이 지났더라도 EXPIRED 등 최종 결과를 저장하기 전까지 실시간 대상 예약을 유지한다. 가용 검사와 SQL unique index의 OFFERED 조건을 일치시켜, 다른 조직에서 아직 저장되지 않은 만료를 무시하고 같은 Identity를 중복 확보하지 않는다. worker 또는 직원 명령이 최종 결과를 저장하면 예약이 해제된다.
 
 ## 단계별 구현
+
+프런트엔드 전송 모듈은 조직·issuer·subject·원본별 sessionStorage key로 요청을 전송 전에 보관한다. 응답 불명 재시도는 기존 UUID를 GET하고 없을 때만 동일 본문을 재전송한다. 저장소 손상/실패·복원 거부·409·잘못된 성공 응답에서는 보관값을 지우거나 다른 ID를 만들지 않는다. 실제 조직/원본/version/status 확인 후 보관값을 해제하며 FAILED 같은 종료 결과도 그대로 반환한다. 실제 요청 폼/목록 연결 및 브라우저 검수는 별도 작업이다.
 
 먼저 상담 업무 요청·수락·거절·취소·만료/회수·원본 보존의 서버 계약을 구현·검수한다. 이어 실제 직원·받은/보낸 이관 목록과 충돌 입력 보존 화면을 연결하고 웹/API를 함께 반영한다. 실시간 통화 이관은 Media 확인/복구 계약까지 구현해야 하며 앞의 업무 이관만으로 전체 목표를 완료 처리하지 않는다.

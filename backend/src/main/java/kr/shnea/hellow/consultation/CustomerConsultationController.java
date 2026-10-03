@@ -37,9 +37,18 @@ public class CustomerConsultationController {
     var actor=access.require("consultation:read"); requireCustomer(actor,code);
     return records.findAll(BusinessScope.<Consultation>rows(actor).and(BusinessScope.equal("customerCode",code)),
         org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt")).stream().map(record->{
-          Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
-          view.put("editable",actor.can("consultation:write",record));return view;
+          return view(actor,record);
         }).toList();
+  }
+  /** An accepted standalone transfer can be opened without granting access to other customer records. */
+  @GetMapping("/{id}")
+  public Map<String,Object> get(@PathVariable Long id) {
+    var actor=access.require("consultation:read");
+    return view(actor,requireRecord(actor,id));
+  }
+  private Map<String,Object> view(WorkspaceAccess.Actor actor,Consultation record) {
+    Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
+    view.put("editable",actor.can("consultation:write",record));return view;
   }
   public record CreateRequest(@NotBlank String customerCode,@NotNull UUID requestId) {}
   @PostMapping
