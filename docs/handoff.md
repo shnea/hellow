@@ -2,12 +2,14 @@
 
 ## 2026-10-03 콜백·방문 예약 화면과 서버 연결 검수
 
+- 검증한 `4a4d81e` 웹/API를 개발 환경에 함께 반영하고 실제 재시작했다(API 16:31:06·웹 16:31:17 KST). 둘 다 healthy·Flyway V12·Nginx 검사/reload, 외부 `/login`·`/support?org=hellow-dev` HTTP 200 확인. 진행 중 음성 통화 0건을 확인하고 쓰기를 중지한 뒤 새 백업을 `hellow_followup_frozen_20261003_163050`에 복원해 V12/API health·활성 Identity unique index/확정 일정 CHECK와 고객 6/접수 21/상담 45/타임라인 14/Membership 4/후속 요청 0건 보존을 검증했다. 고객·접수·상담·타임라인과 기존 후속 요청 원문 hash도 복원/실제 DB에서 동일했다. 백업 SHA-256 `525d135cb516d85be53d6f7df2b638308415d89bb0af016efabb5fe8fbfe4b49`·경로/시작 시각은 Git 제외 `output/followup-deployment.json`이다. 실제 개발 공개 화면 375×812의 요청 버튼 top665.84/bottom709.84·44px·가로 폭375px, 접수 생성 없이 확인했다(`output/review/followup-deployed-support-mobile.jpg`). 임시 웹/API·합성 issuer·검수 탭/viewport를 정리했으며 DB/백업/검수 자료는 보존했다. 실제 사용자 로그인/사용 수락은 별도이며 전체 목표를 완료 처리하지 않는다.
+
 - 상담 우측의 가짜 엔지니어/예약 및 콜백 대기열 표현을 실제 요청 폼으로 바꾸고, 전역 예약 화면의 범위별 목록·최소 고객명/연락처·실제 담당자·희망/확정 시각·내용 수정·일정 변경/재배정·처리/실패 재예약/취소·전후 이력을 연결했다. 완료된 고객 기록에서도 새 요청을 만들 수 있다. 상태/권한은 서버 capability를 따르며 후속 처리 중 수신 대기/수락과 조직 변경을 차단하고 대기열 조회 권한 없는 직원도 처리 상태를 확인한다. 일반 직원 기본 권한에 재배정 권한을 자동 포함하지 않는다.
 - UUID 접수 본문은 전송 전 sessionStorage에 보관하고 응답 불명 시 GET으로 먼저 복원한다. 저장소 손상/실패로 새 중복 접수를 만들지 않는다. 편집 초안은 같은 화면 세션의 React 상태로 유지하며 재조회에서 기준 버전을 덮어쓰지 않는다. 외부 종료 뒤 목적/메모뿐 아니라 일정/소요 시간/담당 이름/사유도 읽고 복사할 수 있다. 페이지 전체 새로고침은 기존 업무 편집 초안을 복원하지 않는다. 상담 완료 뒤 이력 목록이 갱신되지 않는 실제 UI 문제도 수정하고, 재조회가 미저장 상담 기록의 기준 버전을 조용히 올리지 않도록 했다. 계약은 [예약 계약](followup-scheduling.md)에 둔다.
 - frontend 전체 Vitest 70건·lint·Docker production TypeScript/build 통과. Java 21 Gradle 전체 89건·FollowUpIntegrationTest 19건 통과. 새 테스트는 UUID GET 복원/현재 scope·capability/최소 연락처·대기열 권한 없는 진행 상태, 접수 저장소/응답 불명 재시도, 409 입력/버전 보존·종료 후 일정만 수정한 초안, 늦은 이력 응답 차단·서버 readonly·후속 처리 시 조직 차단과 상담 기록 활성 재조회/충돌 버전 확인을 포함한다.
 - 기존 V12 개발 복원 DB의 새 합성 조직/직원으로 production 웹/API를 실행해 방문 접수→재배정→일정 변경→담당자 시작→실패→재예약→취소와 실제 이력 7건을 확인했다. 시작 중 FOLLOW_UP·대기 선택/조직 변경 비활성, 종료 후 OFFLINE 유지, 원본 담당/요약 보존과 실제 에디터 완료 본문 저장·빈 대기열 완료 기록에서 추가 콜백 접수를 확인했다. 처음 PROCESSING 원본은 SQL 합성 fixture이며 실제 직원 수락/실음성 증거가 아니다. 실제 API 외부 취소와 브라우저 재조회 뒤 원문은 바꾸지 않고 일정 2026-10-10 11:30/45분/방문 담당 직원만 변경한 입력도 남았다. Git 제외 `output/followup-ui-proof.json`과 `.impeccable/review/followup-*.jpg`가 근거다.
 - 데스크톱 1280×800/사용자 크기 1280×720·768×1024·375×812의 캡처를 열고 실제 픽셀 크기/가로 넘침과 모바일 하단 44px 버튼·16px 입력을 확인했다. Impeccable detector는 변경 대상 1회 실행, 기존 변경 없는 로고 gradient 경고1을 유지했다. 독립 finish reviewer의 날짜 아이콘 대비와 일정만 변경한 종료 초안의 담당자 표시 누락을 수정·production 재빌드/같은 관련 파일 재캡처했으며 최종 verdict는 해당 수정과 검토한 추가 동작의 ship이다. 독립 documenter가 기존 slate/indigo·Arial/system·16/24px 여백·44px 조작 유지/일반 확장을 확인했고 DESIGN/sidecar를 추가하지 않았다. ignored `output/review/followup-finish-review.md`, `followup-documentation.md`에 기록했다.
-- **현재 기능 단위는 아직 미배포**다. 실제 개발 웹/API는 `3a0a7ba`/V11을 유지하며 다음은 쓰기 중지 후 새 DB 백업/복원·V12 원문/건수 검증을 거쳐 웹/API 동시 반영과 재시작이다. 이어 Consultation 업무 이관·실제 통화 이관/실패 복구·현황 구현을 진행하고 실제 플랫폼 첨부/관리자 사용 수락·두 사람 음성 등 [전체 진행표](mvp-progress.md)의 수락 범위를 유지한다.
+- 이 기능 단위의 개발 반영은 위 배포 기록으로 확정했다. 다음은 Consultation 업무 이관·실제 통화 이관/실패 복구·현황 구현이며 실제 플랫폼 첨부/관리자 사용 수락·두 사람 음성 등 [전체 진행표](mvp-progress.md)의 수락 범위를 유지한다.
 
 ## 2026-10-03 관리자 스크롤 제보 재확인 및 개발 웹 재시작
 
