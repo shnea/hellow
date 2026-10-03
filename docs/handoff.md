@@ -1,5 +1,16 @@
 # 작업 인계 기록
 
+## 2026-10-03 사용자 제보 복구 1차 — 로그인·초안·대기열·화면
+
+- 사용자의 ‘쭉 진행’/취소 후 재개 지시에 따라 [전체 복구 범위](workspace-repair.md)를 유지한다. 이 단위는 전체 통화·녹음 해결이 아니며 **개발 서비스 미반영**이다. 현재 서비스 웹/API `ef6d41c`·V15, 기존 데이터/인증 서버 설정은 유지했다.
+- PKCE의 refresh token/만료 시각을 사용해 API 전 자동 갱신·동시 요청의 단일 갱신·401 한 번 재시도를 구현했다. 로그아웃 뒤 늦은 갱신이 세션을 되살리지 않고 공급자 일시 장애 때 자격 증명/초안을 보존한다. 61분 모의 시간 시험은 통과했으나 실제 인증 서버 idle/max와 모바일 절전 1시간은 검증하지 않았다. 하위 고객/상담 상태 API의403은 전체 로그인 실패와 분리했다.
+- 현재 접수와 과거 기록의 초안을 issuer+subject+조직별 sessionStorage에 보관하고 새로고침/인증 왕복 뒤 최신 버전과 비교한다. 저장409에서 최신 원문을 읽고 명시적 채택을 요구한다. 예약/이관 형제의 동일 React key 경고를 재현하고 고유 key로 분리했으며 반복 폴링/화면 전환 검사에서 중복 경고가 사라졌다.
+- 완료/취소 접수의 조직·행 범위별50건 페이지 API와 지속 대기열/상태 필터를 연결했다. 미등록 고객의 완료 상담도 기록 ID로 열 수 있고, 기록 없는 종료 접수는204와 접수 요약을 제공한다. 고객 전체 조회는30초로 완화하되 권한/명령 변경 때 재조회한다. 새 직원·초대·역할에 두 이관 권한을 표시하고 고객 복구URL의 capability를 Nginx 로그에서 마스킹했다.
+- PC/태블릿 수신 칩·모바일 select, PC 설정의 밀도/직원 목록+폼 병렬 배치를 구현했다. 모바일 편집기의 내부 고정높이/overflow에 의한 저장 버튼 잘림을 실제 브라우저에서 재현하고 수정했다. Chrome headless의1280×800/768×1024/375×812 상단·하단·설정9장과 hit-test를 확인했다. fixture API 사용이며 실기기·실통화 성공은 아니다. 증거 `output/workspace-repair-ui/`.
+- frontend22파일113건·lint·Docker 웹 production build 통과. 최종 웹 build에서 테스트의 Testing Library `exact` 옵션 타입 오류가 한 번 발생해 제거 후 재빌드 통과했다. Java21 API build/실제 JUnit XML12클래스125건·실패/오류/skip0을 확인했다(`output/workspace-repair-test-results/`). DB schema 변경은 없다.
+- Impeccable detector1회에서 기존 QueuePanel 굵은 한쪽 테두리를1px로 수정했다. 전용 agent type이 없어 shipped degraded 지침을 적용한 fresh 일반 reviewer가 이력 콜백 버튼/필터 전환의 오류 상태2건을 지적했으며 수정·회귀2건·동일9장 재캡처 뒤 두 항목 resolved/ship 판정했다. 전체 화면 무결함 판정으로 확대하지 않는다. fresh documenter는 기존 세계의 일반 확장으로 판정하고 DESIGN/sidecar 부재와 기존 drift를 보존했다. 결과는 `output/workspace-repair-finish-review.md`, `output/workspace-repair-documentation.md`.
+- 다음은 통화의 실제 양방향 연결·공유 시간·자동 재생/음소거, 서버 녹음 생성과 플랫폼 PRIVATE 저장/재생, 지속 media cleanup와 외부 Media 호출/전역 배정 lock 분리다. 예약 전체 흐름·모든 화면의 회전/키보드·고객/티켓 구분·실계정 진입/1시간 검증도 남아 있다. 로컬 UI 검수 Next dev 포트3300을 사용 중이며 서비스 재시작은 하지 않았다.
+
 ## 2026-10-03 통화 이관 화면·동일 음성 연결 유지·실패 복구 검수
 
 - 한글 커밋 `ef6d41c`를 push한 뒤 개발 웹/API를 함께 반영했다(API20:21:06·웹20:21:17 KST). 첫 반영 준비는 비교 도구가 실제 없는 선택 테이블 `membership_team_scope`를 조회해 백업/DB 변경 전에 실패했으며 기존 `e97d2cc` 웹/API를 자동 복구했다. 실제 테이블 목록에 맞게 도구를 수정한 다음 동결 백업을 `hellow_call_transfer_frozen_20261003_202045`에 복원해 V15/Hibernate validate/API health·CONNECTING 부분 unique index·CHECK와 기존 모든 열/권한 hash 보존을 확인했다. 실제 DB에서도 고객6/접수23/상담47/타임라인16/Membership4/후속0/이관0/이력0, 직접 권한52/역할 연결1/역할1/grant13건과 원문 hash를 보존했다. 비교는 V15 신규 열만 제외하고 Membership version 등 기존 열은 포함한다. 백업 SHA-256 `51fb15c66b12d25e032fba6b02d5162137d41a344998c68033587a3230466eb5`, 실제 이미지·시작 시각·hash는 Git 제외 `output/call-transfer-deployment.json`에 있다. 두 서비스 healthy·Nginx 검사/reload·외부 login/support/공개 조직 API HTTP200 확인. 임시 복원 API·평문 검수 환경 파일을 정리했고 백업/복원 DB는 보존했다. 실제 사용자 재로그인/통화 수락은 대신 실행하지 않았다.

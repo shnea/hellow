@@ -63,7 +63,8 @@ public class ConsultationController {
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND));
     var saved=consultations.findByOrganizationIdAndQueueCode(actor.organizationId(),code);
     if(saved.isPresent()){actor.requireRow(saved.get());return ResponseEntity.ok(saved.get());}
-    actor.requireRow(q);q.requireOwner(actor.subject());
+    actor.requireRow(q);
+    if(q.getStatus()!=QueueItem.QueueStatus.COMPLETED&&q.getStatus()!=QueueItem.QueueStatus.CANCELLED)q.requireOwner(actor.subject());
     return ResponseEntity.noContent().build();
   }
 

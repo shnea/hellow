@@ -12,7 +12,7 @@ export function WorkspaceSettings({organizations,organizationId,platformAdmin,bl
   const current=organizations.find(o=>o.id===organizationId);
   const [platform,setPlatform]=useState(false);
   return <main className="admin-shell"><header className="admin-header"><h1>시스템 설정</h1><button onClick={onBack}>상담 화면으로 돌아가기</button></header>
-    <section className="admin-section"><h2>작업 조직</h2><p>가입한 활성 조직 중 하나를 선택하세요. 선택한 조직의 고객·상담과 권한을 사용합니다.</p>
+    <section className="admin-section admin-workspace-organization"><h2>작업 조직</h2><p>선택한 조직의 고객·상담과 권한을 사용합니다.</p>
       <label>현재 작업 조직<select aria-label="현재 작업 조직" value={organizationId} disabled={busy||Boolean(blockedReason)} onChange={e=>void onSwitch(e.target.value)}>
         {organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
       </select></label>

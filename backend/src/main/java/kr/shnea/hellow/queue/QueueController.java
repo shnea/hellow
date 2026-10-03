@@ -39,6 +39,25 @@ public class QueueController {
         org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt")),actor);
   }
 
+  public record HistoryPage(List<kr.shnea.hellow.routing.RoutingService.QueueView> items, int page, boolean hasMore) {}
+
+  @GetMapping("/history")
+  public HistoryPage history(@RequestParam(defaultValue="ALL") String status, @RequestParam(defaultValue="0") int page) {
+    var actor=access.require("queue:read");
+    if(page<0||page>100000)throw new ResponseStatusException(BAD_REQUEST,"조회 페이지를 확인해 주세요.");
+    var statuses=switch(status){
+      case "ALL" -> List.of(QueueItem.QueueStatus.COMPLETED,QueueItem.QueueStatus.CANCELLED);
+      case "COMPLETED" -> List.of(QueueItem.QueueStatus.COMPLETED);
+      case "CANCELLED" -> List.of(QueueItem.QueueStatus.CANCELLED);
+      default -> throw new ResponseStatusException(BAD_REQUEST,"조회 상태를 확인해 주세요.");
+    };
+    org.springframework.data.jpa.domain.Specification<QueueItem> scope=BusinessScope.rows(actor);
+    var rows=queues.findAll(scope.and((root,query,cb)->root.get("status").in(statuses)),
+        org.springframework.data.domain.PageRequest.of(page,50,org.springframework.data.domain.Sort.by(
+            org.springframework.data.domain.Sort.Order.desc("createdAt"),org.springframework.data.domain.Sort.Order.desc("id"))));
+    return new HistoryPage(routing.decorate(rows.getContent(),actor),page,rows.hasNext());
+  }
+
   public record AcceptRequest(String attemptId){}
   @PostMapping("/{code}/accept")
   public QueueItem accept(@PathVariable String code,@RequestBody(required=false) AcceptRequest request) {

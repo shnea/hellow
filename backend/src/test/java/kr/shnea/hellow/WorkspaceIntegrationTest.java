@@ -114,6 +114,27 @@ class WorkspaceIntegrationTest {
   }
 
   @Test
+  void completedAndCancelledIntakeHistoryIsPagedAndTenantScoped() throws Exception {
+    var completed=queue("completed-without-customer","org-a");completed.complete();queues.save(completed);
+    var cancelled=queue("cancelled-intake","org-a");cancelled.cancel();queues.save(cancelled);
+    var foreign=queue("foreign-history","org-b");foreign.complete();queues.save(foreign);
+    mvc.perform(actor(get("/api/queue/history"),"alice","org-a"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(2))
+        .andExpect(jsonPath("$.hasMore").value(false))
+        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("foreign-history"))));
+    mvc.perform(actor(get("/api/queue/history?status=COMPLETED"),"alice","org-a"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].code").value("completed-without-customer"));
+    mvc.perform(actor(get("/api/queue/history?page=1"),"alice","org-a"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
+    mvc.perform(actor(get("/api/consultations/queue/cancelled-intake"),"alice","org-a"))
+        .andExpect(status().isNoContent());
+    mvc.perform(actor(get("/api/queue/history?status=PROCESSING"),"alice","org-a"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(actor(get("/api/queue/history"),"alice","org-b"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void rejectsAnonymousForgedCookieWrongTenantAndRevokedMember() throws Exception {
     mvc.perform(get("/api/queue").header("Cookie", "hellow_logged_in=true"))
         .andExpect(status().isUnauthorized());

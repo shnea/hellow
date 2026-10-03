@@ -6,6 +6,7 @@ import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight } from 'lucide-react';
 import { exchangeCodeForToken } from '@/lib/pkce';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import { apiJson } from '@/lib/api';
+import { clearAuthentication, storeTokens } from '@/lib/auth-session';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -72,8 +73,8 @@ function AuthCallbackContent() {
         const {payload} = await jwtVerify(tokenData.id_token, createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`)), {issuer,audience:clientId});
         const nonce=sessionStorage.getItem('oidc_nonce');
         if(!nonce || payload.nonce!==nonce) throw new Error('인증 nonce가 일치하지 않습니다.');
-        sessionStorage.setItem('hellow_access_token',tokenData.access_token);
-        sessionStorage.setItem('hellow_id_token',tokenData.id_token);
+        clearAuthentication();
+        storeTokens(tokenData);
         const me=await apiJson<{name:string}>('/api/me');
         await apiJson('/api/session/login', {method:'POST'});
         const agentName=me.name;
@@ -92,8 +93,7 @@ function AuthCallbackContent() {
           router.replace(targetUrl);
         }, 1000);
       } catch (err: unknown) {
-        sessionStorage.removeItem('hellow_access_token');
-        sessionStorage.removeItem('hellow_id_token');
+        clearAuthentication();
         setStatus('ERROR');
         setErrorMessage((err as Error).message || '토큰 교환 중 오류가 발생했습니다.');
       } finally {

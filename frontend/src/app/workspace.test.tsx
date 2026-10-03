@@ -43,6 +43,47 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals();});
 describe('workspace regressions',()=>{
+  it('restores an unsaved draft after remount and compares it with a changed server version',async()=>{
+    let version=1;const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(p,o)=>p==='/api/consultations/queue/queue-1'?response({id:1,version,memo:'Server draft',tags:''}):original(p,o));
+    const view=render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    view.unmount();version=2;render(<Workspace/>);await flush();
+    expect(screen.getByText('A unique draft')).toBeTruthy();
+    expect(screen.getByText('최신 버전에 내 입력 다시 적용 준비')).toBeTruthy();
+  });
+  it('loads the latest server record after a save conflict without replacing local input',async()=>{
+    let version=1;const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(p,o)=>{
+      if(p==='/api/consultations/queue/queue-1'){
+        if(o?.method==='PUT'){version=2;return response({detail:'다른 화면에서 수정됨'},409);}
+        return response({id:1,version,memo:'Server draft',tags:''});
+      }
+      return original(p,o);
+    });
+    render(<Workspace/>);await flush();fireEvent.click(screen.getByText('type-draft'));
+    fireEvent.click(screen.getByText('complete'));await flush();
+    expect(screen.getByText('A unique draft')).toBeTruthy();
+    expect(screen.getByText('최신 버전에 내 입력 다시 적용 준비')).toBeTruthy();
+  });
+  it('keeps only one follow-up and transfer screen across polling and layout changes',async()=>{
+    vi.useFakeTimers();
+    const errors=vi.spyOn(console,'error');
+    const {container}=render(<Workspace/>);await flush();
+    for(let i=0;i<5;i++)await act(async()=>{await vi.advanceTimersByTimeAsync(2500);});
+    fireEvent.click(screen.getByRole('button',{name:'시스템 설정'}));await flush();
+    fireEvent.click(screen.getByRole('button',{name:'상담 화면으로 돌아가기'}));await flush();
+    expect(container.querySelectorAll('.followup-workspace')).toHaveLength(1);
+    expect(errors.mock.calls.some(args=>args.some(value=>String(value).includes('same key')))).toBe(false);
+    errors.mockRestore();
+  });
+  it.each(['/api/agents/me/heartbeat','/api/customers'])('keeps the consultation screen accessible when %s denies one feature',async(path)=>{
+    const original=fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async(p,o)=>p===path?response({detail:'기능 권한 없음'},403):original(p,o));
+    render(<Workspace/>);await flush();
+    expect(screen.getByText('queue-1')).toBeTruthy();
+    expect(screen.getByText('editor-editable')).toBeTruthy();
+    expect(screen.queryByRole('link',{name:'로그인'})).toBeNull();
+  });
   it('announces an incoming work transfer and blocks receiving and switching organizations while reserved',async()=>{
     items=[];const original=fetchMock.getMockImplementation()!;
     const incoming={id:'t1',version:1,status:'OFFERED',fromName:'이전 담당',toName:'Alice',consultationId:7,reason:'업무 담당 변경',expiresAt:'2026-10-03T12:00:00Z',canAccept:true,canReject:true};

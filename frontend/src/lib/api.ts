@@ -1,14 +1,27 @@
+import { accessToken, SessionExpiredError } from './auth-session';
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-export function apiFetch(path: string, options: RequestInit = {}) {
+export async function apiFetch(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
-  const token = sessionStorage.getItem('hellow_access_token');
   const organization = sessionStorage.getItem('hellow_organization_id');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
   if (organization && !headers.has('X-Organization-ID')) headers.set('X-Organization-ID', organization);
-  return fetch(path, { ...options, headers, cache: 'no-store' });
+  try {
+    const token = await accessToken();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const response = await fetch(path, { ...options, headers, cache: 'no-store' });
+    if (response.status !== 401 || !token || !sessionStorage.getItem('hellow_refresh_token')) return response;
+    const current = sessionStorage.getItem('hellow_access_token');
+    const refreshed = current !== token ? current : await accessToken(true);
+    if (!refreshed) return response;
+    headers.set('Authorization', `Bearer ${refreshed}`);
+    return fetch(path, { ...options, headers, cache: 'no-store' });
+  } catch (error) {
+    if (error instanceof SessionExpiredError) throw new ApiError(401, error.message);
+    throw error;
+  }
 }
 
 export async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {

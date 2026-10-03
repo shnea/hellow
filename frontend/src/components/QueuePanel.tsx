@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { apiJson } from '@/lib/api';
+import { queueItem, type ServerQueue } from '@/lib/workspace-data';
 import { PhoneIncoming, CalendarClock, TicketCheck, PhoneCall, Filter } from 'lucide-react';
 import { QueueItem, QueueItemType } from '../types';
 
@@ -12,6 +14,9 @@ interface QueuePanelProps {
   callBlocked?: boolean;
   onReject?:(item:QueueItem)=>void;
   assignmentHistory?:React.ReactNode;
+  organizationId?:string;
+  historyRefresh?:number;
+  onOpenHistory?:(item:QueueItem)=>void;
 }
 
 export const QueuePanel: React.FC<QueuePanelProps> = ({
@@ -21,17 +26,38 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
   onAcceptCall,
   callBlocked=false,
   onReject,assignmentHistory,
+  organizationId,historyRefresh=0,onOpenHistory,
 }) => {
   const [filterType, setFilterType] = useState<'all' | QueueItemType>('all');
+  const [statusFilter,setStatusFilter]=useState('ACTIVE');
+  const [history,setHistory]=useState<QueueItem[]>([]);
+  const [page,setPage]=useState(0);
+  const [hasMore,setHasMore]=useState(false);
+  const [historyLoading,setHistoryLoading]=useState(false);
+  const [historyError,setHistoryError]=useState('');
+  const [retry,setRetry]=useState(0);
+  useEffect(()=>{
+    if(!organizationId||!['ALL','COMPLETED','CANCELLED'].includes(statusFilter))return;
+    const abort=new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHistoryLoading(true);setHistoryError('');
+    apiJson<{items:ServerQueue[];hasMore:boolean}>(`/api/queue/history?status=${statusFilter}&page=${page}`,{signal:abort.signal,headers:{'X-Organization-ID':organizationId}})
+      .then(result=>{if(!abort.signal.aborted){setHistory(prior=>page===0?result.items.map(queueItem):Array.from(new Map([...prior,...result.items.map(queueItem)].map(item=>[item.id,item])).values()));setHasMore(result.hasMore);}})
+      .catch(error=>{if(!abort.signal.aborted)setHistoryError(error.message);})
+      .finally(()=>{if(!abort.signal.aborted)setHistoryLoading(false);});
+    return()=>abort.abort();
+  },[organizationId,statusFilter,page,historyRefresh,retry]);
+  const statusItems=statusFilter==='ALL'?[...queueItems,...history]:statusFilter==='COMPLETED'||statusFilter==='CANCELLED'?history:
+    statusFilter==='ACTIVE'?queueItems:queueItems.filter(item=>item.status===statusFilter);
 
-  const filteredItems = queueItems.filter((item) => {
+  const filteredItems = statusItems.filter((item) => {
     if (filterType === 'all') return true;
     return item.type === filterType;
   });
 
-  const liveCallCount = queueItems.filter((i) => i.type === 'call').length;
-  const callbackCount = queueItems.filter((i) => i.type === 'callback').length;
-  const ticketCount = queueItems.filter((i) => i.type === 'ticket').length;
+  const liveCallCount = statusItems.filter((i) => i.type === 'call').length;
+  const callbackCount = statusItems.filter((i) => i.type === 'callback').length;
+  const ticketCount = statusItems.filter((i) => i.type === 'ticket').length;
 
   return (
     <section className="queue-panel w-80 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none">
@@ -51,6 +77,13 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
         </div>
       </div>
 
+      <label className="queue-status-filter">업무 상태
+        <select value={statusFilter} onChange={event=>{setStatusFilter(event.target.value);setPage(0);setHistory([]);setHasMore(false);setHistoryLoading(false);setHistoryError('');}}>
+          <option value="ACTIVE">진행 중 전체</option><option value="WAITING">대기</option><option value="PROCESSING">처리 중</option>
+          <option value="COMPLETED">완료 이력</option><option value="CANCELLED">취소·미연결 이력</option><option value="ALL">전체 이력</option>
+        </select>
+      </label>
+
       {/* Tabs */}
       <div className="p-2 border-b border-slate-800/80 bg-slate-950/40 grid grid-cols-4 gap-1 text-xs">
         <button
@@ -61,7 +94,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          전체 <span className="text-[10px] text-slate-400">({queueItems.length})</span>
+          전체 <span className="text-[10px] text-slate-400">({statusItems.length})</span>
         </button>
         <button
           onClick={() => setFilterType('call')}
@@ -71,7 +104,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          {liveCallCount > 0 && (
+          {statusItems.some(item=>item.type==='call'&&item.status==='WAITING') && (
             <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
           )}
           콜 <span className="text-[10px] text-rose-400">({liveCallCount})</span>
@@ -107,12 +140,14 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
           return (
             <div
               key={item.id}
-              onClick={() => onSelectQueueItem(item.id)}
+              onClick={() => item.status==='COMPLETED'||item.status==='CANCELLED'?onOpenHistory?.(item):onSelectQueueItem(item.id)}
+              role="button" tabIndex={0}
+              onKeyDown={event=>{if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();if(item.status==='COMPLETED'||item.status==='CANCELLED')onOpenHistory?.(item);else onSelectQueueItem(item.id);}}}
               className={`p-3 rounded-xl border transition-all cursor-pointer relative text-left group ${
                 isSelected
                   ? 'bg-slate-800/90 border-indigo-500/80 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-500/50'
                   : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'
-              } ${isLiveCall ? 'border-l-4 border-l-rose-500' : ''}`}
+              } ${isLiveCall ? 'border-rose-700' : ''}`}
             >
               {/* Card Header */}
               <div className="flex items-center justify-between mb-1.5">
@@ -184,6 +219,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
 
               {/* Action Buttons */}
               {item.status === 'PROCESSING' && <p className="mt-2 text-xs text-slate-300">{item.assignedAgent || '담당 상담사'} · {item.callEnded ? '후처리 중' : '처리 중'}</p>}
+              {(item.status==='COMPLETED'||item.status==='CANCELLED')&&<p className="mt-2 text-xs text-slate-300">{item.status==='COMPLETED'?'상담 완료':'접수 취소·연결 종료'} · {item.assignedAgent||'담당 미배정'}</p>}
               {item.status==='WAITING'&&<p className="queue-routing-status">{item.offer?`${item.offer.name}에게 수신 배정 · ${item.offer.received?'화면 확인됨':'수신 확인 중'}`:item.routingPaused?'배정 시도 한도에 도달했습니다. 이력에서 배정을 다시 시작할 수 있습니다.':'상담 가능한 직원을 기다리고 있습니다.'}</p>}
               <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
                 <span className="text-[11px] text-indigo-400 font-medium group-hover:underline">
@@ -210,7 +246,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectQueueItem(item.id);
+                      if(item.status==='COMPLETED'||item.status==='CANCELLED')onOpenHistory?.(item);else onSelectQueueItem(item.id);
                     }}
                     className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-600/50 rounded text-[11px] font-medium transition-colors"
                   >
@@ -222,6 +258,10 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
             </div>
           );
         })}
+        {!filteredItems.length&&!historyLoading&&!historyError&&<p className="p-3 text-sm text-slate-300">선택한 조건의 상담이 없습니다. 완료·취소 이력도 조회할 수 있습니다.</p>}
+        {historyLoading&&<p role="status" className="p-3 text-sm text-slate-300">이력을 불러오고 있습니다.</p>}
+        {historyError&&<p role="alert" className="p-3 text-sm text-amber-200">{historyError}<button className="ml-2 underline" onClick={()=>setRetry(value=>value+1)}>다시 조회</button></p>}
+        {hasMore&&['ALL','COMPLETED','CANCELLED'].includes(statusFilter)&&<button className="queue-history-more" disabled={historyLoading} onClick={()=>setPage(value=>value+1)}>이전 이력 더 보기</button>}
       </div>
 
       {/* Queue Footer status */}

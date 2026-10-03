@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { savedClassification } from '@/lib/consultation-content';
 import { ActiveWorkspace } from './ActiveWorkspace';
 import {CustomerHistoryLinker} from './CustomerHistoryLinker';
-import { apiJson, jsonBody } from '@/lib/api';
+import { ApiError, apiJson, jsonBody } from '@/lib/api';
+import { readConsultationDrafts, writeConsultationDrafts } from '@/lib/consultation-drafts';
 import { documentText, readDocument } from '@/lib/editor-document';
 import { customerProfile, type ServerCustomer, type ConsultationDraft } from '@/lib/workspace-data';
 import type { CustomerProfile } from '@/types';
@@ -15,10 +16,11 @@ interface RecordData { categoryId?:string|null;categoryPath?:string|null;resultI
 interface Revision { id:number;actorName:string;changedAt:string;beforeDocument:string; }
 const draft=(r:RecordData):ConsultationDraft=>({...savedClassification(r),resultId:r.resultId??null,resultName:r.resultName||'',status:r.status.toLowerCase(),memo:r.editorDocument||r.memo||'',selectedTags:r.tags?.split(',').filter(Boolean)||[]});
 
-export function CustomerRecordsWorkspace({customers,organizationId,contentRefresh=0,recordRefresh=0,accessKey,canRead,canWrite,canEditCustomer,onCustomerSaved,active,activeQueues,canRequestFollowUp=false,onRequestFollowUp,focus,canTransfer=false,onRequestTransfer}: {
+export function CustomerRecordsWorkspace({customers,organizationId,draftStorageKey,contentRefresh=0,recordRefresh=0,accessKey,canRead,canWrite,canEditCustomer,onCustomerSaved,active,activeQueues,canRequestFollowUp=false,onRequestFollowUp,focus,canTransfer=false,onRequestTransfer}: {
   customers:CustomerProfile[];organizationId:string;contentRefresh?:number;recordRefresh?:number;accessKey:string;canRead:boolean;canWrite:boolean;canEditCustomer:boolean;active:boolean;activeQueues:Record<string,string>;
   onCustomerSaved:(customer:CustomerProfile)=>void;canRequestFollowUp?:boolean;onRequestFollowUp?:(queueCode:string,name:string)=>void;
   focus?:{id:number;revision:number}|null;canTransfer?:boolean;onRequestTransfer?:(source:TransferSource)=>void;
+  draftStorageKey?:string;
 }) {
   const [selectedCustomer,setSelectedCustomer]=useState('');
   const [directRecordId,setDirectRecordId]=useState<number|null>(null);
@@ -33,6 +35,34 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
   const [drafts,setDrafts]=useState<Record<number,ConsultationDraft>>({});
   const [draftVersions,setDraftVersions]=useState<Record<number,number>>({});
   const [dirtyRecords,setDirtyRecords]=useState<Record<number,boolean>>({});
+  const dirtyRef=useRef(dirtyRecords);
+  const [cacheReady,setCacheReady]=useState(false);
+  const [cacheError,setCacheError]=useState('');
+  useEffect(()=>{dirtyRef.current=dirtyRecords;},[dirtyRecords]);
+  useEffect(()=>{
+    if(!draftStorageKey)return;
+    try{
+      const cached=readConsultationDrafts(draftStorageKey);
+      if(cached){
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDrafts(cached.drafts);setDraftVersions(cached.versions);
+        const dirty=Object.fromEntries(Object.keys(cached.drafts).map(id=>[id,true]));
+        dirtyRef.current=dirty;setDirtyRecords(dirty);
+        const id=Number(cached.selected);
+        if(Number.isSafeInteger(id)&&id>0){setDirectRecordId(id);setSelected(id);}
+      }
+      setCacheReady(true);
+    }catch{setCacheError('보관된 상담 기록 초안을 읽지 못했습니다. 이 탭을 닫지 말고 저장 상태를 확인해 주세요.');}
+  },[draftStorageKey]);
+  useEffect(()=>{
+    if(!draftStorageKey||!cacheReady)return;
+    const unsaved=Object.fromEntries(Object.entries(drafts).filter(([id])=>dirtyRecords[Number(id)]));
+    try{writeConsultationDrafts(draftStorageKey,{drafts:unsaved,versions:draftVersions,selected:selected&&unsaved[selected]?String(selected):Object.keys(unsaved)[0]||''});}
+    catch{
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCacheError('브라우저에 초안을 보관하지 못했습니다. 화면을 닫거나 새로고침하기 전에 서버에 저장해 주세요.');
+    }
+  },[draftStorageKey,cacheReady,drafts,draftVersions,dirtyRecords,selected]);
   const [loading,setLoading]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -58,8 +88,8 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
     read.then(rows=>{
       if(abort.signal.aborted)return;
       setRecords(rows);setSelected(prior=>rows.some(r=>r.id===prior)?prior:rows[0]?.id??null);
-      setDrafts(prev=>({...Object.fromEntries(rows.map(r=>[r.id,draft(r)])),...prev}));
-      setDraftVersions(prev=>({...Object.fromEntries(rows.map(r=>[r.id,r.version])),...prev}));
+      setDrafts(prev=>({...prev,...Object.fromEntries(rows.filter(r=>!dirtyRef.current[r.id]).map(r=>[r.id,draft(r)]))}));
+      setDraftVersions(prev=>({...prev,...Object.fromEntries(rows.filter(r=>!dirtyRef.current[r.id]).map(r=>[r.id,r.version]))}));
     }).catch(e=>{if(!abort.signal.aborted)setError(e.message);}).finally(()=>{if(!abort.signal.aborted)setLoading(false);});
     return()=>abort.abort();
   },[active,listCustomerId,directRecordId,focus?.revision,organizationId,refresh,recordRefresh,canRead,accessKey]);
@@ -82,7 +112,11 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
         expectedVersion:draftVersions[record.id]??record.version,memo:documentText(data.memo),editorDocument:readDocument(data.memo),tags:data.selectedTags.join(','),callDurationSeconds:0,complete:data.isComplete},'PUT'));
       setRecords(prev=>prev.map(p=>p.id===r.id?r:p));setNotice('기록을 저장했습니다. 수정 전 내용은 변경 이력에 보존됩니다.');setRevisions(null);
       const confirmed=draft(r);setDrafts(prev=>({...prev,[r.id]:confirmed}));setDraftVersions(prev=>({...prev,[r.id]:r.version}));setDirtyRecords(prev=>({...prev,[r.id]:false}));return confirmed;
-    }catch(e){setError((e as Error).message);throw e;}finally{setBusy(false);}
+    }catch(e){
+      setError((e as Error).message);
+      if(e instanceof ApiError&&e.status===409)setRefresh(v=>v+1);
+      throw e;
+    }finally{setBusy(false);}
   };
   const updateCustomer=async(data:Partial<CustomerProfile>)=>{
     if(!customer||!canEditCustomer)throw new Error('고객 정보 수정 권한이 없습니다.');
@@ -109,6 +143,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,contentRefres
         <span className="block text-xs text-slate-300 mt-1">{r.status==='COMPLETED'?'완료':r.status==='ESCALATED'?'에스컬레이션':'작성 중'}</span></button>)}{!loading&&!records.length&&<p className="p-3 text-sm text-slate-300">이 고객의 기록이 없습니다. 새 기록을 작성할 수 있습니다.</p>}</div>
     </aside>
     <div className={`records-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
+      {cacheError&&<p role="alert" className="p-3 text-amber-200">{cacheError}</p>}
       {error&&<p role="alert" className="p-3 text-amber-200">{error}<button className="ml-3 underline" onClick={()=>setRefresh(v=>v+1)}>최신 기록 다시 조회</button></p>}
       {notice&&<p role="status" className="p-3 text-emerald-200">{notice}</p>}
       {!loading&&Object.entries(dirtyRecords).filter(([id,dirty])=>dirty&&(!canRead||!records.some(r=>r.id===Number(id)))).map(([id])=><details key={id} className="p-3 text-sm bg-slate-900"><summary className="py-2">화면에 없는 기록 #{id} · 미저장 입력 보관</summary><label>내 입력 · 읽고 복사할 수 있습니다<textarea readOnly rows={5} value={documentText(drafts[Number(id)]?.memo||'')} className="w-full p-2 bg-slate-800"/></label></details>)}

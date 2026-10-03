@@ -8,7 +8,18 @@ const customer={id:'c',customerType:'individual' as const,name:'등록 고객',p
 const record={id:1,version:0,customerCode:'c',queueCode:'q',categoryMain:'일반',categorySub:'문의',status:'COMPLETED',memo:'원본',editorDocument:null,tags:'',agentName:'직원',createdAt:'2026-10-03T00:00:00Z',editable:true};
 const props={customers:[customer],organizationId:'org',accessKey:'staff',canRead:true,canWrite:true,canEditCustomer:false,active:true,activeQueues:{},onCustomerSaved:vi.fn(),canRequestFollowUp:true,onRequestFollowUp:vi.fn()};
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();});};
-afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();sessionStorage.clear();vi.unstubAllGlobals();});
+it('restores a historical draft after remount and fetches its current server version',async()=>{
+  let latest=record;
+  vi.stubGlobal('fetch',vi.fn(async(path:string)=>Response.json(path==='/api/consultations/1'?latest:[latest])));
+  const view=render(<CustomerRecordsWorkspace {...props} draftStorageKey="test-record-drafts"/>);await flush();
+  fireEvent.change(screen.getByLabelText('검수 본문'),{target:{value:'복원할 내 입력'}});view.unmount();
+  latest={...record,version:1,memo:'새 서버 내용'};
+  render(<CustomerRecordsWorkspace {...props} draftStorageKey="test-record-drafts"/>);await flush();
+  expect((screen.getByLabelText('검수 본문') as HTMLTextAreaElement).value).toBe('복원할 내 입력');
+  expect(screen.getByText('새 서버 내용')).toBeTruthy();
+  expect((screen.getByRole('button',{name:'검수 저장'}) as HTMLButtonElement).disabled).toBe(true);
+});
 it('opens the exact transferred standalone record without a customer grant or querying a different customer',async()=>{
   const fetcher=vi.fn(async(path:string)=>{expect(path).toBe('/api/consultations/1');return Response.json({...record,customerCode:null,queueCode:null});});vi.stubGlobal('fetch',fetcher);
   render(<CustomerRecordsWorkspace {...props} customers={[]} focus={{id:1,revision:1}}/>);await flush();

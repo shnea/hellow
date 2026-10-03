@@ -2,7 +2,10 @@
 .crm-shell.workspace-settings-hidden { display:none; }
 .incoming-request { width:min(600px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; margin:auto; }
 .incoming-request::backdrop { background:rgb(2 6 23 / .8); }
-.queue-pane.records-active { display:none; }
+.queue-pane { flex-shrink:0; min-height:0; }
+.queue-status-filter { display:flex; align-items:center; gap:8px; padding:8px 12px; font-size:12px; color:#cbd5e1; }
+.queue-status-filter select { min-width:0; flex:1; min-height:36px; padding:6px; border:1px solid #475569; border-radius:6px; background:#0f172a; color:#f1f5f9; }
+.queue-history-more { width:100%; min-height:44px; padding:8px; color:#c7d2fe; text-decoration:underline; }
 .crm-shell button:disabled { opacity:.5; cursor:not-allowed; }
 .crm-shell :focus-visible,.incoming-request :focus-visible { outline:2px solid #a5b4fc;outline-offset:3px; }
 .crm-shell > div > div:first-child { gap:8px;flex-wrap:wrap; }
@@ -30,6 +33,8 @@
   .active-workspace > div:last-child button[disabled][title="관리자 에스컬레이션 미연동"] { display:none; }
 }
 @media (max-width:767px) {
+  .queue-pane.mobile-visible ~ .customer-records,.queue-pane.mobile-visible ~ .interaction-workspace { display:none; }
+  .queue-status-filter select { min-height:44px; font-size:16px; }
   .crm-shell > aside { display:none; }
   .workspace-mobile-tabs { display:flex;overflow-x:auto;flex-shrink:0; }
   .workspace-mobile-tabs { scrollbar-width:none; }
@@ -103,10 +108,18 @@
 .editor-content-tools :focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; }
 @media(max-width:1023px) {
   .records-editor,.interaction-editor { overflow-y:auto; }
+  .interaction-editor > .active-workspace,.records-editor > .active-workspace { flex:0 0 auto; height:auto; min-height:100%; overflow:visible; }
   .active-workspace > .consultation-editor-area { flex:1 0 auto; min-height:480px; }
   .consultation-document-area { min-height:240px; flex-shrink:0; }
   .active-workspace:has(.editor-content-tools[open]) { min-height:800px; flex-shrink:0; }
   .active-workspace .consultation-classification { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .classification-snapshot { grid-column:1/-1; }
   .active-workspace .consultation-classification select { font-size:16px; }
+}
+@media(min-width:768px) and (max-width:1100px) {
+  .customer-records { flex-direction:column; }
+  .records-mobile-tabs { display:flex; flex-shrink:0; }
+  .records-directory { display:none; }
+  .records-directory.mobile-visible { display:flex; width:100%; }
+  .records-directory.mobile-visible + .records-editor { display:none; }
 }
