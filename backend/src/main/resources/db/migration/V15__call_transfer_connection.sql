@@ -1,0 +1,18 @@
+ALTER TABLE work_transfers ADD COLUMN kind varchar(16) NOT NULL DEFAULT 'WORK';
+ALTER TABLE work_transfers ADD COLUMN from_media_identity varchar(255);
+ALTER TABLE work_transfers ADD COLUMN target_media_identity varchar(255);
+ALTER TABLE work_transfers ADD COLUMN media_confirmed_at timestamptz;
+ALTER TABLE work_transfers ADD COLUMN confirmed_participant_sid varchar(255);
+ALTER TABLE work_transfers ADD COLUMN media_cleanup_until timestamptz;
+ALTER TABLE work_transfers ADD COLUMN media_cleanup_complete boolean NOT NULL DEFAULT false;
+ALTER TABLE queue_items ADD COLUMN media_agent_identity varchar(255);
+ALTER TABLE work_transfers DROP CONSTRAINT work_transfer_status;
+ALTER TABLE work_transfers ADD CONSTRAINT work_transfer_status CHECK(status IN ('OFFERED','CONNECTING','ACCEPTED','REJECTED','CANCELLED','EXPIRED','FAILED','REVOKED'));
+ALTER TABLE work_transfers ADD CONSTRAINT work_transfer_kind CHECK(kind IN ('WORK','CALL'));
+ALTER TABLE work_transfers ADD CONSTRAINT call_transfer_connection CHECK(kind<>'CALL' OR (live_work AND queue_code IS NOT NULL AND from_media_identity IS NOT NULL AND target_media_identity IS NOT NULL));
+ALTER TABLE work_transfers ADD CONSTRAINT call_transfer_confirmed CHECK(kind<>'CALL' OR status<>'ACCEPTED' OR (media_confirmed_at IS NOT NULL AND confirmed_participant_sid IS NOT NULL));
+DROP INDEX work_transfer_one_active_record;
+CREATE UNIQUE INDEX work_transfer_one_active_record ON work_transfers(organization_id,consultation_id) WHERE status IN ('OFFERED','CONNECTING');
+DROP INDEX work_transfer_one_live_target;
+CREATE UNIQUE INDEX work_transfer_one_live_target ON work_transfers(to_issuer,to_subject) WHERE status IN ('OFFERED','CONNECTING') AND live_work;
+CREATE INDEX call_transfer_cleanup_pending ON work_transfers(id) WHERE kind='CALL' AND media_cleanup_until IS NOT NULL AND NOT media_cleanup_complete;

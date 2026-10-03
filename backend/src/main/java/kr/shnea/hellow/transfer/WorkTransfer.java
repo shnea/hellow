@@ -9,7 +9,15 @@ import kr.shnea.hellow.security.*;
 /** A proposal never changes the record's owner. Acceptance is an atomic CRM command. */
 @Entity @Table(name="work_transfers")
 public class WorkTransfer extends OrganizationOwned {
-  public enum Status {OFFERED,ACCEPTED,REJECTED,CANCELLED,EXPIRED,FAILED,REVOKED}
+  public enum Status {OFFERED,CONNECTING,ACCEPTED,REJECTED,CANCELLED,EXPIRED,FAILED,REVOKED}
+  public enum Kind {WORK,CALL}
+  @Enumerated(EnumType.STRING) @Column(nullable=false,length=16) private Kind kind=Kind.WORK;
+  @Column(length=255) private String fromMediaIdentity;
+  @Column(length=255) private String targetMediaIdentity;
+  private Instant mediaConfirmedAt;
+  @Column(length=255) private String confirmedParticipantSid;
+  private Instant mediaCleanupUntil;
+  @Column(nullable=false) private boolean mediaCleanupComplete;
   @Id @Column(length=36) private String id;
   @Version private Long version;
   @Column(nullable=false) private Long consultationId;
@@ -48,7 +56,16 @@ public class WorkTransfer extends OrganizationOwned {
     status=Status.OFFERED;this.reason=reason;this.memo=memo;requestKey=key;requestFingerprint=fingerprint;requestedAt=now;expiresAt=expires;
   }
   private static String name(Membership member){return member.getDisplayName()==null?member.getSubject():member.getDisplayName();}
-  void finish(Status state,String outcome,Instant now){if(status!=Status.OFFERED)throw new IllegalStateException("Transfer already finished");status=state;this.outcome=outcome;finishedAt=now;}
+  void call(kr.shnea.hellow.queue.QueueItem queue){kind=Kind.CALL;fromMediaIdentity=queue.getMediaAgentIdentity();targetMediaIdentity="transfer-"+id;}
+  void snapshotMedia(kr.shnea.hellow.queue.QueueItem queue){fromMediaIdentity=queue.getMediaAgentIdentity();}
+  void connecting(String reason,Instant now){if(kind!=Kind.CALL||status!=Status.OFFERED)throw new IllegalStateException("Call proposal required");status=Status.CONNECTING;outcome=reason;expiresAt=now.plusSeconds(20);}
+  void confirmed(String sid,Instant now){mediaConfirmedAt=now;confirmedParticipantSid=sid;}
+  public boolean pending(){return status==Status.OFFERED||status==Status.CONNECTING;}
+  void finish(Status state,String outcome,Instant now){if(!pending())throw new IllegalStateException("Transfer already finished");status=state;this.outcome=outcome;finishedAt=now;if(kind==Kind.CALL)mediaCleanupUntil=now.plusSeconds(180);}
+  public Kind getKind(){return kind;} public String getFromMediaIdentity(){return fromMediaIdentity;} public String getTargetMediaIdentity(){return targetMediaIdentity;}
+  public Instant getMediaConfirmedAt(){return mediaConfirmedAt;} public String getConfirmedParticipantSid(){return confirmedParticipantSid;} public Instant getMediaCleanupUntil(){return mediaCleanupUntil;}
+  public boolean isMediaCleanupComplete(){return mediaCleanupComplete;}
+  public void cleanupSucceeded(Instant now){if(mediaCleanupUntil!=null&&!mediaCleanupUntil.isAfter(now))mediaCleanupComplete=true;}
   String fingerprint(){return requestFingerprint;}
   public String getId(){return id;} public Long getVersion(){return version;}
   public Long getConsultationId(){return consultationId;} public String getQueueCode(){return queueCode;}

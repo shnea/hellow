@@ -75,6 +75,108 @@ class WorkTransferIntegrationTest {
   Consultation saved(Consultation c){return records.findById(c.getId()).orElseThrow();}
   void preserved(Consultation before,Consultation after){assertThat(after.getMemo()).isEqualTo(before.getMemo());assertThat(after.getEditorDocument()).isEqualTo(before.getEditorDocument());assertThat(after.getCategoryMain()).isEqualTo(before.getCategoryMain());assertThat(after.getCategorySub()).isEqualTo(before.getCategorySub());assertThat(after.getTags()).isEqualTo(before.getTags());assertThat(after.getAgentName()).isEqualTo(before.getAgentName());assertThat(after.getAgentSubject()).isEqualTo(before.getAgentSubject());assertThat(after.getCreatedAt()).isEqualTo(before.getCreatedAt());assertThat(after.getCallDurationSeconds()).isEqualTo(42);assertThat(after.getStatus()).isEqualTo(before.getStatus());}
 
+  JsonNode callOffer(Consultation c)throws Exception{ready("bob");return ok(send(post("/api/transfers/call"),"alice","a",request(c,"bob")));}
+  ResultActions connection(JsonNode t,String who,String action,long version)throws Exception{return send(post("/api/transfers/"+t.path("id").asText()+"/"+action),who,"a",Map.of("expectedVersion",version));}
+  ResultActions connection(JsonNode t,String who,String action)throws Exception{return connection(t,who,action,t.path("version").asLong());}
+  void connectedMedia(){when(media.participantConnection(anyString(),anyString())).thenReturn(new LiveKitService.ParticipantConnection(true,true,"PA-confirmed"));}
+
+  @Test void workRequestKeepsV14FingerprintAndCanBeRetriedAfterMigration()throws Exception{
+    var c=source(null,QueueItem.ItemType.TICKET,true);var body=request(c,"bob");
+    var t=ok(send(post("/api/transfers/work"),"alice","a",body));
+    byte[] legacy=json.writeValueAsBytes(Arrays.asList(c.getId(),c.getVersion(),member("bob","a"),body.get("reason"),body.get("memo")));
+    String fingerprint=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(legacy));
+    assertThat(org.springframework.test.util.ReflectionTestUtils.getField(requests.findById(t.path("id").asText()).orElseThrow(),"requestFingerprint")).isEqualTo(fingerprint);
+    assertThat(ok(send(post("/api/transfers/work"),"alice","a",body)).path("id")).isEqualTo(t.path("id"));
+    send(post("/api/transfers/call"),"alice","a",body).andExpect(status().isConflict());
+    assertThat(requests.count()).isEqualTo(1);assertThat(events.count()).isEqualTo(1);
+  }
+
+  @Test void callTransferRequiresActiveOwnedCallAndItsKindIsBoundToRequestUuid()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);ready("bob");
+    send(post("/api/transfers/work"),"alice","a",request(c,"bob")).andExpect(status().isConflict());
+    send(post("/api/transfers/call"),"manager","a",request(c,"bob")).andExpect(status().isForbidden());
+    var body=request(c,"bob");var t=ok(send(post("/api/transfers/call"),"alice","a",body));assertThat(t.path("kind").asText()).isEqualTo("CALL");
+    send(post("/api/transfers/work"),"alice","a",body).andExpect(status().isConflict());ok(send(post("/api/transfers/call"),"alice","a",body));assertThat(requests.count()).isEqualTo(1);
+    var standalone=source(null,QueueItem.ItemType.TICKET,true);send(post("/api/transfers/call"),"alice","a",request(standalone,"bob")).andExpect(status().isConflict());
+    mvc.perform(actor(get("/api/transfers/call-assignees?consultationId="+standalone.getId()),"alice","a")).andExpect(status().isConflict());
+  }
+  @Test void callAcceptanceReservesTargetAndKeepsResponsibilityUntilMediaConfirmation()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var t=callOffer(c);
+    connection(t,"bob","media-token").andExpect(status().isConflict());connection(t,"alice","media-token").andExpect(status().isForbidden());
+    var connecting=ok(command(t,"bob","accept"));assertThat(connecting.path("status").asText()).isEqualTo("CONNECTING");assertThat(connecting.path("canReadRecord").asBoolean()).isFalse();
+    assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");assertThat(queues.findByCode("call").orElseThrow().getAssignedSubject()).isEqualTo("alice");preserved(c,saved(c));
+    assertThat(current("bob","a").path("state").asText()).isEqualTo("TRANSFER_PENDING");assertThat(requests.reservations(ISSUER,"bob")).hasSize(1);
+    send(put("/api/agents/me/status"),"bob","a",Map.of("state","AVAILABLE","expectedVersion",current("bob","a").path("version").asLong())).andExpect(status().isConflict());
+    send(put("/api/agents/me/status"),"bob","b",Map.of("state","OFFLINE","expectedVersion",current("bob","a").path("version").asLong())).andExpect(status().isConflict());
+    connection(connecting,"bob","media-token",99).andExpect(status().isConflict());
+    when(media.createToken(anyString(),anyString(),anyString(),anyBoolean())).thenAnswer(i->new LiveKitService.LiveKitTokenResponse("synthetic-token","ws://synthetic",i.getArgument(0),i.getArgument(1),i.getArgument(2)));
+    var token=ok(connection(connecting,"bob","media-token"));assertThat(token.path("media").path("identity").asText()).isEqualTo(connecting.path("targetMediaIdentity").asText());
+    ok(command(t,"bob","accept"));assertThat(events.count()).isEqualTo(2);verify(media,never()).removeParticipant(anyString(),anyString());
+  }
+  @Test void joinedOrMissingMicrophoneAndProviderFailureCannotConfirmCall()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();
+    when(media.participantConnection(anyString(),eq(connecting.path("targetMediaIdentity").asText()))).thenReturn(new LiveKitService.ParticipantConnection(false,true,"PA-joining"));
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("CONNECTING");
+    when(media.participantConnection(anyString(),eq(connecting.path("targetMediaIdentity").asText()))).thenReturn(new LiveKitService.ParticipantConnection(true,false,"PA-no-mic"));
+    service.reconcile("a");assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+    when(media.participantConnection(anyString(),eq(connecting.path("targetMediaIdentity").asText()))).thenThrow(new IllegalStateException("provider unavailable"));
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("CONNECTING");
+    now=now.plusSeconds(21);service.reconcile("a");assertThat(requests.findById(connecting.path("id").asText()).orElseThrow().getStatus()).isEqualTo(WorkTransfer.Status.EXPIRED);preserved(c,saved(c));
+    assertThat(requests.reservations(ISSUER,"bob")).isEmpty();
+  }
+  @Test void mediaConfirmationAtomicallyMovesRecordAndStableCallIdentityOnlyOnce()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();
+    var accepted=ok(connection(connecting,"bob","confirm-media"));assertThat(accepted.path("status").asText()).isEqualTo("ACCEPTED");assertThat(accepted.path("confirmedParticipantSid").asText()).isEqualTo("PA-confirmed");assertThat(accepted.path("mediaConfirmedAt").isNull()).isFalse();
+    assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");preserved(c,saved(c));var q=queues.findByCode("call").orElseThrow();assertThat(q.getAssignedSubject()).isEqualTo("bob");assertThat(q.getMediaAgentIdentity()).isEqualTo(connecting.path("targetMediaIdentity").asText());
+    mvc.perform(actor(post("/api/queue/call/token"),"alice","a")).andExpect(status().isConflict());mvc.perform(actor(post("/api/queue/call/token"),"bob","a")).andExpect(status().isOk());verify(media).createToken(eq("a-call"),eq(q.getMediaAgentIdentity()),eq("bob"),eq(false));
+    mvc.perform(actor(get("/api/consultations/"+c.getId()),"alice","a")).andExpect(status().isNotFound());mvc.perform(actor(get("/api/consultations/"+c.getId()),"bob","a")).andExpect(status().isOk());
+    ok(connection(connecting,"bob","confirm-media"));ok(command(connecting,"bob","accept"));assertThat(events.count()).isEqualTo(3);verify(media,never()).removeParticipant(anyString(),anyString());
+  }
+  @Test void disconnectedOriginalOrCustomerCannotBeReplacedByConnectedTarget()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();
+    when(media.participantConnection("a-call","customer-call")).thenReturn(new LiveKitService.ParticipantConnection(false,false,null));
+    service.reconcile("a");assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+    connectedMedia();when(media.participantConnection("a-call","agent-alice")).thenReturn(new LiveKitService.ParticipantConnection(false,false,null));
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("CONNECTING");preserved(c,saved(c));
+  }
+  @Test void connectingCallEndedOrDocumentChangedKeepsCurrentResponsibility()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();
+    var q=queues.findByCode("call").orElseThrow();q.endCall();queues.saveAndFlush(q);
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("FAILED");assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+    c=source("another-call",QueueItem.ItemType.CALL,false);connecting=ok(command(callOffer(c),"bob","accept"));var edited=saved(c);edited.update(null,edited.getCategoryMain(),edited.getCategorySub(),edited.getStatus(),"변경 원문",edited.getEditorDocument(),edited.getTags(),42);records.saveAndFlush(edited);
+    assertThat(ok(connection(connecting,"bob","media-token")).path("transfer").path("status").asText()).isEqualTo("FAILED");assertThat(saved(c).getMemo()).isEqualTo("변경 원문");
+  }
+  @Test void sourceMediaAuthorityAndTargetAuthorityAreRecheckedWhileConnecting()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();
+    var alice=members.findById(member("alice","a")).orElseThrow();var permissions=new HashSet<>(alice.getPermissions());permissions.remove("queue:accept");alice.update("alice",permissions,true);members.saveAndFlush(alice);
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("REVOKED");assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+    alice=members.findById(member("alice","a")).orElseThrow();alice.update("alice",OrganizationAdminController.PERMISSIONS,true);members.saveAndFlush(alice);
+    c=source("another-call",QueueItem.ItemType.CALL,false);connecting=ok(command(callOffer(c),"bob","accept"));var bob=members.findById(member("bob","a")).orElseThrow();bob.update("bob",Set.of("transfer:read"),true);members.saveAndFlush(bob);
+    assertThat(ok(connection(connecting,"bob","confirm-media")).path("status").asText()).isEqualTo("REVOKED");assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+  }
+  @Test void cancelVersusMediaConfirmationCannotSplitResponsibility()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();var pool=Executors.newFixedThreadPool(2);var race=new CountDownLatch(1);
+    try{var confirm=pool.submit(()->{race.await();return connection(connecting,"bob","confirm-media").andReturn().getResponse().getStatus();});var cancel=pool.submit(()->{race.await();return command(connecting,"alice","cancel").andReturn().getResponse().getStatus();});race.countDown();
+      assertThat(List.of(confirm.get(15,TimeUnit.SECONDS),cancel.get(15,TimeUnit.SECONDS))).contains(200).allMatch(s->s==200||s==409||s==403);
+      var result=requests.findById(connecting.path("id").asText()).orElseThrow();String owner=result.getStatus()==WorkTransfer.Status.ACCEPTED?"bob":"alice";assertThat(saved(c).getOwnerSubject()).isEqualTo(owner);assertThat(queues.findByCode("call").orElseThrow().getAssignedSubject()).isEqualTo(owner);assertThat(events.count()).isEqualTo(3);preserved(c,saved(c));
+    }finally{pool.shutdownNow();}
+  }
+  @Test void cleanupRetriesPastTokenDeadlineAndNeverRemovesRetainedSourceOnFailure()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));ok(command(connecting,"alice","cancel"));var worker=new TransferMediaCleanupWorker(queues,requests,media,clock);
+    String preview=connecting.path("targetMediaIdentity").asText();doThrow(new IllegalStateException("provider unavailable")).when(media).removeParticipant("a-call",preview);
+    now=now.plusSeconds(181);worker.cleanup();assertThat(requests.callCleanupPending()).hasSize(1);verify(media,never()).removeParticipant("a-call","agent-alice");
+    doNothing().when(media).removeParticipant("a-call",preview);worker.cleanup();assertThat(requests.callCleanupPending()).isEmpty();assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");
+  }
+  @Test void acceptedCleanupRemovesFormerIdentityAndKeepsNewConnectionForRefresh()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));connectedMedia();ok(connection(connecting,"bob","confirm-media"));var worker=new TransferMediaCleanupWorker(queues,requests,media,clock);
+    worker.cleanup();verify(media).removeParticipant("a-call","agent-alice");verify(media,never()).removeParticipant("a-call",connecting.path("targetMediaIdentity").asText());assertThat(requests.callCleanupPending()).hasSize(1);
+    now=now.plusSeconds(181);worker.cleanup();assertThat(requests.callCleanupPending()).isEmpty();assertThat(queues.findByCode("call").orElseThrow().getMediaAgentIdentity()).isEqualTo(connecting.path("targetMediaIdentity").asText());
+  }
+  @Test void persistedConnectingReservationCanBeConfirmedByWorkerWithoutClientRetry()throws Exception{
+    var c=source("call",QueueItem.ItemType.CALL,false);var connecting=ok(command(callOffer(c),"bob","accept"));assertThat(requests.reservations(ISSUER,"bob")).hasSize(1);connectedMedia();
+    service.reconcile("a");var accepted=requests.findById(connecting.path("id").asText()).orElseThrow();assertThat(accepted.getStatus()).isEqualTo(WorkTransfer.Status.ACCEPTED);assertThat(saved(c).getOwnerSubject()).isEqualTo("bob");preserved(c,saved(c));
+  }
+
   @Test void standaloneAcceptMovesResponsibilityOnlyAndRequestNeverGrantsBody()throws Exception{
     var c=source(null,QueueItem.ItemType.TICKET,true);var t=offer(c);
     assertThat(saved(c).getOwnerSubject()).isEqualTo("alice");assertThat(t.has("editorDocument")).isFalse();assertThat(t.has("requestKey")).isFalse();assertThat(t.has("requestFingerprint")).isFalse();

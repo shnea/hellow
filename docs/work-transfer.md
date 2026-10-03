@@ -20,6 +20,27 @@
 - Media 공급자 호출과 DB 상태 변경 사이의 실패·재시작을 처리할 지속 상태/재시도와 전후 이력이 필요하다. 완료 후 이전 상담사의 토큰 갱신을 거부하고 실제 참가자를 제거한다. 기존 발급 토큰의 재접속 가능 기간에도 제거를 재시도한다.
 - 고객 종료와 이관 수락/확정의 경합, 대상 연결 확인 전에 원본을 끝내는 경로, 연결 확인 후 DB 확정 실패, 기존 참가자 제거 실패를 검증해야 한다. 실제 두 사람 음성 수락은 사용자가 미뤄 둔 [진행표](mvp-progress.md)의 WebRTC 검수에 남아 있다.
 
+### V15 서버 연결 확인과 복구
+
+- 기존 요청·이력에 `kind=WORK/CALL`을 추가한다. WORK의 기존 요청 fingerprint를 유지하므로 V14에서 전송한 UUID의 재시도도 복원한다. 같은 UUID를 다른 kind로 전송하면 409다. 새 CALL 요청도 기존 목록·상세·수행 이력·거절/취소 경로를 사용한다.
+- 본인이 처리 중인 미종료 CALL의 저장 원본에서만 제안한다. 같은 조직의 현재 AVAILABLE/heartbeat·조회/작성/수락 권한을 가진 직원을 선택하며 다른 배정·후속 업무·이관 예약을 중복 확보하지 않는다. 조직 관리자라도 다른 직원의 진행 중 통화를 대신 이관하지 못한다.
+- 제안 30초 안에 대상이 명시적으로 수락하면 `CONNECTING`으로 바뀌고 연결 확인 기한은 그 시점부터 20초다. 수락 사유를 저장하지만 접수/원본 담당·문서는 유지한다. OFFERED와 CONNECTING 모두 같은 SQL 부분 unique index와 ACD/후속 업무/조직 전환 예약 검사에 포함한다. 기한이 지나도 최종 상태를 저장할 때까지 예약을 유지한다.
+- CONNECTING의 정확한 대상·현재 권한·표시 버전만 임시 Media 토큰을 발급받는다. 동일 방의 `transfer-{요청 UUID}` Identity로 2분 유효·마이크만 게시·구독 허용하며 클라이언트에 Room Admin 권한을 주지 않는다. 원본 전문 접근은 담당 확정 전 허용하지 않는다.
+- 서버는 LiveKit `GetParticipant`로 임시 대상의 ACTIVE 상태·마이크 트랙·SID, 기존 상담사와 고객의 ACTIVE 상태를 확인한다. JOINED 소켓·클라이언트 성공 표시·업무 담당 변경은 확인 근거가 아니다. [공식 참가자/트랙 정의](https://github.com/livekit/protocol/blob/main/protobufs/livekit_models.proto)와 [Room Service 계약](https://github.com/livekit/protocol/blob/main/protobufs/livekit_room.proto)을 따른다. ACTIVE/트랙 증거는 실제 사람이 음성을 들었음을 증명하지 않는다.
+- 확인 뒤 같은 트랜잭션에서 원본/접수 담당·현재 Media Identity·확인 SID/시각과 ACCEPTED/이력을 저장한다. 기존 문서·작성자·생성 시각·분류/결과/고객 스냅샷은 유지한다. 기존 상담사는 새 토큰을 받지 못하고 새 담당은 임시 연결 때의 동일 Identity로 토큰을 갱신한다. 이전 연결을 다른 Identity로 재생성하지 않는 화면 연결이 필요하다.
+- provider 조회 장애는 CONNECTING을 유지하며 2초 worker와 대상의 확인 재시도로 복구한다. worker도 저장된 CONNECTING을 재시작 후 확인할 수 있다. 현재 권한/가용·원본 버전·기존 통화 종료를 매번 재검사하며 실패/만료/취소 시 기존 책임을 유지한다. DB 쓰기 실패는 확인 메타데이터와 담당 변경까지 롤백한다.
+- 별도 Media cleanup은 ACCEPTED의 이전 Identity, 다른 최종 상태의 임시 대상 Identity를 제거한다. 마지막 발급 가능 시점부터 180초 동안 성공해도 반복 제거하고, 공급자 장애가 이어지면 그 기한 뒤에도 성공할 때까지 재시도한다. 성공 후 완료 플래그를 저장하며 CRM 확정 트랜잭션 안에서 제거하지 않는다. 일반 통화 종료의 기존 cleanup 계약은 별도다.
+
+| 경로 | 입력·동작 |
+| --- | --- |
+| `POST /api/transfers/call` | 업무 요청과 같은 입력. 본인의 활성 통화에서 CALL/OFFERED 생성 |
+| `GET /api/transfers/call-assignees?consultationId=…` | 활성 통화의 현재 선택 가능한 직원 |
+| `POST /api/transfers/{id}/accept` | CALL은 expectedVersion/reason으로 CONNECTING 진입. ACCEPTED로 표시하지 않음 |
+| `POST /api/transfers/{id}/media-token` | expectedVersion. `{transfer,media}` 응답이며 현재 CONNECTING만 임시 토큰 반환. 최종 상태는 media=null, 제안 상태는 409 |
+| `POST /api/transfers/{id}/confirm-media` | expectedVersion. 서버 참가자 증거와 현재 원본/권한 재검사 후 CONNECTING 또는 최종 상태 반환 |
+
+ACCEPTED 이후에는 최신 본인 접수와 기존 임시 Media 연결을 유지하고 일반 접수 토큰을 사용한다. 종료 응답에서 media=null이면 새 임시 토큰을 만들지 않는다. 현재 버전과 terminal 상태를 채택하지 않고 연결을 무조건 재시도하는 화면은 허용하지 않는다. 이 서버 계약의 구현/검수와 미연결 화면·미배포 여부는 [인계](handoff.md)에 구분한다.
+
 ## 업무 이관 API
 
 모든 직원 요청은 현재 로그인 Identity와 `X-Organization-ID`를 사용한다. 응답의 capability는 현재 권한과 상태를 반영하며, 제안에 원본 상담 본문은 포함하지 않는다.
@@ -41,7 +62,7 @@
 - 같은 수행자가 이미 성공한 같은 명령을 다시 보내면 기록된 결과를 반환한다. 다른 종료 명령은 409이며 수락 뒤 원본을 다시 넘기는 동작은 새 UUID 요청으로 수행한다.
 - V14는 현재 담당 이름과 실시간 업무 예약 플래그·Identity당 활성 실시간 대상 unique index를 추가한다. 진행 중 이관 대상은 `TRANSFER_PENDING`이고 ACD 자동/직접 수신, 후속 업무 시작 및 조직 변경을 차단한다. workTransferId는 현재 조직일 때만 보인다. 자리비움/오프라인은 허용하고 worker가 해당 요청의 권한/가용 변경을 기록한다.
 - 2초 worker는 별도 조직별 트랜잭션으로 미결 요청을 재검사한다. 업무 이관으로 종료 통화의 후처리 담당자가 달라져도 원래 참가자 Identity를 이관 이력에서 찾아 기존 통화의 cleanup 기한까지 Media 제거를 재시도한다. 이 경로는 활성 통화의 Media 이관 구현을 뜻하지 않는다.
-- 기한이 지났더라도 EXPIRED 등 최종 결과를 저장하기 전까지 실시간 대상 예약을 유지한다. 가용 검사와 SQL unique index의 OFFERED 조건을 일치시켜, 다른 조직에서 아직 저장되지 않은 만료를 무시하고 같은 Identity를 중복 확보하지 않는다. worker 또는 직원 명령이 최종 결과를 저장하면 예약이 해제된다.
+- 기한이 지났더라도 EXPIRED 등 최종 결과를 저장하기 전까지 실시간 대상 예약을 유지한다. 가용 검사와 SQL unique index의 미결 조건(V14 OFFERED, V15 OFFERED/CONNECTING)을 일치시켜, 다른 조직에서 아직 저장되지 않은 만료를 무시하고 같은 Identity를 중복 확보하지 않는다. worker 또는 직원 명령이 최종 결과를 저장하면 예약이 해제된다.
 
 ## 단계별 구현
 

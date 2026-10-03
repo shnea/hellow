@@ -13,7 +13,7 @@ public class WorkTransferWorker {
   public WorkTransferWorker(WorkTransferRepository requests,WorkTransferService service){this.requests=requests;this.service=service;}
   @Scheduled(fixedDelay=2000,initialDelay=5000)
   public void tick(){
-    for(var org:requests.findByStatus(WorkTransfer.Status.OFFERED).stream().map(WorkTransfer::getOrganizationId).distinct().toList())
+    for(var org:requests.findByStatusIn(WorkTransferService.PENDING).stream().map(WorkTransfer::getOrganizationId).distinct().toList())
       try{service.reconcile(org);}catch(Exception error){LoggerFactory.getLogger(getClass()).warn("Work transfer reconciliation pending for organization {}",org);}
   }
 }

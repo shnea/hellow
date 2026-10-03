@@ -19,9 +19,14 @@ public class TransferMediaCleanupWorker {
   public void cleanup(){
     for(var q:queues.findByCallEndedTrueAndMediaCleanupUntilAfter(clock.instant())){
       if(q.getType()!=QueueItem.ItemType.CALL||q.getOrganizationId()==null)continue;
-      for(var subject:requests.findByOrganizationIdAndQueueCodeAndStatus(q.getOrganizationId(),q.getCode(),WorkTransfer.Status.ACCEPTED).stream().map(WorkTransfer::getFromSubject).distinct().toList())
-        try{media.removeParticipant(q.getOrganizationId()+"-"+q.getCode(),"agent-"+subject);}
+      for(var identity:requests.findByOrganizationIdAndQueueCodeAndStatus(q.getOrganizationId(),q.getCode(),WorkTransfer.Status.ACCEPTED).stream().map(t->t.getFromMediaIdentity()==null?"agent-"+t.getFromSubject():t.getFromMediaIdentity()).distinct().toList())
+        try{media.removeParticipant(q.getOrganizationId()+"-"+q.getCode(),identity);}
         catch(Exception error){LoggerFactory.getLogger(getClass()).warn("Former agent media cleanup pending for queue {}",q.getCode());}
+    }
+    for(var t:requests.callCleanupPending()) {
+      String identity=t.getStatus()==WorkTransfer.Status.ACCEPTED?t.getFromMediaIdentity():t.getTargetMediaIdentity();
+      try{media.removeParticipant(t.getOrganizationId()+"-"+t.getQueueCode(),identity);t.cleanupSucceeded(clock.instant());requests.save(t);}
+      catch(Exception error){LoggerFactory.getLogger(getClass()).warn("Call transfer media cleanup pending for request {}",t.getId());}
     }
   }
 }

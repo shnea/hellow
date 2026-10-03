@@ -65,7 +65,7 @@ public class MediaCleanupWorker {
       String room = q.getOrganizationId() + "-" + q.getCode();
       try {
         if (q.getAssignedSubject() != null)
-          media.removeParticipant(room, "agent-" + q.getAssignedSubject());
+          media.removeParticipant(room, q.getMediaAgentIdentity());
         media.removeParticipant(room, "customer-" + q.getCode());
       } catch (Exception e) {
         LoggerFactory.getLogger(getClass()).warn("Media cleanup pending for queue {}", q.getCode());

@@ -65,7 +65,7 @@ public class QueueController {
       throw new ResponseStatusException(CONFLICT, "활성 음성 통화가 아닙니다.");
     return media.createToken(
         actor.organizationId() + "-" + q.getCode(),
-        "agent-" + actor.subject(),
+        q.getMediaAgentIdentity(),
         actor.name(),
         false);
   }

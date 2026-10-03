@@ -89,6 +89,9 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   private String assignedSubject;
   private boolean callEnded;
   private java.time.Instant mediaCleanupUntil;
+  @Column(length=255) private String mediaAgentIdentity;
+  public String getMediaAgentIdentity(){return mediaAgentIdentity==null?"agent-"+assignedSubject:mediaAgentIdentity;}
+  public void useMediaIdentity(String identity){this.mediaAgentIdentity=identity;}
   @Version private Long version;
   @Column(nullable=false) private int routingCycle;
   public int getRoutingCycle(){return routingCycle;}
