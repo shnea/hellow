@@ -26,5 +26,6 @@ keys.txt
 
 # Local review evidence and user attachments
 output/
+.impeccable/review/
 .codex-remote-attachments/
 

@@ -1,5 +1,14 @@
 # 작업 인계 기록
 
+## 2026-10-03 고객 접수 복원·티켓/음성 상태 화면 연결
+
+- 명시적 요청의 UUID·원래 내용을 조직별 sessionStorage에 전송 전에 보관하고 재로드 때 GET으로 먼저 복원한다. 응답을 받지 못한 요청은 동일 ID·본문을 재시도하며 종료/취소/만료 후 명시적 새 요청만 새 ID를 만든다. 취소·종료 실패 시 요청/통화를 유지하고 서버의 실제 상태로 전환한다. 오래된 폴링 응답/조직 전환의 이전 응답은 무시한다. 저장소 실패 때 요청을 보내지 않는다.
+- 온라인 티켓은 담당자·처리 상태만 표시하고 마이크/Media에 연결하지 않는다. CALL만 음성 연결·명시적 재연결과 실제 적용 후 음소거 상태를 제공한다. CALL_ENDED는 통화 종료로 표시하여 직원 후처리 완료와 구분한다. 미구현 평가 등록·임의 담당자·평균/예상 대기시간·미검증 E2EE 문구를 제거하고 실제 조직의 대기 요청 수를 표시한다. 기존 조직 로고/색상/안내·중심 폼 문법과 모바일 하단 요청 버튼을 유지한다.
+- frontend 전체 Vitest 56건·lint·Docker production build 통과. 새로고침 GET 복원/POST 없음, 응답 불명 후 재로드·동일 ID/본문 재전송, 재시도 전 원래 성공 조회, 취소 뒤 새 UUID, 취소 실패/완료 경합, 만료 뒤 명시적 새 접수, 이전 조직 응답/늦은 폴링 무시, 마이크 거부 시 요청 없음, 수락 CHAT의 미디어 차단, CALL 연결 실패·재시도/종료 실패 시 연결 유지 회귀를 확인했다.
+- 격리된 V11 복원 DB/실제 production 웹/API에서 조직별 로고(/file.svg 합성 자산)·색상·제목·안내·버튼 반영, 티켓 접수→재로드 복원→취소→새 접수→재로드를 확인했다. 실제 DB에서 접수 2건·서로 다른 키 2개·취소 1건을 확인했다. 이어 SQL 합성 처리 상태의 담당자/티켓 처리 화면을 확인했으며 실제 직원 수락/두 사람 음성 증거로 주장하지 않는다. Git 제외 `output/support-ui-proof.json` 및 `output/review/support-*.jpg`가 근거다.
+- 1280×800 폼·사용자 크기 1280×720 처리 화면·768×1024·375×812 캡처의 실제 픽셀 크기를 확인했다. 모바일 하단 접수 버튼 화면 내 표시/44px·16px 입력, 태블릿 접수 버튼 화면 내 표시와 가로 넘침 없음 확인. Impeccable detector 1회 warning1은 본문 slate 배경/selection indigo+white 조합의 정적 gray-on-color 판단으로 독립 리뷰에 전달했다. finish review의 연락처 안내 대비 지적 1건을 slate400으로 수정·production 재빌드·동일 폼 3크기 재캡처했고 reviewer verdict는 해당 fix1 resolved/ship이다. 추가 detector는 실행하지 않았다.
+- 독립 documenter가 기존 HEAD/현재 코드/최종 화면 7장을 비교해 slate/indigo·Arial/system·중앙 576px 폼·모바일 sticky 액션·44/48px 조작 유지와 일반 확장을 확인했다. 기존 blur/shadow/경계 중복·Geist/Arial 불일치 drift는 보존했으며 DESIGN/sidecar는 생성하지 않았다. Git 제외 `output/review/support-documentation.md`가 근거다. 최종 캡처는 `.impeccable/review/`에도 보관하고 Git 제외했다. 검증 이미지 `hellow-dev-web:support-check`/`hellow-dev-api:support-check`를 준비했고 V11 개발 웹/API 동시 반영은 후속 기록으로 확정한다. 실제 두 사람 통화·플랫폼 첨부/관리자 사용 수락·예약/이관·현황 등 [전체 진행표](mvp-progress.md)의 남은 범위를 유지한다.
+
 ## 2026-10-03 공개 고객 접수 서버 계약 보완
 
 - 공개 요청의 UUID v4 검증·조직별 중복 잠금·동일 내용 hash, GET 결과 복원, 현재 대기 건수, 24시간 세션 만료와 공개 신규 WAITING 한도를 구현했다. 대기 취소/수락과의 경합은 서버의 실제 CANCELLED/CALL_ENDED/COMPLETED 결과를 반환하며 직원 후처리를 유지한다. 수락 티켓은 음성 조작으로 종료하지 않는다. 만료 worker와 ACD도 만료 요청의 신규 배정을 막고 저장된 본문을 보존한다. 상세는 [공개 접수 계약](public-support.md)이다.
