@@ -2,11 +2,12 @@
 
 ## 2026-10-03 같은 창의 설정·조직 전환·팀 트리·관리자 스크롤
 
+- 검증한 웹 `f7669e4`를 개발 웹에 반영하고 실제 재시작했다. 웹 healthy, API `b01e729` healthy·기존 시작 시각 유지, Flyway V7 유지, Nginx 설정 검사/reload 및 개발 `/login` HTTP 200 확인. `.env.dev`의 다음 이미지 선택을 `f7669e4`로 두고 API 별칭은 동일 `b01e729` 이미지로 준비했다. DB migration과 운영 NAS 배포는 하지 않았다. 이 단위의 임시 검수 웹/API·합성 issuer·브라우저 탭은 종료하고 검수 DB/증거는 보존했다.
 - 시스템 설정을 상담 워크스페이스 안에서 열도록 바꿨다. 새 창의 sessionStorage 분리로 로그인 만료처럼 보이던 경로를 제거했고, 설정을 보고 돌아와도 상위 통화 연결과 대기열 초안을 유지한다. 최고관리자도 같은 화면 안에서 전환한다. 플랫폼 토큰 발급 설정은 변경하지 않았다.
 - 모든 직원이 설정에서 가입한 활성 조직을 선택한다. 변경 직전에 현재 Membership을 다시 검사하고, 이전 조직의 조회 결과·고객·통화 상태를 비우며 조직별 대기열 초안을 분리한다. 통화와 후처리 중에는 조직 변경을 차단한다. 조직 신규 등록/권한 배정 뒤 돌아오기·창 포커스 복귀·‘조직 권한 다시 확인’으로 최신 권한을 조회한다. 실제 개발 DB의 ‘조직1’에는 활성 관리자 Membership이 있는 것을 읽기 전용으로 확인했다.
 - 팀을 펼치고 접을 수 있는 트리로 표시하고 팀 클릭 시 직접 소속 직원을 보여 준다. 직원 드래그앤드롭 또는 모바일/키보드의 ‘이동’ 선택 폼으로 소속 팀을 변경한다. 기존 버전 검사 API를 사용해 역할·직접 권한과 과거 기록의 작성 당시 팀을 보존하며 실패 시 현재 배치를 유지한다.
 - 관리자 최상위 화면에 높이와 세로 스크롤을 부여하고 내부 관리 화면은 함께 흐르도록 했다. 실제 375×812 브라우저에서 문서 폭 375px, 관리자 높이 812px/내용 높이 2065px와 하단 직원·초대 버튼 접근을 확인했다. 768×1024도 문서 가로 넘침이 없다.
-- 검증: frontend Vitest 24건·lint·Docker production 웹 빌드 통과, 관리자 UI Impeccable static detector 0건. 별도 PostgreSQL/합성 계정 브라우저에서 같은 URL의 설정, 두 조직 전환과 데이터 분리, 팀 클릭 직원 표시, 선택 폼 저장과 실제 드래그 저장·재조회 후 유지 확인. 증거는 Git 제외 `output/review/team-tree-settings.jpg`, `output/review/admin-scroll-mobile.jpg`다. 실제 사용자 계정의 재확인은 남아 있다. 개발 웹 반영 결과는 후속 기록에 둔다.
+- 검증: frontend Vitest 24건·lint·Docker production 웹 빌드 통과, 관리자 UI Impeccable static detector 0건. 별도 PostgreSQL/합성 계정 브라우저에서 같은 URL의 설정, 두 조직 전환과 데이터 분리, 팀 클릭 직원 표시, 선택 폼 저장과 실제 드래그 저장·재조회 후 유지 확인. 증거는 Git 제외 `output/review/team-tree-settings.jpg`, `output/review/admin-scroll-mobile.jpg`다. 실제 사용자 계정의 재확인은 남아 있다.
 - 다음 기능인 분류·결과·공통/조직/개인 템플릿의 **백엔드 작업은 아직 미커밋·미배포**다. `content` 패키지·V8·ContentIntegrationTest와 상담 저장 계약 변경은 전체 Docker build/test 및 백업 복원 V8 검증을 통과했다. `hellow-dev-api:content-check`와 Git 제외 `output/content-rehearsal.json`에 증거가 있다. 분류 ID·완료 결과를 보내는 프론트가 연결되기 전에는 배포하지 않는다. 이번 수정은 V7 기존 API와 호환되는 웹만 반영한다. [전체 진행표](mvp-progress.md)의 나머지 요청 범위는 유지한다.
 
 ## 2026-10-03 계층 팀·동적 역할·본인/팀/조직 데이터 범위
