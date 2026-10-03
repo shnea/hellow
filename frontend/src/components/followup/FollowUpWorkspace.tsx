@@ -63,14 +63,14 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
     return()=>abort.abort();
   },[active,canRead,canWrite,organizationId,accessKey,refresh]);
   const current=canRead&&task?.id===selected?task:null;const draft=current?drafts[current.id]:undefined;
-  const editable=current&&canWrite&&current.canWrite&&['PENDING','SCHEDULED','FAILED'].includes(current.status);
+  const editable=current&&canWrite&&current.canWrite&&['PENDING','ASSIGNED','SCHEDULED','FAILED'].includes(current.status);
   const stale=current&&draft&&draft.version!==current.version;
   const textDirty=Boolean(current&&draft&&(draft.title!==current.title||draft.details!==current.details));
-  const scheduleDirty=Boolean(current&&draft&&current.status==='SCHEDULED'&&(draft.at!==koreanInput(current.scheduledAt)||draft.memberId!==String(current.assignedMemberId)||draft.minutes!==String(current.durationMinutes)));
+  const scheduleDirty=Boolean(current&&draft&&['SCHEDULED','ASSIGNED'].includes(current.status)&&(draft.at!==koreanInput(current.scheduledAt)||draft.memberId!==String(current.assignedMemberId)||draft.minutes!==String(current.durationMinutes||30)));
   const scheduleInputDirty=Boolean(current&&draft&&(draft.at!==koreanInput(current.scheduledAt||current.proposedAt)||draft.memberId!==(current.assignedMemberId?String(current.assignedMemberId):'')||draft.minutes!==String(current.durationMinutes||30)));
   const patch=(value:Partial<Draft>)=>{if(current)setDrafts(prev=>({...prev,[current.id]:{...prev[current.id],...value}}));};
   const choose=(id:number)=>{if(busy)return;setSelected(id);setNotice('');setError('');};
-  const mutate=async(kind:'edit'|'schedule'|'status',nextStatus?:FollowUpStatus)=>{
+  const mutate=async(kind:'edit'|'assign'|'schedule'|'status',nextStatus?:FollowUpStatus)=>{
     if(!current||!draft||flight.current||!canWrite||!current.canWrite||stale||detailLoading)return;
     flight.current=true;setBusy(true);setError('');setNotice('');detailRead.current?.abort();listRead.current?.abort();historyRead.current?.abort();
     try{
@@ -83,11 +83,12 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
         if(!assignees.some(a=>String(a.memberId)===draft.memberId))throw new Error('현재 선택 가능한 담당자를 다시 확인해 주세요.');
         body={...body,scheduledAt:at,timeZone:'Asia/Seoul',durationMinutes:minutes,assignedMemberId:Number(draft.memberId)};
       }
+      if(kind==='assign'){if(!assignees.some(a=>String(a.memberId)===draft.memberId))throw new Error('현재 선택 가능한 담당자를 확인해 주세요.');body={...body,assignedMemberId:Number(draft.memberId)};}
       if(kind==='status')body={...body,status:nextStatus};
-      const saved=await followUpJson<FollowUp>(`/api/followup/${current.id}${kind==='edit'?'':kind==='schedule'?'/schedule':'/status'}`,organizationId,jsonBody(body,kind==='edit'?'PUT':'POST'));
+      const saved=await followUpJson<FollowUp>(`/api/followup/${current.id}${kind==='edit'?'':`/${kind}`}`,organizationId,jsonBody(body,kind==='edit'?'PUT':'POST'));
       if(!mounted.current)return;
       setTask(saved);setRows(prev=>prev.map(row=>row.id===saved.id?saved:row));setHistory(null);setHistoryPage(0);
-      setDrafts(prev=>({...prev,[saved.id]:{...prev[saved.id],version:saved.version,reason:'',...(kind==='edit'?{title:saved.title,details:saved.details}:kind==='schedule'?{at:koreanInput(saved.scheduledAt),minutes:String(saved.durationMinutes),memberId:String(saved.assignedMemberId),memberName:saved.assignedName||''}:{})}}));
+      setDrafts(prev=>({...prev,[saved.id]:{...prev[saved.id],version:saved.version,reason:'',...(kind==='edit'?{title:saved.title,details:saved.details}:kind==='assign'?{memberId:String(saved.assignedMemberId),memberName:saved.assignedName||''}:kind==='schedule'?{at:koreanInput(saved.scheduledAt),minutes:String(saved.durationMinutes),memberId:String(saved.assignedMemberId),memberName:saved.assignedName||''}:{})}}));
       setNotice('서버 저장을 확인했습니다.');onChanged(saved);
     }catch(e){if(mounted.current){setError((e as Error).message+' 입력은 유지됩니다.' );if(e instanceof ApiError&&e.status===409)setNotice('최신 상태를 다시 조회해 내 입력과 비교해 주세요.');}}
     finally{flight.current=false;if(mounted.current){setBusy(false);setLoading(false);setDetailLoading(false);setHistoryBusy(false);}}
@@ -128,6 +129,7 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
               <button type="button" disabled={Boolean(stale)||!draft.title.trim()||!draft.details.trim()||!draft.reason.trim()} onClick={()=>void mutate('edit')}>요청 내용 저장</button>
               <div className="followup-form-grid"><label>확정 일시 · 한국 시간<input type="datetime-local" value={draft.at} onChange={e=>patch({at:e.target.value})}/></label><label>소요 시간 (분)<input type="number" min={5} max={480} step={1} value={draft.minutes} onChange={e=>patch({minutes:e.target.value})}/></label></div>
               <label>담당자<select value={draft.memberId} onChange={e=>patch({memberId:e.target.value,memberName:assignees.find(a=>String(a.memberId)===e.target.value)?.name||''})}><option value="">담당자 선택</option>{assignees.filter(a=>current.canAssign||a.memberId===current.assignedMemberId||current.status==='PENDING').map(a=><option key={a.memberId} value={a.memberId}>{a.name}</option>)}</select></label>
+              {current.actionType==='CALLBACK'&&current.canAssign&&<div className="followup-actions"><button type="button" disabled={Boolean(stale)||!draft.memberId||!draft.reason.trim()||Boolean(assigneeError)||draft.memberId===String(current.assignedMemberId)} onClick={()=>void mutate('assign')}>{current.assignedMemberId?'콜백 담당자 변경':'콜백 담당자 배정'}</button><p>연락 시각이 정해지지 않아도 담당자부터 배정할 수 있습니다.</p></div>}
               {assigneeError&&<p role="alert" className="followup-error">담당자 조회 실패: {assigneeError} 위의 다시 조회로 확인하세요.</p>}
               {!current.canAssign&&<p>다른 직원으로 담당자를 바꾸려면 재배정 권한이 필요합니다.</p>}
               <button type="button" className="followup-primary" disabled={Boolean(stale)||!draft.at||!draft.memberId||!draft.reason.trim()||Boolean(assigneeError)} onClick={()=>void mutate('schedule')}>{current.status==='FAILED'?'실패 업무 재예약':current.status==='PENDING'?'담당자·일정 확정':'일정 변경·담당 재배정'}</button>
@@ -135,7 +137,7 @@ export function FollowUpWorkspace({active,organizationId,identityKey,accessKey,c
             {!['COMPLETED','CANCELLED'].includes(current.status)&&<label>변경 사유·처리 결과<textarea maxLength={2000} rows={3} disabled={busy||detailLoading} value={draft.reason} onChange={e=>patch({reason:e.target.value})}/></label>}
             {editable&&(textDirty||scheduleDirty)&&<p>입력한 내용과 일정 변경을 먼저 저장하거나 서버 내용으로 되돌린 뒤 처리 상태를 변경하세요.</p>}
             <div className="followup-actions">
-              {current.status==='SCHEDULED'&&current.canProcess&&<button type="button" disabled={busy||detailLoading||Boolean(stale)||textDirty||scheduleDirty||!draft.reason.trim()||!current.scheduledAt||Date.parse(current.scheduledAt)>now} onClick={()=>void mutate('status','IN_PROGRESS')}>예약 업무 시작</button>}
+              {['SCHEDULED','ASSIGNED'].includes(current.status)&&current.canProcess&&<button type="button" disabled={busy||detailLoading||Boolean(stale)||textDirty||scheduleDirty||!draft.reason.trim()||(current.status==='SCHEDULED'&&(!current.scheduledAt||Date.parse(current.scheduledAt)>now))} onClick={()=>void mutate('status','IN_PROGRESS')}>{current.actionType==='CALLBACK'?'콜백 처리 시작':'예약 업무 시작'}</button>}
               {current.status==='IN_PROGRESS'&&current.canProcess&&<><button type="button" className="followup-primary" disabled={busy||detailLoading||Boolean(stale)||!draft.reason.trim()} onClick={()=>void mutate('status','COMPLETED')}>처리 완료</button><button type="button" disabled={busy||detailLoading||Boolean(stale)||!draft.reason.trim()} onClick={()=>void mutate('status','FAILED')}>실패 기록</button></>}
               {!['COMPLETED','CANCELLED'].includes(current.status)&&(current.status!=='IN_PROGRESS'||current.canProcess||current.canAssign)&&<button type="button" disabled={busy||detailLoading||Boolean(stale)||textDirty||scheduleDirty||!draft.reason.trim()} onClick={()=>void mutate('status','CANCELLED')}>예약·요청 취소</button>}
               {(textDirty||scheduleDirty)&&<button type="button" disabled={busy||detailLoading} onClick={()=>setDrafts(prev=>({...prev,[current.id]:draftOf(current)}))}>내 입력을 서버 내용으로 되돌리기</button>}

@@ -95,6 +95,7 @@ public class SupportController {
     q.setSessionId(UUID.randomUUID().toString() + UUID.randomUUID());
     q.setRequestKey(key);
     q.initializeSupportSession(clock.instant().plus(java.time.Duration.ofHours(24)),fingerprint);
+    if(q.getType()==QueueItem.ItemType.CALL)q.awaitCallbackUntil(clock.instant().plusSeconds(30));
     q.setInquiryType(r.inquiryType());
     queues.save(q);
     return response(q);
@@ -162,7 +163,7 @@ public class SupportController {
         "queueCode",
         q.getCode(),
         "status",
-        q.getType()==QueueItem.ItemType.CALL && q.getStatus() == QueueItem.QueueStatus.PROCESSING && q.isCallEnded()
+        q.getCallbackFollowUpId()!=null?"CALLBACK_REQUESTED":q.getType()==QueueItem.ItemType.CALL && q.getStatus() == QueueItem.QueueStatus.PROCESSING && q.isCallEnded()
             ? "CALL_ENDED"
             : q.getStatus().name(),
         "assignedAgent",

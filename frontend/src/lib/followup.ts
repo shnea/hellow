@@ -1,6 +1,6 @@
 import {apiJson} from './api';
 export type FollowUpType='VISIT'|'CALLBACK';
-export type FollowUpStatus='PENDING'|'SCHEDULED'|'IN_PROGRESS'|'COMPLETED'|'FAILED'|'CANCELLED';
+export type FollowUpStatus='PENDING'|'ASSIGNED'|'SCHEDULED'|'IN_PROGRESS'|'COMPLETED'|'FAILED'|'CANCELLED';
 export interface FollowUp {
   contactName?:string|null;phoneNumber?:string|null;
   id:number;version:number;actionType:FollowUpType;title:string;details:string;status:FollowUpStatus;
@@ -13,8 +13,8 @@ export interface ActiveFollowUp {processing:boolean;id:number|null;}
 export interface FollowUpAssignee {memberId:number;name:string;teamId:string|null;}
 export interface FollowUpEvent {id:number;action:string;actorName:string;occurredAt:string;reason:string;beforeSnapshot:string|null;afterSnapshot:string;}
 export interface FollowUpRequest {queueCode:string;actionType:FollowUpType;title:string;details:string;requestId:string;proposedAt?:string;timeZone?:string;}
-export const followUpLabels:Record<FollowUpStatus,string>={PENDING:'일정 미확정',SCHEDULED:'일정 확정',IN_PROGRESS:'처리 중',COMPLETED:'완료',FAILED:'처리 실패',CANCELLED:'취소'};
-export const followUpEventLabels:Record<string,string>={CREATED:'요청 접수',EDITED:'내용 수정',SCHEDULED:'일정 확정·변경',REASSIGNED:'담당 재배정',IN_PROGRESS:'처리 시작',COMPLETED:'처리 완료',FAILED:'실패 기록',CANCELLED:'취소'};
+export const followUpLabels:Record<FollowUpStatus,string>={PENDING:'미배정·일정 미확정',ASSIGNED:'담당 배정·연락 대기',SCHEDULED:'일정 확정',IN_PROGRESS:'처리 중',COMPLETED:'완료',FAILED:'처리 실패',CANCELLED:'취소'};
+export const followUpEventLabels:Record<string,string>={CREATED:'요청 접수',ASSIGNED:'담당 배정',EDITED:'내용 수정',SCHEDULED:'일정 확정·변경',REASSIGNED:'담당 재배정',IN_PROGRESS:'처리 시작',COMPLETED:'처리 완료',FAILED:'실패 기록',CANCELLED:'취소'};
 export function followUpJson<T>(path:string,organizationId:string,options:RequestInit={}){
   const headers=new Headers(options.headers);headers.set('X-Organization-ID',organizationId);
   return apiJson<T>(path,{...options,headers});

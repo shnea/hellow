@@ -121,6 +121,10 @@ public class FollowUpAction extends kr.shnea.hellow.security.OrganizationOwned {
     proposedAt=proposed;timeZone=zone;requestKey=key;requestFingerprint=fingerprint;
   }
   void edit(String title,String details,Instant now){this.title=title;this.details=details;updatedAt=now;}
+  void assign(WorkspaceAccess.Actor assignee,Long memberId,Instant now){
+    assignOwner(assignee);assignedMemberId=memberId;assignedName=assignee.name();updatedAt=now;
+    if(!"SCHEDULED".equals(status))status="ASSIGNED";
+  }
   void schedule(WorkspaceAccess.Actor assignee,Long memberId,Instant at,int minutes,String zone,Instant now){
     assignOwner(assignee);assignedMemberId=memberId;assignedName=assignee.name();
     scheduledAt=at;scheduledEndAt=at.plusSeconds(minutes*60L);durationMinutes=minutes;timeZone=zone;

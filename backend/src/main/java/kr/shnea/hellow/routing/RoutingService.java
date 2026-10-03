@@ -30,10 +30,11 @@ public class RoutingService {
   private final AuditEventRepository audits;
   private final FollowUpRepository followups;
   private final WorkTransferRepository transfers;
+  private final kr.shnea.hellow.followup.WaitingCallCallbacks callbacks;
   public RoutingService(RoutingLockRepository lock,AgentPresenceRepository presence,AssignmentAttemptRepository attempts,
-      QueueItemRepository queues,OrganizationRepository organizations,MembershipRepository members,MembershipAccess authority,Clock clock,AuditEventRepository audits,FollowUpRepository followups,WorkTransferRepository transfers){
+      QueueItemRepository queues,OrganizationRepository organizations,MembershipRepository members,MembershipAccess authority,Clock clock,AuditEventRepository audits,FollowUpRepository followups,WorkTransferRepository transfers,kr.shnea.hellow.followup.WaitingCallCallbacks callbacks){
     this.lock=lock;this.presence=presence;this.attempts=attempts;this.queues=queues;
-    this.organizations=organizations;this.members=members;this.authority=authority;this.clock=clock;this.audits=audits;this.followups=followups;this.transfers=transfers;
+    this.organizations=organizations;this.members=members;this.authority=authority;this.clock=clock;this.audits=audits;this.followups=followups;this.transfers=transfers;this.callbacks=callbacks;
   }
 
   public record AgentView(String state,AgentPresence.Availability availability,long version,
@@ -105,6 +106,7 @@ public class RoutingService {
     var q=queue(actor.organizationId(),code);
     if(q.getStatus()==QueueItem.QueueStatus.PROCESSING&&owned(q,actor))return q;
     if(q.getStatus()!=QueueItem.QueueStatus.WAITING)throw conflict("이미 처리 중이거나 종료된 요청입니다.");
+    if(q.callbackDue(now))throw conflict("수락 대기 시간이 지나 콜백으로 전환 중인 요청입니다.");
     if(!eligibleQueue(actor,q))throw new ResponseStatusException(NOT_FOUND);
     var p=presence.findByIssuerAndSubject(actor.issuer(),actor.subject()).orElseThrow(()->conflict("상담 상태를 대기로 변경해 주세요."));
     if(!p.getOrganizationId().equals(actor.organizationId())||!p.live(now)||p.getAvailability()!=AgentPresence.Availability.AVAILABLE||busy(p))
@@ -165,6 +167,11 @@ public class RoutingService {
   }
 
   private void routeLocked(String org,Instant now){
+    if(organizations.findById(org).map(Organization::isActive).orElse(false)){
+      for(var candidate:queues.findByOrganizationIdAndStatusOrderByCreatedAtAsc(org,QueueItem.QueueStatus.WAITING)){
+        if(candidate.callbackDue(now))callbacks.convert(queue(org,candidate.getCode()),now);
+      }
+    }
     reconcile(org,now);attempts.flush();
     if(!organizations.findById(org).map(Organization::isActive).orElse(false))return;
     var agents=presence.findByOrganizationId(org);

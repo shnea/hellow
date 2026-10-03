@@ -11,6 +11,15 @@ const response = (data:unknown = waiting, status = 200) => new Response(JSON.str
 const flush = async () => {await act(async () => {await Promise.resolve(); await Promise.resolve();});};
 beforeEach(() => {sessionStorage.clear(); localStorage.clear();});
 afterEach(() => {cleanup(); vi.unstubAllGlobals();});
+it('restores confirmed automatic callback without resubmitting or allowing duplicate retry',async()=>{
+  storeSupportRequest({...payload,channel:'CALL'});
+  const fetcher=vi.fn<(url:string,options?:RequestInit)=>Promise<Response>>(async()=>response({...waiting,channel:'CALL',status:'CALLBACK_REQUESTED'}));vi.stubGlobal('fetch',fetcher);
+  const {result}=renderHook(()=>useSupportSession('org-a'));
+  await waitFor(()=>expect(result.current.step).toBe('CALLBACK_REQUESTED'));
+  await act(()=>result.current.submit({...payload,channel:'CALL'}));
+  expect(fetcher.mock.calls.every(([,options])=>options?.method!=='POST')).toBe(true);
+  expect(result.current.request?.message).toBe('원래 문의');
+});
 
 it('reopened customer tab survives effect replay and reload without creating another request', async () => {
   rememberSupportResume('org-a', 'opaque-session');

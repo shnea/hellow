@@ -328,6 +328,12 @@ export default function CustomerSupportPage() {
             </div>
           </>:<p className="mt-4 text-slate-300">담당자가 문의를 확인했습니다. 처리 결과가 저장되면 이 화면에 완료 상태가 표시됩니다.</p>}
         </div>}
+        {step==='CALLBACK_REQUESTED'&&<div className={panelClass} role="status">
+          <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4"/>
+          <h1 className="text-2xl font-bold">현재 바로 연결할 수 있는 상담사가 없습니다.</h1>
+          <p className="mt-4 text-slate-200">남겨주신 연락처로 연락드릴 수 있도록 콜백 요청을 접수했습니다.</p>
+          <p className="mt-3 text-sm text-slate-300">작성하신 문의 내용도 함께 전달되었습니다. 이 화면을 닫으셔도 됩니다.</p>
+        </div>}
         {['FINISHED','CANCELLED','EXPIRED'].includes(step)&&<div className={panelClass}>
           {step==='FINISHED'?<CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4"/>:<AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4"/>}
           <h1 className="text-2xl font-bold">{step==='EXPIRED'?'접수 화면의 이용 시간이 만료되었습니다':step==='CANCELLED'?'상담 요청이 취소되었습니다':session?.status==='CALL_ENDED'?'통화가 종료되었습니다':'상담이 완료되었습니다'}</h1>

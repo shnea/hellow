@@ -30,6 +30,18 @@
   .interaction-editor:has(+.interaction-history.mobile-visible) { display:none; }
   .workspace-mobile-tabs { display:flex;overflow-x:auto;flex-shrink:0; }
   .workspace-mobile-tabs button { min-height:44px;padding:8px;white-space:nowrap;flex-shrink:0; }
+  /* The middle panel owns vertical scrolling, including header, document and save actions. */
+  .interaction-editor { overscroll-behavior-y:contain;scrollbar-gutter:stable; }
+  .interaction-editor .customer-records,.interaction-editor .records-editor { flex:0 0 auto;min-height:100%;overflow:visible; }
+  .interaction-editor .active-workspace,.interaction-editor .consultation-editor-area,
+  .interaction-editor .consultation-document-area,.interaction-editor .shnea-consultation-editor,
+  .interaction-editor .shnea-consultation-editor > div:last-child,
+  .interaction-editor .shnea-consultation-editor .shnea-editor,
+  .interaction-editor .shnea-consultation-editor .shnea-editor .se-body,
+  .interaction-editor .shnea-consultation-editor .shnea-editor .tiptap {
+    flex:0 0 auto;height:auto;max-height:none;overflow:visible;
+  }
+  .interaction-editor .shnea-consultation-editor .shnea-editor .tiptap { min-height:280px; }
 }
 @media (max-width:1023px) {
   .active-workspace .quick-tags,.active-workspace .template-controls,.active-workspace .record-status-controls { display:none; }

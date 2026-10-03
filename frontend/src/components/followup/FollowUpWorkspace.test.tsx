@@ -9,6 +9,25 @@ const response=(body:unknown,status=200)=>new Response(JSON.stringify(body),{sta
 const flush=async()=>{await act(async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();});};
 beforeEach(()=>{HTMLDialogElement.prototype.showModal=function(){this.setAttribute("open","");};HTMLDialogElement.prototype.close=function(){this.removeAttribute("open");};});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it('assigns a callback without a schedule and allows its assignee to start',async()=>{
+  let latest=task;const commands:{path:string;body:Record<string,unknown>}[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(path:string,o?:RequestInit)=>{
+    if(path.includes('/assignees'))return response([{memberId:2,name:'담당자(agent)',teamId:null}]);
+    if(o?.method==='POST'){
+      const body=JSON.parse(o.body as string);commands.push({path,body});
+      latest={...latest,version:latest.version+1,status:path.endsWith('/assign')?'ASSIGNED':'IN_PROGRESS',assignedMemberId:2,assignedName:'담당자(agent)'};
+      return response(latest);
+    }
+    return response(path.includes('?')?{items:[latest],hasMore:false}:latest);
+  }));
+  render(<FollowUpWorkspace {...props}/>);await flush();
+  fireEvent.change(screen.getByLabelText('담당자'),{target:{value:'2'}});fireEvent.change(screen.getByLabelText('변경 사유·처리 결과'),{target:{value:'담당 지정'}});
+  fireEvent.click(screen.getByRole('button',{name:'콜백 담당자 배정'}));await flush();
+  expect(commands[0].path).toBe('/api/followup/1/assign');expect(commands[0].body).toEqual({expectedVersion:0,reason:'담당 지정',assignedMemberId:2});
+  fireEvent.change(screen.getByLabelText('변경 사유·처리 결과'),{target:{value:'전화 연락 시도'}});
+  const start=screen.getByRole('button',{name:'콜백 처리 시작'}) as HTMLButtonElement;expect(start.disabled).toBe(false);fireEvent.click(start);await flush();
+  expect(commands[1].body).toEqual({expectedVersion:1,reason:'전화 연락 시도',status:'IN_PROGRESS'});
+});
 it('keeps failed edits and versions across reload and requires explicit adoption before retry',async()=>{
   let latest=task;const commands:unknown[]=[];let reject=true;
   vi.stubGlobal('fetch',vi.fn(async(path:string,o?:RequestInit)=>{

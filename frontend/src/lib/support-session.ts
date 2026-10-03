@@ -13,7 +13,7 @@ export interface SupportRequest {
 export interface SupportSession {
   sessionId: string;
   queueCode: string;
-  status: 'WAITING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED' | 'CALL_ENDED';
+  status: 'WAITING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED' | 'CALL_ENDED' | 'CALLBACK_REQUESTED';
   channel: 'CALL' | 'CHAT';
   assignedAgent: string;
   waitingCount: number;
@@ -94,7 +94,7 @@ export async function supportJson<T>(url: string, options?: RequestInit): Promis
 
 export function validateSupportSession(value: SupportSession): SupportSession {
   if (!value || typeof value.sessionId !== 'string' || !value.sessionId || typeof value.queueCode !== 'string'
-    || !['WAITING','PROCESSING','COMPLETED','CANCELLED','CALL_ENDED'].includes(value.status)
+    || !['WAITING','PROCESSING','COMPLETED','CANCELLED','CALL_ENDED','CALLBACK_REQUESTED'].includes(value.status)
     || !['CALL','CHAT'].includes(value.channel) || !Number.isFinite(value.waitingCount)
     || typeof value.expiresAt !== 'string' || !Number.isFinite(Date.parse(value.expiresAt))) {
     throw new Error('접수 상태 응답을 확인하지 못했습니다. 기존 요청을 다시 확인해 주세요.');

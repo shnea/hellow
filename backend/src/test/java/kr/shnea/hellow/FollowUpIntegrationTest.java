@@ -67,6 +67,52 @@ class FollowUpIntegrationTest {
   JsonNode current(String who,String org)throws Exception{return ok(mvc.perform(actor(get("/api/agents/me"),who,org)));}
   void ready(String who)throws Exception{var current=current(who,"a");ok(command(put("/api/agents/me/status"),who,"a",Map.of("state","AVAILABLE","expectedVersion",current.path("version").asLong())));}
 
+  Map<String,Object> publicCallBody(String channel){return Map.of("organizationCode","a-public","requestId",UUID.randomUUID().toString(),"customerName","콜백 고객","phoneNumber","01012345678","customerType","INDIVIDUAL","inquiryType","도입 문의","message","원래 작성한 문의","channel",channel);}
+  JsonNode publicSubmit(Map<String,Object> body)throws Exception{return ok(mvc.perform(post("/api/support/request").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))));}
+  @Test void waitingCallConvertsOnceAtDeadlineAndRecoveryDoesNotCreateAnotherCallback()throws Exception{
+    var body=publicCallBody("CALL");var call=publicSubmit(body);String code=call.path("queueCode").asText();
+    now=now.plusSeconds(29);routing.route("a");assertThat(tasks.count()).isZero();
+    now=now.plusSeconds(1);var executor=Executors.newFixedThreadPool(2);
+    try{var first=executor.submit(()->routing.route("a"));var second=executor.submit(()->routing.route("a"));first.get(10,TimeUnit.SECONDS);second.get(10,TimeUnit.SECONDS);}finally{executor.shutdownNow();}
+    var task=tasks.findAll().getFirst();assertThat(tasks.count()).isOne();assertThat(history.count()).isOne();
+    assertThat(task.getQueueCode()).isEqualTo(code);assertThat(task.getDetails()).isEqualTo("원래 작성한 문의");assertThat(task.getAssignedMemberId()).isNull();assertThat(task.getOwnerSubject()).isNull();
+    assertThat(queues.findByCode(code).orElseThrow().getStatus()).isEqualTo(QueueItem.QueueStatus.CANCELLED);
+    mvc.perform(get("/api/support/session/"+call.path("sessionId").asText())).andExpect(jsonPath("$.status").value("CALLBACK_REQUESTED"));
+    assertThat(publicSubmit(body).path("status").asText()).isEqualTo("CALLBACK_REQUESTED");assertThat(tasks.count()).isOne();
+    mvc.perform(post("/api/support/session/"+call.path("sessionId").asText()+"/token")).andExpect(status().isConflict());
+  }
+  @Test void acceptedCallWinsBeforeDeadlineAndLateAcceptanceCannotCompeteWithCallback()throws Exception{
+    ready("bob");var first=publicSubmit(publicCallBody("CALL"));now=now.plusSeconds(29);
+    ok(command(post("/api/queue/"+first.path("queueCode").asText()+"/accept"),"bob","a",Map.of()));
+    now=now.plusSeconds(2);routing.route("a");assertThat(tasks.count()).isZero();
+    var second=publicSubmit(publicCallBody("CALL"));now=now.plusSeconds(30);
+    command(post("/api/queue/"+second.path("queueCode").asText()+"/accept"),"alice","a",Map.of()).andExpect(status().isConflict());
+    routing.route("a");assertThat(tasks.count()).isOne();assertThat(queues.findByCode(first.path("queueCode").asText()).orElseThrow().getStatus()).isEqualTo(QueueItem.QueueStatus.PROCESSING);
+  }
+  @Test void cancelledCallsAndTextRequestsNeverAutomaticallyBecomeCallbacks()throws Exception{
+    var cancelled=publicSubmit(publicCallBody("CALL"));publicSubmit(publicCallBody("CHAT"));
+    mvc.perform(post("/api/support/session/"+cancelled.path("sessionId").asText()+"/cancel")).andExpect(status().isOk());
+    now=now.plusSeconds(40);routing.route("a");assertThat(tasks.count()).isZero();
+  }
+  @Test void callbackAssignmentUsesPermissionScopesAndAssigneeCanProcessWithoutAppointment()throws Exception{
+    publicSubmit(publicCallBody("CALL"));now=now.plusSeconds(30);routing.route("a");long id=tasks.findAll().getFirst().getId();
+    mvc.perform(actor(get("/api/followup/"+id),"bob","a")).andExpect(status().isNotFound());
+    var task=ok(mvc.perform(actor(get("/api/followup/"+id),"alice","a")));
+    var assignment=new HashMap<String,Object>(Map.of("expectedVersion",task.path("version").asLong(),"assignedMemberId",member("bob","a"),"reason","콜백 담당 지정"));
+    command(post("/api/followup/"+id+"/assign"),"writer","a",assignment).andExpect(status().isForbidden());
+    command(post("/api/followup/"+id+"/assign"),"alice","b",assignment).andExpect(status().isNotFound());
+    task=ok(command(post("/api/followup/"+id+"/assign"),"alice","a",assignment));
+    assertThat(task.path("status").asText()).isEqualTo("ASSIGNED");assertThat(task.path("scheduledAt").isNull()).isTrue();
+    mvc.perform(actor(get("/api/followup/"+id),"bob","a")).andExpect(status().isOk()).andExpect(jsonPath("$.canProcess").value(true));
+    command(post("/api/followup/"+id+"/assign"),"alice","a",assignment).andExpect(status().isConflict());
+    transition("alice","a",task,"IN_PROGRESS").andExpect(status().isForbidden());
+    task=ok(transition("bob","a",task,"IN_PROGRESS"));task=ok(transition("bob","a",task,"FAILED"));
+    task=ok(schedule("bob","a",task,"bob",now.plusSeconds(60)));transition("bob","a",task,"IN_PROGRESS").andExpect(status().isConflict());
+    now=now.plusSeconds(60);task=ok(transition("bob","a",task,"IN_PROGRESS"));task=ok(transition("bob","a",task,"COMPLETED"));
+    assertThat(task.path("status").asText()).isEqualTo("COMPLETED");
+    var events=ok(mvc.perform(actor(get("/api/followup/"+id+"/history"),"bob","a")));assertThat(events.toString()).contains("ASSIGNED","FAILED","COMPLETED");
+  }
+
   @Test void duplicateRequestsKeepOneTaskTimelineAndHistoryEvenAfterProposedTimePasses()throws Exception{
     var body=request("source");body.put("proposedAt",now.plusSeconds(120).toString());body.put("timeZone","Asia/Seoul");body.put("title","긴".repeat(200));
     var first=ok(command(post("/api/followup"),"alice","a",body));now=now.plusSeconds(300);

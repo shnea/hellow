@@ -71,6 +71,13 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   private String requestKey;
 
   private java.time.Instant supportExpiresAt;
+  private java.time.Instant callbackDueAt;
+  private Long callbackFollowUpId;
+  public java.time.Instant getCallbackDueAt(){return callbackDueAt;}
+  public Long getCallbackFollowUpId(){return callbackFollowUpId;}
+  public void awaitCallbackUntil(java.time.Instant deadline){callbackDueAt=deadline;}
+  public boolean callbackDue(java.time.Instant now){return type==ItemType.CALL&&status==QueueStatus.WAITING&&callbackDueAt!=null&&!now.isBefore(callbackDueAt);}
+  public void convertedToCallback(Long id){callbackFollowUpId=id;cancel();}
   @Column(length=64) private String requestFingerprint;
   @com.fasterxml.jackson.annotation.JsonIgnore
   public java.time.Instant getSupportExpiresAt(){return supportExpiresAt;}

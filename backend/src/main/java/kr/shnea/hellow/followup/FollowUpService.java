@@ -140,6 +140,21 @@ public class FollowUpService {
     task.edit(r.title(),r.details(),now);tasks.flush();record(task,actor,"EDITED",r.reason(),before,now);return view(task,actor);
   }
   @Transactional
+  public View assign(Long id,FollowUpController.Assign r){
+    var actor=acquire();var task=editable(id,actor,r.expectedVersion());mutable(task);
+    if(!"CALLBACK".equals(task.getActionType()))throw bad("담당자만 지정하는 기능은 콜백에서 사용합니다.");
+    if(!actor.can("followup:assign",task))throw new ResponseStatusException(FORBIDDEN,"콜백 배정 권한이 필요합니다.");
+    var member=members.findById(r.assignedMemberId()).filter(m->m.isActive()&&actor.organizationId().equals(m.getOrganizationId()))
+      .orElseThrow(()->bad("현재 조직의 활성 담당자를 선택해 주세요."));
+    var target=recipient(member);if(target==null)throw bad("담당자의 후속 업무 조회·처리 권한이 없습니다.");
+    var destination=new FollowUpAction(null,"CALLBACK","","");destination.setOrganizationId(actor.organizationId());destination.assignOwner(target);
+    if(!actor.can("followup:assign",destination))throw new ResponseStatusException(FORBIDDEN,"접근 범위 안의 담당자를 선택해 주세요.");
+    if("SCHEDULED".equals(task.getStatus())&&tasks.overlaps(target.issuer(),target.subject(),id,task.getScheduledAt(),task.getScheduledEndAt())>0)
+      throw conflict("담당자의 다른 확정 일정과 겹칩니다. 일정을 변경해 주세요.");
+    String before=snapshot(task);boolean first=task.getAssignedMemberId()==null;var now=clock.instant();
+    task.assign(target,member.getId(),now);tasks.flush();record(task,actor,first?"ASSIGNED":"REASSIGNED",r.reason(),before,now);return view(task,actor);
+  }
+  @Transactional
   public View schedule(Long id,FollowUpController.Schedule r){
     var actor=acquire();var task=editable(id,actor,r.expectedVersion());mutable(task);
     var now=clock.instant();future(r.scheduledAt(),now);String zone=zone(r.timeZone());
@@ -168,8 +183,8 @@ public class FollowUpService {
       var member=members.findByOrganizationIdAndIssuerAndSubjectAndActiveTrue(actor.organizationId(),actor.issuer(),actor.subject()).orElseThrow();
       if(recipient(member)==null)throw new ResponseStatusException(FORBIDDEN,"후속 업무 조회·처리 권한이 필요합니다.");
       if("IN_PROGRESS".equals(r.status())){
-        if(!"SCHEDULED".equals(state))throw conflict("확정된 일정만 시작할 수 있습니다.");
-        if(task.getScheduledAt().isAfter(now))throw conflict("예약 시각이 아직 되지 않았습니다.");
+        if(!"SCHEDULED".equals(state)&&!("ASSIGNED".equals(state)&&"CALLBACK".equals(task.getActionType())))throw conflict("담당자가 배정된 콜백이나 확정된 일정만 시작할 수 있습니다.");
+        if(task.getScheduledAt()!=null&&task.getScheduledAt().isAfter(now))throw conflict("예약 시각이 아직 되지 않았습니다.");
         if(!queues.activeForIdentity(actor.issuer(),actor.subject()).isEmpty()||!tasks.activeForIdentity(actor.issuer(),actor.subject()).isEmpty()
             ||!transfers.reservations(actor.issuer(),actor.subject()).isEmpty()
             ||presence.findByIssuerAndSubject(actor.issuer(),actor.subject()).flatMap(p->attempts.activeForPresence(p.getId())).isPresent())
@@ -201,7 +216,7 @@ public class FollowUpService {
     if(!Objects.equals(task.getVersion(),version))throw conflict("다른 창에서 후속 업무를 변경했습니다. 입력을 유지한 채 최신 상태를 다시 확인해 주세요.");
     return task;
   }
-  private void mutable(FollowUpAction task){if(!Set.of("PENDING","SCHEDULED","FAILED").contains(task.getStatus()))throw conflict("미확정·확정·실패 업무만 수정하거나 재예약할 수 있습니다.");}
+  private void mutable(FollowUpAction task){if(!Set.of("PENDING","ASSIGNED","SCHEDULED","FAILED").contains(task.getStatus()))throw conflict("미확정·배정·확정·실패 업무만 수정하거나 재예약할 수 있습니다.");}
   private void requireRead(WorkspaceAccess.Actor actor,FollowUpAction task){if(!actor.can("followup:read",task))throw new ResponseStatusException(NOT_FOUND,"접근할 수 있는 후속 업무가 없습니다.");}
   private WorkspaceAccess.Actor recipient(Membership m){
     if(!m.isActive())return null;var grants=access.authority().grants(m);

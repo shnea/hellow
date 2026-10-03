@@ -5,7 +5,7 @@ import {loadSupportRequest, prepareSupportMicrophone, storeSupportRequest, suppo
   clearSupportResume, loadSupportResume,
   supportStorageKey, validateSupportSession, type SupportRequest, type SupportSession} from '@/lib/support-session';
 
-export type SupportStep = 'RESTORING' | 'FORM' | 'PENDING' | 'WAITING' | 'PROCESSING' | 'FINISHED' | 'CANCELLED' | 'EXPIRED' | 'UNAVAILABLE';
+export type SupportStep = 'RESTORING' | 'FORM' | 'PENDING' | 'WAITING' | 'PROCESSING' | 'FINISHED' | 'CANCELLED' | 'EXPIRED' | 'UNAVAILABLE' | 'CALLBACK_REQUESTED';
 const stepFor = (session: SupportSession): SupportStep => session.status === 'COMPLETED' || session.status === 'CALL_ENDED'
   ? 'FINISHED' : session.status === 'CANCELLED' ? 'CANCELLED' : session.status;
 
