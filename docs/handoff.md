@@ -2,13 +2,14 @@
 
 ## 2026-10-03 업무 이관 화면·원문 열기·입력 보존 검수
 
+- 검수·문서 단위를 한글 커밋 `e97d2cc`로 push하고 개발 웹/API를 같은 버전으로 함께 반영했다(API18:55:23·웹18:55:34 KST 재시작). 진행 중 음성0건 확인·쓰기 중지 뒤 확보한 새 백업을 `hellow_transfer_frozen_20261003_185505`에 복원해 V14/API health·활성 원본/실시간 대상 unique index·CHECK·기존 Membership/Role의 이관 범위 보존을 검증했다. 고객6/접수21/상담45/타임라인14/Membership4/후속0건과 원문 hash를 실제 DB에서도 유지했다. 신규 nullable 담당 이름/의도한 Membership version만 비교에서 제외했다. 백업 SHA-256 `a8c5d995edd1ae2f5a5a66b9c4e8740ccc6942ebe0f8da694b0f5779e73a8914`와 실제 이미지/재시작 시각·hash 증거는 Git 제외 `output/transfer-deployment.json`에 있다. 두 서비스 healthy·Nginx 검사/reload·외부 `/login`/`/support?org=hellow-dev`/공개 조직 API HTTP200 확인. 실제 사용자 재로그인 수락은 대신 수행하지 않았다. 평문 검수 환경 파일·임시 복원 API를 정리했고 백업/복원 DB는 보존했다.
 - 저장된 상담의 요청 폼과 받은/보낸/허용 범위 목록·상태 필터·상세·수행 이력, 대상 수락/거절·요청자 취소를 연결했다. 실제 선택 가능한 직원과 현재 capability를 사용하며 미저장 문서/분류/결과/태그가 있으면 먼저 저장하도록 한다. 요청 UUID/본문을 전송 전에 보관하고 응답 불명·403/409/저장소 실패에서는 입력과 표시 버전을 유지한다. HTTP 성공 응답의 FAILED/REVOKED/EXPIRED를 수락 성공으로 표시하지 않는다.
 - 큰 수신 모달과 TRANSFER_PENDING 상태·새 수신/조직 변경 차단을 연결했다. 수락 뒤 최신 대기열의 본인 PROCESSING 접수 또는 정확한 독립 기록 ID를 열며 제안 수신만으로 본문을 공개하지 않는다. `/api/me`의 검증 issuer로 보관 key를 구분한다. 원본 id/list의 processing/editable로 진행 중 접수를 독립 편집 경로에서 수정하지 못하게 했다. 대기열 초안의 충돌 버전을 조용히 갱신하지 않고 직원의 최신 원본 채택을 요구하며, 이관/권한 변경 후 남은 본인 입력은 복사할 수 있다.
 - Java 21 Docker API 전체110건·WorkTransferIntegrationTest21건/build, frontend89건·lint·TypeScript noEmit·Docker production build 통과. 초기 mock 타입/사용하지 않는 import 오류는 수정 후 검사했다. 합성 문서 fixture에서 SHNEA version 누락으로 표시한 JSON은 fixture 작성 오류였으며 공식 version3 문서로 API 저장 후 확인했다. 실제 제품의 JSON 오류 수정으로 보고하지 않는다.
 - V14 격리 복원 DB의 새 합성 조직 `transfer-ui-183117`과 두 합성 직원으로 실제 공개 티켓 접수→수락/저장한 상담53의 업무 요청→큰 수신 모달/수신 차단→대상 수락→기존 본문 열기/저장/완료를 확인했다. 별도 API 작성한 독립 완료 기록54는 거절 후 새 요청 수락·정확한 ID 열기, 완료53은 요청자 취소를 확인했다. API 재조회로 원래 agentName/문서/상태 유지와 현재 담당200·이전 담당404를 확인했다. Membership은 SQL 합성 fixture이며 실제 개발 DB/플랫폼 설정·실계정 인증을 바꾸거나 검수한 것은 아니다. `output/transfer-ui-proof.json`에 증거가 있다.
 - 1280×800·사용자1280×720·768×1024·375×812의 상단/하단/요청 모달 12장을 실제 픽셀로 검수했다. 대상 탭이 다른 초기 viewport 캡처는 보정 후 각 실제 크기/가로 넘침 없음·모바일16px 입력과44px 제어·하단 수락/거절/이력 접근을 확인했다. 증거는 Git 제외 `.impeccable/review/transfer/`와 `output/transfer-ui-dimensions.json`이다. detector1회 기존 Sidebar 로고 gradient 경고1건을 전달했고 fresh finish reviewer는 다섯 계약 섹션과 지정 화면/코드 범위의 material finding 없음·ship을 반환했다(`output/transfer-ui-finish-review.md`).
 - fresh documenter도 12장/네 viewport·실제 소스와 기존 Operate 일치를 확인했다(`output/transfer-ui-documentation.md`). 기존 Geist/Arial·global/shell·로고 gradient/shadow 차이와 DESIGN/sidecar 부재는 기록만 하고 변경하지 않았다. 문서 검사82파일/292링크/85요구사항·64Impeccable해시와 Git whitespace 검사 통과. 검수 서버/합성 issuer·브라우저 탭/viewport를 정리했다.
-- 개발 V14 웹/API 동시 반영을 이어서 수행한다. 현재 개발 웹/API는 `4a4d81e` healthy이며 진행 중 음성0건을 확인했다. 반영 직전 쓰기 중지 백업·별도 복원 V14/건수/원문 hash·기존 권한 범위 검증 후 새 웹/API를 함께 재시작한다. 관리자 하단 스크롤은 기존 수정/검수 상태를 유지한다. 전체 목표는 완료하지 않았으며 다음 기능은 실제 Media 통화 이관/실패 복구와 현황/대시보드다. 실제 사용자/첨부/두 사람 음성·운영 NAS 수락은 [진행표](mvp-progress.md)에 남아 있다.
+- 개발 V14 동시 반영을 완료했고 관리자 하단 스크롤은 기존 수정/검수 상태를 유지한다. 전체 목표는 완료하지 않았으며 다음 기능은 실제 Media 통화 이관/실패 복구와 현황/대시보드다. 실제 사용자/첨부/두 사람 음성·운영 NAS 수락은 [진행표](mvp-progress.md)에 남아 있다.
 
 ## 2026-10-03 업무 이관 화면 연결용 조회·접수 복원 계약
 
