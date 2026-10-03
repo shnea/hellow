@@ -1,5 +1,14 @@
 # 작업 인계 기록
 
+## 2026-10-03 Media 포트 적용·자동 재생 복구 — LTE 원인 추적 중
+
+- 참가자0명을 확인하고 개발 LiveKit 1.13.7에 새 공개 포트/UDP TURN 설정을 적용했다. 짧은 개발 기본 Media 비밀값을 새 값으로 교체하고 기존 API 이미지 `ef6d41c`를 동일 키로 재시작했다. 비밀값은 Git 제외 환경 파일에만 보관한다. API healthy, Nginx 검사/reload, 새 공개 nodeIP와 TCP30163/UDP30164 광고를 확인했다. 실행 중 웹/API 소스는 여전히 `ef6d41c`·V15이며 후속 기능 코드 배포는 아니다. `output/media-port-deployment.json` 참고. 운영 NAS 미반영.
+- 사용자는 3개 음성/TURN 전달 규칙 추가 후에도 Wi-Fi 성공·LTE 실패를 보고했다. localhost/LAN의3478은 TURN 인증 challenge에 응답하지만 공개30167은 timeout이고 relay-only 두 Chrome 연결도 실패했다. 샌드박스 밖 재검사도 동일하다. 공개 DNS와 LiveKit이 찾은 공인IP는 일치한다. Windows 활성 Public 프로필의 Docker Backend 규칙은 TCP/UDP 모두 Any 주소·Any 포트 Allow임을 확인했다. 내부에서 공인IP로 돌아오는 실패만으로 외부 전달 오류를 확정하지 않으며, 실제 LTE 실패와 함께 공유기 규칙 화면을 요청했다. 방화벽을 임의로 해제하거나 규칙을 삭제하지 않았다.
+- PC는 수신/수락은 되지만 시간이0초라고 추가 제보했다. 최근 실사용 연결 완료 로그에는 Samsung Internet 상담사와 Android WebView 고객이 있고 PC 상담사의 ACTIVE는 확인되지 않았다. 한 조회에서 양측 ACTIVE·마이크 송출이 확인됐으나 사용자 기기의 LTE 성공으로 간주하지 않는다. PC 화면 상단의 실제 오류 문구를 요청했다. 공유 시간/실제 음성 상태 구현은 여전히 남았다.
+- 프런트에는 마이크 준비 이후 연결 완료 알림, 자동 재생 차단/클릭 복구, 재연결 상태 표시, 음소거 상태의 통화 hook 소유·재시도 유지·새 통화 초기화를 구현했다. 테스트에서 재시도가 이전 browser lease 해제 전에 새 lease를 요청하는 실패를 재현해 자신의 이전 lease 완료를 기다리도록 수정했다. 같은 origin의 다른 창 중복 차단은 유지한다.
+- 프런트 전체 검사 최초115건 통과 뒤 음소거 재연결 회귀1건이 실패했다. lease 수정 후 관련11건 통과, 나머지105건의 직전 성공과 함께 총116건 범위를 검사했다. Docker 웹 production build/TypeScript·최종 lint 통과.
+- Chrome headless1280×800/768×1024/375×812에서 상담사/고객 자동 재생 차단6장을 실제로 열어 확인하고, 44px 버튼 hit-test·가로 넘침 없음·클릭 후 차단 해제를 검사했다(`output/audio-recovery-ui/`). 실제 LiveKit+합성 마이크, API fixture, 의도적 play 거부를 사용했다. 초기 fixture의 catalog 주소 오류와 로컬 Next에 Media 프록시가 없는 연결 실패를 고친 뒤 임시 WS 프록시로 검수했다. 모바일 한 검사에는 주입한 autoplay 거부 메시지가 기록돼 무오류라고 보고하지 않는다. detector1회는 기존 selection:bg-indigo/selection:text-white를 일반 slate foreground와 결합한 gray-on-color 경고1건이며 새 색상 변경이 없어 유지한다. 삼성 인터넷 실기기·LTE 수락은 별도다.
+
 ## 2026-10-03 LTE 통화 경로 — 포트 설정 준비
 
 - 사용자 실험에서 같은 휴대폰·삼성 인터넷은 LTE 실패, Wi-Fi 연결 성공이다. 태블릿은 삼성 인터넷·Wi-Fi다. 사용자는 음성 포트 전달이 없었다고 확인하고 새 규칙을 추가했다고 알려왔다. 최종 합의는 외부 포트만 분리하고 호스트 기본 포트를 유지하는 방식이다. 개발 `30163/TCP → .55:7881`, `30164/UDP → .55:7882`, TURN `30167/UDP → .55:3478`; 운영 `30165/TCP → .93:7881`, `30166/UDP → .93:7882`, TURN `30168/UDP → .93:3478`이다.

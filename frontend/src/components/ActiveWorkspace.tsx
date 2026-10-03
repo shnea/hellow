@@ -50,6 +50,7 @@ interface ActiveWorkspaceProps {
   recordMode?: boolean;
   busy?: boolean;
   mediaStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  isMuted?: boolean;
   onMute: (muted: boolean) => Promise<void> | undefined;
   callDuration: number;
   isCallActive: boolean;
@@ -75,7 +76,7 @@ interface ActiveWorkspaceProps {
 }
 
 export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
-  customer, queueCode, organizationId, contentRefresh=0, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute,
+  customer, queueCode, organizationId, contentRefresh=0, initialDraft, onDraftChange, readOnly=false, customerReadOnly=readOnly, recordMode=false, busy=false, mediaStatus, onMute, isMuted=false,
   callDuration,
   isCallActive,
   onEndCall,
@@ -88,12 +89,15 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
   onClearQuotedText,
 }) => {
   // Call controls state
-  const [isMuted, setIsMuted] = useState(false);
+  const [muting,setMuting]=useState(false);
   const isOnHold = false;
 
   const handleToggleMute = async () => {
-    try { await onMute(!isMuted); setIsMuted(!isMuted); }
+    if(muting||mediaStatus!=='connected')return;
+    setMuting(true);
+    try { await onMute(!isMuted); }
     catch { setActionError('마이크 상태를 변경하지 못했습니다. 다시 시도해 주세요.'); }
+    finally { setMuting(false); }
   };
   // A media hold requires server signaling and both audio directions; mute is not hold.
   const handleToggleHold = () => setActionError('통화 보류는 아직 지원하지 않습니다. 음소거를 사용할 수 있습니다.');
@@ -329,7 +333,7 @@ export const ActiveWorkspace: React.FC<ActiveWorkspaceProps> = ({
             <>
               {/* Mute Button */}
               <button
-                disabled={readOnly || busy}
+                disabled={readOnly || busy || muting || mediaStatus!=='connected'}
                 onClick={handleToggleMute}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   isMuted

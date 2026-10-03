@@ -1,12 +1,12 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {LiveKitCallSession} from './livekit';
-const mocks=vi.hoisted(()=>({events:new Map<string,(...a:unknown[])=>void>(),mic:vi.fn(async()=>{}),disconnect:vi.fn(),connect:vi.fn(async()=>{})}));
+const mocks=vi.hoisted(()=>({events:new Map<string,(...a:unknown[])=>void>(),mic:vi.fn(async()=>{}),disconnect:vi.fn(),connect:vi.fn(async()=>{}),playback:false,startAudio:vi.fn(async()=>{})}));
 vi.mock('livekit-client',()=>({
- Room:class {localParticipant={setMicrophoneEnabled:mocks.mic};state='connected';on(event:string,cb:(...a:unknown[])=>void){mocks.events.set(event,cb);return this;}connect=mocks.connect;disconnect=mocks.disconnect;},
- RoomEvent:{ConnectionStateChanged:'state',Connected:'connected',Disconnected:'disconnected',TrackSubscribed:'subscribe',TrackUnsubscribed:'unsubscribe',ActiveSpeakersChanged:'speakers'},
+ Room:class {localParticipant={setMicrophoneEnabled:mocks.mic};state='connected';get canPlaybackAudio(){return mocks.playback;}startAudio=mocks.startAudio;on(event:string,cb:(...a:unknown[])=>void){mocks.events.set(event,cb);return this;}connect=mocks.connect;disconnect=mocks.disconnect;},
+ RoomEvent:{ConnectionStateChanged:'state',Connected:'connected',Reconnected:'reconnected',AudioPlaybackStatusChanged:'playback',Disconnected:'disconnected',TrackSubscribed:'subscribe',TrackUnsubscribed:'unsubscribe',ActiveSpeakersChanged:'speakers'},
  Track:{Kind:{Audio:'audio'}},ConnectionState:{Connected:'connected'},DisconnectReason:{DUPLICATE_IDENTITY:'duplicate'},
 }));
-afterEach(()=>{document.body.replaceChildren();mocks.events.clear();vi.restoreAllMocks();mocks.connect.mockResolvedValue(undefined);mocks.mic.mockResolvedValue(undefined);});
+afterEach(()=>{document.body.replaceChildren();mocks.events.clear();vi.restoreAllMocks();mocks.connect.mockResolvedValue(undefined);mocks.mic.mockResolvedValue(undefined);mocks.playback=false;mocks.startAudio.mockReset();});
 it('keeps customer audio when the former agent leaves and removes every remaining track on disposal',async()=>{
  vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
  const call=new LiveKitCallSession();await call.connect('wss://media','fixture-token');
@@ -24,5 +24,16 @@ it('reports a recoverable Korean connection error without exposing the SDK messa
 });
 it('explains microphone permission rejection after the room connects',async()=>{
  mocks.mic.mockRejectedValue(new DOMException('Permission denied','NotAllowedError'));
- const call=new LiveKitCallSession();await expect(call.connect('wss://media','fixture-token')).rejects.toThrow('브라우저의 마이크 권한');
+ const connected=vi.fn();const call=new LiveKitCallSession({onConnected:connected});await expect(call.connect('wss://media','fixture-token')).rejects.toThrow('브라우저의 마이크 권한');expect(connected).not.toHaveBeenCalled();
+});
+it('reports autoplay blocking and starts audio immediately from the user action',async()=>{
+ const changed=vi.fn();const call=new LiveKitCallSession({onAudioPlaybackChanged:changed});await call.connect('wss://media','fixture-token');
+ expect(changed).toHaveBeenLastCalledWith(false);
+ mocks.startAudio.mockImplementation(async()=>{mocks.playback=true;});
+ const action=call.startAudio();expect(mocks.startAudio).toHaveBeenCalledTimes(1);await action;
+ expect(changed).toHaveBeenLastCalledWith(true);
+});
+it('keeps the microphone disabled when restoring a muted session',async()=>{
+ mocks.mic.mockClear();const call=new LiveKitCallSession();await call.connect('wss://media','fixture-token',true);
+ expect(mocks.mic).toHaveBeenCalledExactlyOnceWith(false);
 });

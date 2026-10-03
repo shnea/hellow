@@ -26,6 +26,9 @@ export default function CustomerSupportPage() {
   const [mediaStatus,setMediaStatus]=useState<'idle'|'connecting'|'connected'|'error'>('idle');
   const [mediaError,setMediaError]=useState('');
   const [mediaRetry,setMediaRetry]=useState(0);
+  const [audioBlocked,setAudioBlocked]=useState(false);
+  const [audioError,setAudioError]=useState('');
+  const mutePreference=useRef({sessionId:'',muted:false});
   const [isMuted,setIsMuted]=useState(false);
   const [muting,setMuting]=useState(false);
   const [callDuration,setCallDuration]=useState(0);
@@ -60,17 +63,21 @@ export default function CustomerSupportPage() {
     if(!isVoice || !sessionId)return;
     const abort=new AbortController();
     const manager=new LiveKitCallSession({
-      onConnected:()=>{if(!abort.signal.aborted)setMediaStatus('connected');},
+      onConnected:()=>{if(!abort.signal.aborted){setMediaStatus('connected');setMediaError('');}},
+      onConnectionStateChanged:state=>{if(!abort.signal.aborted&&state==='reconnecting')setMediaStatus('connecting');},
+      onAudioPlaybackChanged:allowed=>{if(!abort.signal.aborted){setAudioBlocked(!allowed);if(allowed)setAudioError('');}},
       onDisconnected:()=>{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결이 끊겼습니다. 접수는 유지됩니다. 음성 다시 연결을 눌러 주세요.');}},
       onError:()=>{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결에 실패했습니다. 마이크 권한과 네트워크를 확인한 뒤 다시 연결해 주세요.');}},
     });
     livekitRef.current=manager;
     void Promise.resolve().then(async()=>{
       if(abort.signal.aborted)return;
-      setMediaStatus('connecting');setMediaError('');setIsMuted(false);
+      setMediaStatus('connecting');setMediaError('');setAudioBlocked(false);setAudioError('');
+      if(mutePreference.current.sessionId!==sessionId)mutePreference.current={sessionId,muted:false};
+      setIsMuted(mutePreference.current.muted);
       try{
         const data=await supportJson<{url:string;token:string}>(`/api/support/session/${sessionId}/token`,{method:'POST',signal:abort.signal});
-        if(!abort.signal.aborted)await manager.connect(data.url,data.token);
+        if(!abort.signal.aborted)await manager.connect(data.url,data.token,mutePreference.current.muted);
       }catch{if(!abort.signal.aborted){setMediaStatus('error');setMediaError('음성 연결을 확인하지 못했습니다. 마이크 권한과 네트워크를 확인한 뒤 다시 연결해 주세요.');}}
     });
     return()=>{abort.abort();manager.disconnect();if(livekitRef.current===manager)livekitRef.current=null;};
@@ -85,9 +92,15 @@ export default function CustomerSupportPage() {
   const handleToggleMute=async()=>{
     if(!livekitRef.current || mediaStatus!=='connected' || muting)return;
     setMuting(true);
-    try{await livekitRef.current.setMuted(!isMuted);setIsMuted(!isMuted);setMediaError('');}
+    const manager=livekitRef.current;
+    try{await manager.setMuted(!isMuted);if(livekitRef.current===manager){mutePreference.current.muted=!isMuted;setIsMuted(!isMuted);setMediaError('');}}
     catch{setMediaError('마이크 상태를 변경하지 못했습니다. 다시 시도해 주세요.');}
     finally{setMuting(false);}
+  };
+  const startAudio=async()=>{
+    const manager=livekitRef.current;if(!manager)return;
+    try{await manager.startAudio();if(livekitRef.current===manager)setAudioError('');}
+    catch{if(livekitRef.current===manager)setAudioError('소리를 재생하지 못했습니다. 브라우저의 소리 권한을 확인한 뒤 다시 눌러 주세요.');}
   };
   const newRequest=()=>{flow.newRequest();setMessage('');setCallDuration(0);setMediaError('');};
   const buttonClass='min-h-12 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-50';
@@ -306,6 +319,7 @@ export default function CustomerSupportPage() {
             <p role="status" className="mb-4 text-slate-300">{mediaStatus==='connected'?'음성 서버에 연결되었습니다':mediaStatus==='connecting'?'마이크와 음성 서버에 연결하고 있습니다':'음성 연결을 확인해 주세요'}</p>
             <p className="mb-6 text-3xl font-semibold tabular-nums">{Math.floor(callDuration/60).toString().padStart(2,'0')}:{(callDuration%60).toString().padStart(2,'0')}</p>
             {mediaStatus==='error'&&<button onClick={()=>setMediaRetry(value=>value+1)} disabled={submitting} className={`${buttonClass} mb-4`}>음성 다시 연결</button>}
+            {audioBlocked&&<div className="mb-4"><p role="status" className="mb-3 text-amber-200">{audioError||'브라우저가 상담사 소리의 자동 재생을 차단했습니다.'}</p><button onClick={()=>void startAudio()} className={buttonClass}>상담사 소리 켜기</button></div>}
             <div className="flex flex-wrap justify-center gap-3">
               <button onClick={()=>void handleToggleMute()} disabled={submitting||muting||mediaStatus!=='connected'} className={buttonClass}>{isMuted?<MicOff className="w-4 h-4 inline mr-2"/>:<Mic className="w-4 h-4 inline mr-2"/>}{isMuted?'음소거 해제':'음소거'}</button>
               <button onClick={()=>void flow.endCall()} disabled={submitting} className={`${buttonClass} bg-rose-600 hover:bg-rose-500`}><PhoneOff className="w-4 h-4 inline mr-2"/>{submitting?'종료 확인 중…':'통화 종료'}</button>

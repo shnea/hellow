@@ -11,18 +11,29 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
   const latest=useRef(options);useEffect(()=>{latest.current=options;},[options]);
   const mediaIdentity=options.mediaIdentity||'';const organizationId=options.organizationId||'';
   const session = useRef<LiveKitCallSession | null>(null);
+  const lease = useRef<Promise<unknown> | null>(null);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState('');
   const [restart,setRestart]=useState(0);
+  const [audioBlocked,setAudioBlocked]=useState(false);
+  const [audioError,setAudioError]=useState('');
+  const [isMuted,setIsMuted]=useState(false);
+  const mutePreference=useRef({key:'',muted:false});
   useEffect(() => {
     // Synchronize the independent media session lifecycle when its queue changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDuration(0);
     setError('');
+    setAudioBlocked(false);setAudioError('');
+    const muteKey=JSON.stringify([organizationId,queueCode]);
+    if(mutePreference.current.key!==muteKey)mutePreference.current={key:muteKey,muted:false};
+    setIsMuted(mutePreference.current.muted);
     if (!queueCode) { setStatus('idle'); return; }
     let active = true;
-    const call = new LiveKitCallSession({ onConnected: () => active && setStatus('connected'),
+    const call = new LiveKitCallSession({ onConnected: () => {if(active){setStatus('connected');setError('');}},
+      onConnectionStateChanged: state=>{if(active&&state==='reconnecting')setStatus('connecting');},
+      onAudioPlaybackChanged: allowed=>{if(active){setAudioBlocked(!allowed);if(allowed)setAudioError('');}},
       onDisconnected: () => active && setStatus('idle'), onError: err => {if(active){setError(err.message);setStatus('error');}} });
     session.current = call;
     setStatus('connecting');
@@ -44,7 +55,7 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
       if(data.identity&&mediaIdentity&&data.identity!==mediaIdentity)throw new Error('통화 담당 연결이 변경되었습니다. 최신 접수를 다시 조회해 주세요.');
       if(preview&&(data.identity!==mediaIdentity||data.roomName!==`${organizationId}-${queueCode}`))throw new Error('이관 통화의 연결 정보를 확인하지 못했습니다. 다시 조회해 주세요.');
       if(!active)return;
-      await call.connect(data.url,data.token);
+      await call.connect(data.url,data.token,mutePreference.current.muted);
       if(!active)return;
       setStatus('connected');
       // Keep this exact room and its browser lease when CONNECTING becomes ACCEPTED.
@@ -63,14 +74,20 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
       }
     };
     // Hold one origin-wide lock for the full media lifecycle, including token acquisition.
-    const start = navigator.locks
-      ? navigator.locks.request('hellow-agent-audio', { ifAvailable: true }, async lock => {
+    const previousLease=lease.current;
+    const start=(async()=>{
+      // A retry in this hook must wait for its own previous lease to release.
+      if(previousLease)await previousLease.catch(()=>{});
+      if(!active)return;
+      if(!navigator.locks)throw new Error('통화 중복 연결 방지를 지원하는 최신 브라우저를 사용해 주세요.');
+      await navigator.locks.request('hellow-agent-audio', { ifAvailable: true }, async lock => {
           if (!active) return;
           if (!lock) throw new Error('다른 창에서 통화가 연결돼 있습니다. 그 창에서 통화를 진행해 주세요.');
           try { await connect(); await new Promise<void>(resolve => { release = resolve; if (!active) resolve(); }); }
           finally { call.disconnect(); }
-        })
-      : Promise.reject(new Error('통화 중복 연결 방지를 지원하는 최신 브라우저를 사용해 주세요.'));
+        });
+    })();
+    lease.current=start;
     void start.catch(err => { if(active) { setError((err as Error).message); setStatus('error'); } });
     return () => { active = false; abort.abort(); release?.(); call.disconnect(); session.current = null; };
   }, [queueCode,mediaIdentity,organizationId,restart]);
@@ -79,5 +96,15 @@ export function useCall(queueCode: string | null,options:CallOptions={}) {
     const timer = setInterval(() => setDuration(value => value + 1), 1000);
     return () => clearInterval(timer);
   }, [status]);
-  return { status, duration, error, retry:()=>setRestart(value=>value+1),setMuted: (muted: boolean) => session.current?.setMuted(muted) };
+  const setMuted=async(muted:boolean)=>{
+    const call=session.current;if(!call)throw new Error('음성 연결을 먼저 확인해 주세요.');
+    await call.setMuted(muted);
+    if(session.current===call){mutePreference.current.muted=muted;setIsMuted(muted);}
+  };
+  const startAudio=async()=>{
+    const call=session.current;if(!call)return;
+    try{await call.startAudio();if(session.current===call)setAudioError('');}
+    catch{if(session.current===call)setAudioError('소리를 재생하지 못했습니다. 브라우저의 소리 권한을 확인한 뒤 다시 눌러 주세요.');}
+  };
+  return { status, duration, error, audioBlocked,audioError,startAudio,isMuted,retry:()=>setRestart(value=>value+1),setMuted };
 }

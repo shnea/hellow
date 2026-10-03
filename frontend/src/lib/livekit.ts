@@ -6,6 +6,7 @@ export interface LiveKitCallbacks {
   onConnected?: (room: Room) => void;
   onDisconnected?: () => void;
   onRemoteAudioAttached?: (element: HTMLAudioElement) => void;
+  onAudioPlaybackChanged?: (allowed: boolean) => void;
   onConnectionStateChanged?: (state: ConnectionState) => void;
   onSpeakingChanged?: (speaking: boolean, participant: Participant) => void;
   onError?: (err: Error) => void;
@@ -29,13 +30,13 @@ export class LiveKitCallSession {
       const isHttps = window.location.protocol === 'https:';
       const wsProto = isHttps ? 'wss:' : 'ws:';
       // 현재 브라우저의 호스트(예: localhost:30160 또는 dev-hellow.shnea.kr:30160)
-      // Nginx의 /livekit/ 프록시를 통해 직접 포트 오픈 없이 30160 단일 포트로 통신 가능
+      // 이 프록시는 시그널링용이다. 실제 오디오는 별도의 ICE/TURN 도달성이 필요하다.
       return `${wsProto}//${window.location.host}/livekit/`;
     }
     return serverUrl || 'ws://localhost:30162';
   }
 
-  public async connect(url: string, token: string): Promise<Room> {
+  public async connect(url: string, token: string, muted = false): Promise<Room> {
     // 이전 연결 정리
     if (this.disposed) throw new Error('종료된 통화 연결입니다.');
 
@@ -50,14 +51,18 @@ export class LiveKitCallSession {
       this.callbacks.onConnectionStateChanged?.(state);
     });
 
-    room.on(RoomEvent.Connected, () => {
-      this.callbacks.onConnected?.(room);
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      if (!this.disposed) this.callbacks.onAudioPlaybackChanged?.(room.canPlaybackAudio);
+    });
+    room.on(RoomEvent.Reconnected, () => {
+      if (!this.disposed) this.callbacks.onConnected?.(room);
     });
 
     room.on(RoomEvent.Disconnected, (reason) => {
-      this.callbacks.onDisconnected?.();
       this.cleanupAudio();
-      if(!this.disposed) this.callbacks.onError?.(new Error(reason===DisconnectReason.DUPLICATE_IDENTITY
+      if(this.disposed)return;
+      this.callbacks.onDisconnected?.();
+      this.callbacks.onError?.(new Error(reason===DisconnectReason.DUPLICATE_IDENTITY
         ? '다른 브라우저에서 같은 계정으로 통화에 연결하여 음성 연결이 종료됐습니다.'
         : '음성 서버 연결이 끊겼습니다. 상담 내용은 유지됩니다.'));
     });
@@ -93,15 +98,17 @@ export class LiveKitCallSession {
         await room.connect(wsUrl, token);
       } catch (proxyErr) {
         if(this.disposed) throw proxyErr;
-        console.warn('LiveKit proxy connect failed, trying direct server url:', url, proxyErr);
+        console.warn('음성 시그널링 프록시 연결 실패. 대체 서버 연결을 시도합니다.');
         // fallback: 백엔드가 내려준 direct url (예: ws://localhost:30162)
         await room.connect(url, token);
       }
 
       // 2. 마이크 활성화 및 로컬 오디오 스트림 송출
       if(this.disposed) { await room.disconnect(); throw new Error('통화 연결이 취소되었습니다.'); }
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(!muted);
       if(this.disposed) { await room.disconnect(); throw new Error('통화 연결이 취소되었습니다.'); }
+      this.callbacks.onConnected?.(room);
+      this.callbacks.onAudioPlaybackChanged?.(room.canPlaybackAudio);
 
       return room;
     } catch (err) {
@@ -122,6 +129,14 @@ export class LiveKitCallSession {
     if (this.room?.localParticipant) {
       await this.room.localParticipant.setMicrophoneEnabled(!muted);
     }
+  }
+
+  /** Must be called directly from a click/tap when the browser blocks autoplay. */
+  public async startAudio(): Promise<void> {
+    if (!this.room || this.disposed) throw new Error('음성 연결을 먼저 확인해 주세요.');
+    await this.room.startAudio();
+    this.callbacks.onAudioPlaybackChanged?.(this.room.canPlaybackAudio);
+    if (!this.room.canPlaybackAudio) throw new Error('소리 재생이 차단되어 있습니다. 다시 눌러 주세요.');
   }
 
   public disconnect(): void {

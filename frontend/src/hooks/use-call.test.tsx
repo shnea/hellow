@@ -1,11 +1,11 @@
 import React from 'react';
-import { act,cleanup,render,screen } from '@testing-library/react';
+import { act,cleanup,fireEvent,render,screen } from '@testing-library/react';
 import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import type {WorkTransfer} from '@/lib/work-transfer';
 import { useCall } from './use-call';
-const mocks=vi.hoisted(()=>({token:vi.fn<(path:string,options?:RequestInit)=>Promise<unknown>>(async()=>({url:'wss://media',token:'test'})),connect:vi.fn(),disconnect:vi.fn()}));
+const mocks=vi.hoisted(()=>({token:vi.fn<(path:string,options?:RequestInit)=>Promise<unknown>>(async()=>({url:'wss://media',token:'test'})),connect:vi.fn(),disconnect:vi.fn(),mute:vi.fn(async()=>{})}));
 vi.mock('@/lib/api',async importOriginal=>({...await importOriginal<typeof import('@/lib/api')>(),apiJson:mocks.token}));
-vi.mock('@/lib/livekit',()=>({LiveKitCallSession:class {connect=mocks.connect;disconnect=mocks.disconnect;setMuted=vi.fn();}}));
+vi.mock('@/lib/livekit',()=>({LiveKitCallSession:class {connect=mocks.connect;disconnect=mocks.disconnect;setMuted=mocks.mute;}}));
 function Call({code,preview,identity,onChanged}:{code:string;preview?:WorkTransfer|null;identity?:string;onChanged?:(t:WorkTransfer)=>void}) {const c=useCall(code,{organizationId:preview||identity?'org':undefined,mediaIdentity:identity,transfer:preview,onTransferChanged:onChanged});return <p>{c.error||c.status}</p>;}
 beforeEach(()=>{vi.clearAllMocks();mocks.token.mockResolvedValue({url:'wss://media',token:'test'});mocks.connect.mockResolvedValue(undefined);});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();mocks.token.mockClear();});
@@ -23,6 +23,14 @@ it('holds a single media lease across windows and does not request a duplicate t
 const pending={id:'12345678-1234-4123-8123-abcdefabcdef',kind:'CALL',organizationId:'org',consultationId:1,queueCode:'q-one',version:1,status:'CONNECTING',targetMediaIdentity:'transfer-one'} as WorkTransfer;
 function locks(){let held=false;vi.stubGlobal('navigator',{locks:{request:vi.fn(async(_n:string,_o:unknown,cb:(lock:object|null)=>Promise<void>)=>{if(held)return cb(null);held=true;try{return await cb({});}finally{held=false;}})}});return ()=>held;}
 const flush=async()=>{await act(async()=>{for(let i=0;i<8;i++)await Promise.resolve();});};
+it('retains mute on reconnect and resets it for a different call',async()=>{
+  locks();
+  function Controls({code}:{code:string}){const c=useCall(code);return <><span>{c.isMuted?'muted':'unmuted'}</span><button onClick={()=>void c.setMuted(true)}>mute</button><button onClick={c.retry}>retry</button></>;}
+  const view=render(<Controls code="first"/>);await flush();
+  fireEvent.click(screen.getByText('mute'));await flush();expect(screen.getByText('muted')).toBeTruthy();
+  fireEvent.click(screen.getByText('retry'));await flush();expect(mocks.connect).toHaveBeenLastCalledWith('wss://media','test',true);expect(screen.getByText('muted')).toBeTruthy();
+  view.rerender(<Controls code="second"/>);await flush();expect(mocks.connect).toHaveBeenLastCalledWith('wss://media','test',false);expect(screen.getByText('unmuted')).toBeTruthy();
+});
 it('retains the same room and media lease after a CALL preview becomes the assigned queue',async()=>{
   const held=locks();const changed=vi.fn();const accepted={...pending,status:'ACCEPTED',version:2};
   mocks.token.mockImplementation(async(path?:string)=>path?.endsWith('/media-token')?{transfer:pending,media:{url:'wss://media',token:'preview',identity:'transfer-one',roomName:'org-q-one'}}:accepted as never);
