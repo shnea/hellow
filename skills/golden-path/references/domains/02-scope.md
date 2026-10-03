@@ -21,7 +21,7 @@
 | --- | --- | --- | --- | --- |
 | MVP-01 | OIDC 로그인·Platform Super Admin·Organization 생성·최초 Admin·초대·로그인 이력·Team·Role·Permission·Data Scope | 가입 후 자동 조직/권한 없음, 조직 격리·권한 회수·관리자 보호·관측 가능한 로그인 이력 검증 | MVP | 부분 구현: Bearer JWT·API audience 검증, Organization/Membership/Permission/ORG 서버 격리와 권한 회수 테스트. 실제 OIDC 발급 계약·첫 조직 권한 배정, 관리자 UI·Team·SELF/TEAM 등은 남음 |
 | MVP-02 | Customer·상담유형·상담결과·Consultation | 미등록 고객 상담 가능, 고객·상담·배정 시도 관계와 후처리·초안/확정 구분 | MVP | 부분 구현: Queue/Customer 식별자 분리, 상담별 초안·version, Editor JSON, 저장·이력·완료 원자 처리와 재조회. 등록 시 저장된 이력 동기화와 직원 확인에 따른 과거 미연결 이력의 연결·취소 구현. 실사용/첨부 수락은 남음 |
-| MVP-03 | Agent 상태·Queue·기본 ACD·WebRTC 1:1·통화 조작·통화/배정 이력 | 원자 배정·수락/거절·음소거/보류 구분·연결/재접속 실패·시도별 이력 검증 | MVP | 부분 구현: Queue 수락 잠금·상담사당 CALL 하나, LiveKit 토큰·종료 재시도, 활성 통화/조회 분리. ACD 가용 상태·실제 2인 통화·재접속 수락은 남음 |
+| MVP-03 | Agent 상태·Queue·기본 ACD·WebRTC 1:1·통화 조작·통화/배정 이력 | 원자 배정·수락/거절·음소거/보류 구분·연결/재접속 실패·시도별 이력 검증 | MVP | 부분 구현: 서버 가용 상태/단일 Identity·LONGEST_IDLE·거절/미수신/시간 초과/재배정·시도 저장과 V10 복원/실제 PostgreSQL 검증. 상태/배정 화면 연결·동시 배포·실제 2인 통화·재접속 수락은 남음 |
 | MVP-04 | 공통 고객 웹 상담 페이지·공개 URL·홈페이지 버튼·최소 로고/색상/문구 | 명시 요청·유효 세션·연결 준비 후 배정, 미리보기/중복 클릭이 Queue 중복 생성 안 함 | MVP | 부분 구현: 고객 웹 상담 진입과 Queue 요청, 폴링·오래된 응답 폐기. 실제 서비스 환경의 중복 진입·연결 실패 수락은 남음 |
 | MVP-05 | Callback·Reservation·Transfer | 담당자·일정·재배정·통화/업무 이관 구분·실패 복구, WebRTC만으로 PSTN 발신 약속 안 함 | MVP | 부분 구현: 방문·콜백 PENDING 접수. 일정·가용 인력 확정, 실제 전환·재발신·메시징은 미연동 |
 | MVP-06 | 기본 Dashboard·Observability | 허용 범위 통계, 구조화 로그·Trace ID·Health·기본 Metrics·배포 버전 확인 | MVP | 미완료: 현재 리뷰 수정의 수락 범위 밖. 실제 대시보드·관측성 검증 필요 |
@@ -48,7 +48,7 @@
 
 - 완료한 수정: 인증 거부 기본값, 조직별 서버 조회·권한 확인, PRIVATE 파일 소유 관계, 상담별 초안과 완료 트랜잭션, 실제 이력 재조회, 순차 폴링과 오류 표시. 상세 처리와 근거는 [리뷰 수정 결과](../../../../docs/review-repair.md)를 따른다.
 - 설정·운영 수락 전: 실제 OIDC issuer/API audience와 첫 조직·직원 Membership, 승인된 파일 보존 정책, 기존 PUBLIC 파일 조사·이관, 운영 DB migration/restore, NAS 배포를 확인해야 한다.
-- 제품 통합 수락 전: HTTPS 마이크 권한, 실제 2인 WebRTC 통화, LiveKit 참가자 제거 실패·재시작과 권한 회수 뒤 실제 연결 종료를 검증해야 한다. 관리자 UI·TEAM/SELF·등록 전 이력 연결은 코드/격리 검수가 있으며 실제 사용자 수락은 남아 있다. ACD 가용 상태·예약/이관·모니터링은 후속 구현이다.
+- 제품 통합 수락 전: HTTPS 마이크 권한, 실제 2인 WebRTC 통화, LiveKit 참가자 제거 실패·재시작과 권한 회수 뒤 실제 연결 종료를 검증해야 한다. 관리자 UI·TEAM/SELF·등록 전 이력 연결은 코드/격리 검수가 있으며 실제 사용자 수락은 남아 있다. 서버 상태·ACD의 화면 연결/동시 배포·예약/이관·모니터링은 후속 구현이다.
 
 MVP 전체는 완료되지 않았다. 이번 서버·화면 테스트 통과 범위와 미실행 검증은 [검증 영역](11-validation.md)에 기록한다.
 
@@ -65,4 +65,4 @@ MVP 전체는 완료되지 않았다. 이번 서버·화면 테스트 통과 범
 | Phase 4 | SIP, Asterisk 등 SIP 인프라, 실제 전화번호, CTI, PSTN Inbound/Outbound | 후속·미구현 |
 | Phase 2 이후 선택 확장 | Widget, 고객 SDK/API, 진입점별 설정, 카카오·톡톡·Instagram DM Adapter; 링크·접수·통합 채팅을 각각 정의 | 후보·도입 순서 미정 |
 
-초기 Routing은 ROUND_ROBIN 또는 LONGEST_IDLE 중 상세설계에서 선택한다. 상태명 예시, 정확한 Media 보류·이관 의미, Timeout·재Queue·재접속 정책, 고객 재상담 연결 조건은 구현 전 해당 상세설계에서 정한다.
+초기 Routing은 LONGEST_IDLE로 정했다. 서버 가용 상태, 단일 Identity 예약, 30초 제안/45초 heartbeat, 거절·미수신·시간 초과와 최대 10회·명시적 재시작 계약은 [초기 자동 배정 계약](../../../../docs/contact-routing.md)에 둔다. 웹/API 동시 반영과 실제 수락은 인계 기록에서 구분한다. 정확한 Media 보류·이관 의미와 Media 재접속 정책은 해당 후속 작업 전에 정한다.

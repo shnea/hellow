@@ -9,12 +9,14 @@ public class SessionAuditController {
   private final MembershipRepository memberships;
   private final OrganizationRepository organizations;
   private final AuditEvents audit;
-  public SessionAuditController(WorkspaceAccess access, MembershipRepository memberships, OrganizationRepository organizations, AuditEvents audit) {
-    this.access = access; this.memberships = memberships; this.organizations = organizations; this.audit = audit;
+  private final kr.shnea.hellow.routing.RoutingService routing;
+  public SessionAuditController(WorkspaceAccess access, MembershipRepository memberships, OrganizationRepository organizations, AuditEvents audit,kr.shnea.hellow.routing.RoutingService routing) {
+    this.access = access; this.memberships = memberships; this.organizations = organizations; this.audit = audit;this.routing=routing;
   }
   @PostMapping("/{action:login|logout}") @Transactional
   public void session(@PathVariable String action) {
     var jwt = access.identity();
+    if(action.equals("logout"))routing.logout(jwt.getIssuer().toString(),jwt.getSubject());
     audit.record(null, "CRM_" + action.toUpperCase(java.util.Locale.ROOT), jwt.getSubject(), "CRM 세션 " + action);
     memberships.findByIssuerAndSubjectAndActiveTrue(jwt.getIssuer().toString(), jwt.getSubject()).forEach(
         m -> audit.record(m.getOrganizationId(), "CRM_" + action.toUpperCase(java.util.Locale.ROOT), jwt.getSubject(), "CRM 세션 " + action));

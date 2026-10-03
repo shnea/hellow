@@ -14,6 +14,7 @@ platform:
   api-url: http://localhost:59999
   oidc-issuer: https://identity.example/realms/test
 hellow:
+  routing-enabled: false
   media-cleanup-enabled: false
   attachment-retention-code: test-policy
   seed-demo: false

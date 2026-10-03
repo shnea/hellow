@@ -43,4 +43,9 @@ public interface QueueItemRepository extends JpaRepository<QueueItem, Long>, org
   List<QueueItem> findByStatusInOrderByCreatedAtDesc(List<QueueItem.QueueStatus> statuses);
 
   long countByStatus(QueueItem.QueueStatus status);
+
+  List<QueueItem> findByOrganizationIdAndStatusOrderByCreatedAtAsc(String org,QueueItem.QueueStatus status);
+
+  @org.springframework.data.jpa.repository.Query("select q from QueueItem q where q.status=kr.shnea.hellow.queue.QueueItem$QueueStatus.PROCESSING and (q.ownerIssuer=:issuer or q.ownerIssuer is null) and q.assignedSubject=:subject order by q.createdAt")
+  List<QueueItem> activeForIdentity(String issuer,String subject);
 }

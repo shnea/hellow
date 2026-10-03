@@ -41,9 +41,13 @@ class WorkspaceIntegrationTest {
   @Autowired AttachmentRepository files;
   @MockitoBean JwtDecoder decoder;
   @MockitoBean PlatformClient platform;
+  @Autowired kr.shnea.hellow.routing.AgentPresenceRepository presence;
+  @Autowired kr.shnea.hellow.routing.AssignmentAttemptRepository attempts;
+  @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
 
   @BeforeEach
   void setup() {
+    attempts.deleteAll();presence.deleteAll();
     files.deleteAll();
     revisions.deleteAll();
     timelines.deleteAll();
@@ -88,8 +92,17 @@ class WorkspaceIntegrationTest {
   }
 
   void accept(String subject, String code) throws Exception {
-    mvc.perform(actor(post("/api/queue/" + code + "/accept"), subject, "org-a"))
+    ready(subject);
+    mvc.perform(acceptRequest(subject,code))
         .andExpect(status().isOk());
+  }
+  void ready(String subject)throws Exception{
+    var state=json.readTree(mvc.perform(actor(post("/api/agents/me/heartbeat"),subject,"org-a")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    if(state.path("state").asText().equals("OFFLINE"))mvc.perform(actor(put("/api/agents/me/status"),subject,"org-a").contentType(MediaType.APPLICATION_JSON).content("{\"state\":\"AVAILABLE\",\"expectedVersion\":"+state.path("version").asLong()+"}")).andExpect(status().isOk());
+  }
+  MockHttpServletRequestBuilder acceptRequest(String subject,String code){
+    var offer=attempts.activeForQueue("org-a",code).filter(a->a.getAgentSubject().equals(subject));
+    return actor(post("/api/queue/"+code+"/accept"),subject,"org-a").contentType(MediaType.APPLICATION_JSON).content(offer.map(a->"{\"attemptId\":\""+a.getId()+"\"}").orElse("{}"));
   }
 
   String body(long version, boolean complete) {
@@ -133,6 +146,7 @@ class WorkspaceIntegrationTest {
 
   @Test
   void queueAcceptanceIsAtomicAndOwnerOnly() throws Exception {
+    ready("alice");ready("bob");
     var pool = Executors.newFixedThreadPool(2);
     var start = new CountDownLatch(1);
     try {
@@ -144,7 +158,7 @@ class WorkspaceIntegrationTest {
                           () -> {
                             start.await();
                             return mvc.perform(
-                                    actor(post("/api/queue/q-a/accept"), subject, "org-a"))
+                                    acceptRequest(subject,"q-a"))
                                 .andReturn()
                                 .getResponse()
                                 .getStatus();
@@ -313,6 +327,7 @@ class WorkspaceIntegrationTest {
 
   @Test
   void publicSessionOnlyConnectsAfterAcceptanceAndCannotCompleteStaffRecord() throws Exception {
+    queues.delete(queues.findByCode("q-a").orElseThrow());
     String payload =
         """
         {"organizationCode":"public-a","requestId":"browser-request-1","customerType":"INDIVIDUAL","customerName":"Public customer","phoneNumber":"01000000000","inquiryType":"Support","message":"Help please","channel":"CALL"}

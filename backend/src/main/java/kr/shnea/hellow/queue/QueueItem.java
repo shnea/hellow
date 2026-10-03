@@ -81,6 +81,9 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   private boolean callEnded;
   private java.time.Instant mediaCleanupUntil;
   @Version private Long version;
+  @Column(nullable=false) private int routingCycle;
+  public int getRoutingCycle(){return routingCycle;}
+  public void restartRouting(){routingCycle++;}
 
   public String getCustomerCode() {
     return customerCode;

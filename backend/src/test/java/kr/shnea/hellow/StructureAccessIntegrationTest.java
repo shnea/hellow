@@ -37,7 +37,10 @@ class StructureAccessIntegrationTest {
   @Autowired AuditEventRepository audits;@Autowired PlatformProperties properties;
   @MockitoBean JwtDecoder decoder;@MockitoBean PlatformClient platform;@MockitoBean LiveKitService media;
   Consultation aliceRecord,bobRecord,otherRecord;
+  @Autowired kr.shnea.hellow.routing.AgentPresenceRepository presence;
+  @Autowired kr.shnea.hellow.routing.AssignmentAttemptRepository attempts;
   @BeforeEach void setup() {
+    attempts.deleteAll();presence.deleteAll();
     files.deleteAll();revisions.deleteAll();timelines.deleteAll();records.deleteAll();queues.deleteAll();customers.deleteAll();
     audits.deleteAll();members.deleteAll();roles.deleteAll();teams.deleteAll();organizations.deleteAll();
     organizations.save(new Organization("a","A","public-a"));organizations.save(new Organization("b","B","public-b"));
@@ -143,7 +146,10 @@ class StructureAccessIntegrationTest {
   @Test void sharedWaitingQueueIsVisibleToAcceptorsButAnotherTeamsActiveQueueIsHidden() throws Exception {
     var waiting=new QueueItem("waiting",QueueItem.ItemType.CALL,Customer.CustomerType.INDIVIDUAL,"접수",null,"010","waiting","normal","request",true,false,false);waiting.setOrganizationId("a");queues.save(waiting);
     assertThat(getJson("/api/queue","alice").size()).isEqualTo(1);
-    mvc.perform(actor(post("/api/queue/waiting/accept"),"bob","a")).andExpect(status().isOk());
+    mvc.perform(actor(post("/api/agents/me/heartbeat"),"bob","a")).andExpect(status().isOk());
+    mvc.perform(actor(put("/api/agents/me/status"),"bob","a").contentType(MediaType.APPLICATION_JSON).content("{\"state\":\"AVAILABLE\",\"expectedVersion\":0}")).andExpect(status().isOk());
+    var offered=attempts.activeForQueue("a","waiting").orElseThrow();
+    mvc.perform(actor(post("/api/queue/waiting/accept"),"bob","a").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("attemptId",offered.getId())))).andExpect(status().isOk());
     assertThat(getJson("/api/queue","alice").size()).isEqualTo(0);
     assertThat(getJson("/api/queue","lead").size()).isEqualTo(1);
     assertThat(getJson("/api/queue","bob").size()).isEqualTo(1);
