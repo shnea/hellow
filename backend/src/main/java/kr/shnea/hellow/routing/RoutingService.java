@@ -268,7 +268,7 @@ public class RoutingService {
   @Transactional(readOnly=true)
   public List<AttemptView> history(WorkspaceAccess.Actor actor,String code){
     var q=queues.findByOrganizationIdAndCode(actor.organizationId(),code).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
-    if(!(actor.allows(q)||q.getStatus()==QueueItem.QueueStatus.WAITING&&q.getOwnerSubject()==null&&actor.grants().containsKey("queue:accept")))throw new ResponseStatusException(NOT_FOUND);
+    actor.requireRow(q);
     return attempts.findTop100ByOrganizationIdAndQueueCodeOrderByOfferedAtDesc(actor.organizationId(),code).stream()
       .map(a->new AttemptView(a.getId(),a.getAgentSubject(),a.getAgentName(),a.getOfferedAt(),a.getExpiresAt(),a.getReceivedAt(),a.getFinishedAt(),a.getOutcome(),a.getRoutingCycle())).toList();
   }

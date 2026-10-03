@@ -62,7 +62,7 @@ export const mockQueueItems: QueueItem[] = [
     phoneNumber: '010-5512-9903',
     waitTimeOrSchedule: '42분 전 접수',
     priority: 'normal',
-    summary: '[티켓 #TK-2026-089] 결제 모듈 Webhook 전송 실패 에러 로그 분석 요청',
+    summary: '[문의 #TK-2026-089] 결제 모듈 Webhook 전송 실패 에러 로그 분석 요청',
     isRegistered: true,
   },
   {

@@ -75,7 +75,7 @@ export function validateSupportSession(value: SupportSession): SupportSession {
 }
 
 export async function prepareSupportMicrophone() {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error('음성 상담은 HTTPS와 마이크 지원 브라우저가 필요합니다. 온라인 티켓을 선택할 수 있습니다.');
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('음성 상담은 HTTPS와 마이크 지원 브라우저가 필요합니다. 온라인 문의를 선택할 수 있습니다.');
   const stream = await navigator.mediaDevices.getUserMedia({audio:true});
   stream.getTracks().forEach(track => track.stop());
 }

@@ -28,12 +28,13 @@ public class CustomerConsultationController {
   private final kr.shnea.hellow.content.CatalogService catalog;
   private final ConsultationHistoryQuery history;
   private final kr.shnea.hellow.customer.CustomerIdentityService customerIdentity;
+  private final kr.shnea.hellow.recording.CallRecordingRepository recordings;
   public CustomerConsultationController(ConsultationRepository records,ConsultationRevisionRepository revisions,
-      CustomerRepository customers,QueueItemRepository queues,AttachmentRepository attachments,WorkspaceAccess access,ObjectMapper json,kr.shnea.hellow.content.CatalogService catalog,ConsultationHistoryQuery history,kr.shnea.hellow.customer.CustomerIdentityService customerIdentity) {
+      CustomerRepository customers,QueueItemRepository queues,AttachmentRepository attachments,WorkspaceAccess access,ObjectMapper json,kr.shnea.hellow.content.CatalogService catalog,ConsultationHistoryQuery history,kr.shnea.hellow.customer.CustomerIdentityService customerIdentity,kr.shnea.hellow.recording.CallRecordingRepository recordings) {
     this.records=records;this.revisions=revisions;this.customers=customers;this.queues=queues;
     this.attachments=attachments;this.access=access;this.json=json;
     this.catalog=catalog;
-    this.history=history;this.customerIdentity=customerIdentity;
+    this.history=history;this.customerIdentity=customerIdentity;this.recordings=recordings;
   }
   @GetMapping("/customer/{code}")
   public List<Map<String,Object>> list(@PathVariable String code) {
@@ -45,11 +46,17 @@ public class CustomerConsultationController {
   }
   public record HistoryPage(List<Map<String,Object>> items,int page,boolean hasMore){}
   @GetMapping
-  public HistoryPage history(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="") String search){
+  public HistoryPage history(@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="") String search,
+      @RequestParam(defaultValue="all") String scope,@RequestParam(defaultValue="") String name,@RequestParam(defaultValue="") String phone,
+      @RequestParam(defaultValue="") String status,@RequestParam(defaultValue="") String assignee,
+      @RequestParam(required=false) java.time.Instant from,@RequestParam(required=false) java.time.Instant to){
     var actor=access.require("consultation:read");
-    if(page<0||page>100000||search.length()>100)throw new ResponseStatusException(BAD_REQUEST);
-    var ids=history.ids(actor,page,search);
-    return new HistoryPage(ids.stream().limit(50).map(id->id<0?intakeView(actor,-id):view(actor,requireRecord(actor,id))).toList(),page,ids.size()>50);
+    if(page<0||page>100000||java.util.stream.Stream.of(search,name,phone,assignee).anyMatch(s->s.length()>100)
+        ||!Set.of("all","mine").contains(scope)||!Set.of("","WAITING","PROCESSING","COMPLETED","CANCELLED","IN_PROGRESS","ESCALATED").contains(status)
+        ||from!=null&&to!=null&&!from.isBefore(to))throw new ResponseStatusException(BAD_REQUEST);
+    var reader="mine".equals(scope)?new WorkspaceAccess.Actor(actor.organizationId(),actor.subject(),actor.name(),actor.issuer(),actor.teamId(),kr.shnea.hellow.security.DataScope.SELF,actor.teamIds(),actor.grants()):actor;
+    var ids=history.ids(reader,page,search,name,phone,status,assignee,from,to);
+    return new HistoryPage(ids.stream().limit(50).map(id->id<0?intakeView(reader,-id):view(reader,requireRecord(reader,id))).toList(),page,ids.size()>50);
   }
   /** An accepted standalone transfer can be opened without granting access to other customer records. */
   @GetMapping("/{id}")
@@ -66,14 +73,16 @@ public class CustomerConsultationController {
     if(existing.isPresent()){actor.requireRow(existing.get());return view(actor,existing.get());}
     var result=new LinkedHashMap<String,Object>();result.put("id",-id);result.put("version",0);result.put("queueCode",q.getCode());result.put("customerCode",q.getCustomerCode());
     result.put("customerName",q.getCustomerName());result.put("phoneNumber",q.getPhoneNumber());result.put("companyName",q.getCompanyName());result.put("customerType",q.getCustomerType());result.put("customerRegistered",q.getCustomerCode()!=null);
-    result.put("contactVersion",q.getVersion());result.put("contactEditable",actor.can("customer:write",q));result.put("createdAt",q.getCreatedAt());result.put("agentName",q.getAssignedAgent());
+    result.put("contactVersion",q.getVersion());result.put("contactEditable",actor.can("customer:write",q));result.put("createdAt",q.getCreatedAt());result.put("receivedAt",q.getCreatedAt());result.put("type",q.getType());result.put("processingStatus",q.getStatus());result.put("agentName",q.getAssignedAgent());
     result.put("categoryMain","일반 상담");result.put("categorySub",q.getInquiryType()==null?"일반 문의":q.getInquiryType());result.put("status",q.getStatus());result.put("memo",q.getSummary());result.put("tags","");
     boolean processing=q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING;
-    result.put("processing",processing);result.put("editable",actor.can("consultation:write",q)&&!processing);return result;
+    result.put("processing",processing);result.put("editable",actor.can("consultation:write",q)&&!processing);recordingStatus(result,actor,q.getCode());return result;
   }
   private Map<String,Object> view(WorkspaceAccess.Actor actor,Consultation record) {
     Map<String,Object> view=json.convertValue(record,new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>(){});
     var intake=record.getQueueCode()==null?Optional.<QueueItem>empty():queues.findByOrganizationIdAndCode(actor.organizationId(),record.getQueueCode());
+    view.put("receivedAt",intake.map(QueueItem::getCreatedAt).orElse(record.getCreatedAt()));view.put("type",intake.map(q->q.getType().name()).orElse("MANUAL"));
+    view.put("processingStatus",intake.map(q->q.getStatus().name()).orElse(record.getStatus().name()));
     var customer=record.getCustomerCode()==null?Optional.<kr.shnea.hellow.customer.Customer>empty():customers.findByOrganizationIdAndCode(actor.organizationId(),record.getCustomerCode());
     view.put("customerName",customer.map(c->c.getName()).orElseGet(()->intake.map(QueueItem::getCustomerName).orElse("상담 고객")));
     view.put("phoneNumber",customer.map(c->c.getPhoneNumber()).orElseGet(()->intake.map(QueueItem::getPhoneNumber).orElse("")));
@@ -83,8 +92,9 @@ public class CustomerConsultationController {
     view.put("contactVersion",intake.map(QueueItem::getVersion).orElse(0L));
     view.put("contactEditable",customer.map(c->actor.can("customer:write",c)).orElseGet(()->intake.map(q->actor.can("customer:write",q)).orElse(false)));
     boolean processing=intake.map(q->q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING).orElse(false);
-    view.put("processing",processing);view.put("editable",actor.can("consultation:write",record)&&!processing);return view;
+    view.put("processing",processing);view.put("editable",actor.can("consultation:write",record)&&!processing);recordingStatus(view,actor,record.getQueueCode());return view;
   }
+  private void recordingStatus(Map<String,Object> result,WorkspaceAccess.Actor actor,String code){if(code!=null)recordings.findByOrganizationIdAndQueueCode(actor.organizationId(),code).ifPresent(r->result.put("recordingStatus",r.getState().name()));}
   public record CreateRequest(@NotBlank String customerCode,@NotNull UUID requestId) {}
   @PostMapping
   @Transactional

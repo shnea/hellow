@@ -18,7 +18,7 @@ public class OrganizationAdminController {
   private final AuditEvents audit;
   private final AuditEventRepository events;
   public static final Set<String> PERMISSIONS = Set.of("organization:admin", "customer:read", "customer:write",
-      "queue:read", "queue:accept", "consultation:read", "consultation:write", "consultation:transfer", "transfer:read", "followup:read", "followup:write", "followup:assign", "template:personal");
+      "queue:read", "queue:accept", "consultation:read", "consultation:write", "consultation:transfer", "transfer:read", "followup:read", "followup:write", "followup:assign", "template:personal", "recording:read", "recording:manage");
   public OrganizationAdminController(WorkspaceAccess access, AdminAccess admin, OrganizationRepository organizations,
       MembershipRepository memberships, AuditEvents audit, AuditEventRepository events) {
     this.access = access; this.admin = admin; this.organizations = organizations;

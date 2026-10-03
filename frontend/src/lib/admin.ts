@@ -9,12 +9,13 @@ export interface AdminInvitation { id: string; recipientEmail: string; expiresAt
 export interface AdminEvent { id: number; occurredAt: string; action: string; actorSubject: string; target: string | null; details: string | null; }
 export interface SettingsView { version: number; overrides: Record<string,string>; effective: Record<string,string>; }
 export const permissionLabels: Record<string,string> = {
+  'recording:read':'통화 녹음 재생·다운로드', 'recording:manage':'통화 녹음 저장 재시도',
   'organization:admin':'조직 관리', 'customer:read':'고객 조회', 'customer:write':'고객 등록·수정',
   'queue:read':'대기열 조회', 'queue:accept':'상담 수락', 'consultation:read':'상담 기록 조회',
   'consultation:write':'상담 기록 작성', 'consultation:transfer':'상담 이관 요청', 'transfer:read':'상담 이관 조회·응답',
   'followup:read':'후속 업무 조회','followup:write':'후속 업무 작성·처리','followup:assign':'후속 업무 재배정','template:personal':'내 템플릿 관리',
 };
-export const agentPermissions = Object.keys(permissionLabels).filter(key=>key!=='organization:admin'&&key!=='followup:assign');
+export const agentPermissions = Object.keys(permissionLabels).filter(key=>key!=='organization:admin'&&key!=='followup:assign'&&key!=='recording:manage'&&key!=='recording:read');
 export function adminJson<T>(path:string, organizationId:string, options:RequestInit={}) {
   const headers=new Headers(options.headers);
   if(organizationId) headers.set('X-Organization-ID',organizationId);

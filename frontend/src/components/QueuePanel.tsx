@@ -126,7 +126,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          티켓 <span className="text-[10px] text-indigo-400">({ticketCount})</span>
+          문의 <span className="text-[10px] text-indigo-400">({ticketCount})</span>
         </button>
       </div>
 
@@ -166,7 +166,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = ({
                   {item.type === 'ticket' && (
                     <span className="flex items-center gap-1 text-[11px] font-medium text-indigo-400 bg-indigo-950/50 px-2 py-0.5 rounded-full border border-indigo-800/40">
                       <TicketCheck className="w-3 h-3 text-indigo-400" />
-                      할당 티켓
+                      배정 문의
                     </span>
                   )}
 

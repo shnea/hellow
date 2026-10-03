@@ -12,6 +12,31 @@ import org.springframework.mock.web.MockMultipartFile;
 
 class PlatformUploadTest {
   @Test
+  void resolvesRelativePlaybackCapabilitiesAgainstPlatformOrigin() throws Exception {
+    var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/api/v1/files/audio/view-ticket", exchange -> {
+      assertThat(exchange.getRequestHeaders().getFirst("X-Platform-Key")).isEqualTo("test-key");
+      byte[] body = "{\"originalUrl\":\"/api/v1/files/audio/content/original?token=fixture\",\"downloadUrl\":\"https://cdn.example.test/audio\",\"previewUrl\":null,\"state\":\"READY\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Content-Type", "application/json");
+      exchange.sendResponseHeaders(200, body.length);
+      exchange.getResponseBody().write(body);
+      exchange.close();
+    });
+    server.start();
+    try {
+      var origin = "http://127.0.0.1:" + server.getAddress().getPort();
+      var properties = mock(PlatformProperties.class);
+      when(properties.getApiUrl()).thenReturn(origin);
+      when(properties.getApiKey()).thenReturn("test-key");
+      var result = new PlatformClient(properties).getViewTicket("audio");
+      assertThat(result.get("originalUrl")).isEqualTo(origin + "/api/v1/files/audio/content/original?token=fixture");
+      assertThat(result.get("downloadUrl")).isEqualTo("https://cdn.example.test/audio");
+      assertThat(result.get("previewUrl")).isNull();
+      assertThat(result.get("state")).isEqualTo("READY");
+    } finally { server.stop(0); }
+  }
+
+  @Test
   void resumesAcknowledgedBytesAndRecoversLostCompletionResponse() throws Exception {
     var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     var requests = new ArrayList<String>();

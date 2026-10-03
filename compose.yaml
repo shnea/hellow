@@ -32,6 +32,10 @@ services:
       DB_NAME: hellow
       DB_USER: hellow
       DB_PASSWORD: hellow_dev_password
+      HELLOW_RECORDING_ENABLED: ${HELLOW_RECORDING_ENABLED:-true}
+    volumes:
+      - recordings:/recordings
+    group_add: ["2000"]
     depends_on:
       db:
         condition: service_healthy
@@ -77,6 +81,49 @@ services:
       - "7882:30164/udp"
       - "3478:30167/udp"
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - media-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  recording-storage:
+    image: alpine:3.21
+    command: ["sh", "-c", "mkdir -p /recordings && chown root:2000 /recordings && chmod 2770 /recordings"]
+    volumes:
+      - recordings:/recordings
+
+  egress:
+    image: livekit/egress:v1.14.1
+    group_add: ["2000"]
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      EGRESS_CONFIG_BODY: |
+        ws_url: ws://livekit:7880
+        insecure: true
+        redis:
+          address: redis:6379
+    volumes:
+      - recordings:/recordings
+    depends_on:
+      recording-storage:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    restart: unless-stopped
 
   nginx:
     image: nginx:1.28-alpine
@@ -94,3 +141,5 @@ services:
 
 volumes:
   db-data:
+  recordings:
+  media-redis:

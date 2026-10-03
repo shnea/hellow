@@ -1,5 +1,9 @@
 # 개발·운영 환경 기준
 
+## 2026-10-04 개발 녹음 저장 구성
+
+개발 Compose에 Redis 7.4와 LiveKit Egress 1.14.1, API/Egress의 `/recordings` 공유 볼륨(group 2000)을 추가했다. LiveKit 1.13.7에 내부 Redis 주소를 설정했고 기존 ICE/TURN 포트는 유지했다. audio-only Egress를 사용하며 Redis/Egress를 위한 외부 포트는 없다. 실제 양측 합성 음성을 캡처해 플랫폼 PRIVATE 업로드와 재생을 확인했다. `HELLOW_RECORDING_ENABLED`는 개발에서 기본 true이며 배포 보존 검사 중 false로 둔다. 저장이 확인되기 전 로컬 파일을 지우지 않는다. 녹음 권한·V16·검증·제약은 [상담 이력·녹음 계약](consultation-history-recordings.md)에 둔다. 운영 Compose/NAS 적용과 장시간·실기기 수락을 완료한 것으로 간주하지 않는다.
+
 ## 2026-10-03 인증·파일 설정과 배포 경계
 
 [리뷰 수정 결과](review-repair.md)를 현재 부분 구현의 정본으로 읽는다. `PLATFORM_OIDC_ISSUER`와 `PLATFORM_OIDC_CLIENT_ID`, 첫 조직 생성용 `ADMIN_OIDC_ISSUER`/`ADMIN_OIDC_SUB`, 승인된 `HELLOW_ATTACHMENT_RETENTION_CODE`를 운영 계약에 맞춰 지정한다. 현재 플랫폼의 프로젝트 realm은 `app` access token에 `aud=account`, `azp=app`, `typ=Bearer`를 발급한다. Hellow는 서명·issuer·만료와 이 세 claim, 활성 조직 Membership을 검증한다. 플랫폼이 API 전용 audience를 발급하는 환경에서만 `HELLOW_API_AUDIENCE`를 설정해 더 엄격한 검사를 적용한다. ID token은 받지 않는다.

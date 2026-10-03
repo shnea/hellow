@@ -144,12 +144,14 @@ class StructureAccessIntegrationTest {
     putJson("/api/admin/memberships/"+member("admin").getId()+"/access","admin",assignment("admin",null,Set.of(),Set.of(),DataScope.SELF),409);
     assertThat(authority.isAdmin(member("admin"))).isTrue();
   }
-  @Test void sharedWaitingQueueIsVisibleToAcceptorsButAnotherTeamsActiveQueueIsHidden() throws Exception {
+  @Test void unassignedQueueIsVisibleOnlyToScopedReadersOrItsSingleOfferRecipient() throws Exception {
     var waiting=new QueueItem("waiting",QueueItem.ItemType.CALL,Customer.CustomerType.INDIVIDUAL,"접수",null,"010","waiting","normal","request",true,false,false);waiting.setOrganizationId("a");queues.save(waiting);
-    assertThat(getJson("/api/queue","alice").size()).isEqualTo(1);
+    assertThat(getJson("/api/queue","alice").size()).isEqualTo(0);
     mvc.perform(actor(post("/api/agents/me/heartbeat"),"bob","a")).andExpect(status().isOk());
     mvc.perform(actor(put("/api/agents/me/status"),"bob","a").contentType(MediaType.APPLICATION_JSON).content("{\"state\":\"AVAILABLE\",\"expectedVersion\":0}")).andExpect(status().isOk());
     var offered=attempts.activeForQueue("a","waiting").orElseThrow();
+    assertThat(getJson("/api/queue","alice").size()).isEqualTo(0);
+    assertThat(getJson("/api/queue","bob").size()).isEqualTo(1);
     mvc.perform(actor(post("/api/queue/waiting/accept"),"bob","a").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("attemptId",offered.getId())))).andExpect(status().isOk());
     assertThat(getJson("/api/queue","alice").size()).isEqualTo(0);
     assertThat(getJson("/api/queue","lead").size()).isEqualTo(1);

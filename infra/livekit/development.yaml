@@ -1,4 +1,6 @@
 port: 7880
+redis:
+  address: redis:6379
 # Keep the host ports conventional; Docker maps them to these advertised WAN ports.
 # Router 30163 -> host 7881 -> container 30163 (TCP), 30164 -> 7882 -> 30164 (UDP).
 bind_addresses: ["0.0.0.0"]

@@ -12,6 +12,7 @@ import { customerProfile, queueItem, requestProfile, timelineItem, type Consulta
 import { useCall } from '@/hooks/use-call';
 import {prepareMicrophone,microphoneReady} from '@/lib/microphone-readiness';
 import { CustomerRecordsWorkspace } from '@/components/CustomerRecordsWorkspace';
+import { ConsultationHistoryWorkspace } from '@/components/ConsultationHistoryWorkspace';
 import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
@@ -447,10 +448,8 @@ export default function ConsultationWorkspacePage() {
     {identity&&<button disabled={checkingIdentity} onClick={refreshIdentity} className="text-left text-indigo-300 underline">{checkingIdentity?'권한 확인 중…':'조직 권한 다시 확인'}</button>}
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
-  return <>{currentTab==='settings'&&<WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
-    blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}}/>}
-  <div className={`crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100 ${currentTab==='settings'?'workspace-settings-hidden':''}`}>
-    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showFollowups={can('followup:read')} showTransfers={can('transfer:read')}
+  return <><div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
+    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showHistory={canReadConsultation} showFollowups={can('followup:read')} showTransfers={can('transfer:read')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={tab=>{if(tab==='stats')notify('info','준비 중','통계 화면을 연결하고 있습니다.');else setCurrentTab(tab);}}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
@@ -470,8 +469,8 @@ export default function ConsultationWorkspacePage() {
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('queue');}}>대기열 {queue.length}</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('editor');}}>편집기</button>
         <button onClick={()=>{setCurrentTab('workspace');setMobilePanel('history');}}>이력·후속 요청</button>
-        <button onClick={()=>setCurrentTab('customers')}>고객·기록</button>
-        <button onClick={()=>setCurrentTab('tickets')}>상담 이력</button>
+        {canReadConsultation&&<button onClick={()=>setCurrentTab('customers')}>전체 상담 이력</button>}
+        {canReadConsultation&&<button onClick={()=>setCurrentTab('tickets')}>My 상담 이력</button>}
         {can('followup:read')&&<button onClick={()=>setCurrentTab('followups')}>예약</button>}
         {can('transfer:read')&&<button onClick={()=>setCurrentTab('transfers')}>상담 이관</button>}
         <button onClick={()=>setCurrentTab('settings')}>설정</button>
@@ -484,16 +483,18 @@ export default function ConsultationWorkspacePage() {
         onChanged={followUpChanged} onSourceClosed={()=>setFollowUpSource(null)}/>
       <WorkTransferWorkspace key={`transfer:${organizationId}:${identity.issuer}:${identity.subject}`} active={showTransfers} organizationId={organizationId} accessKey={accessKey} canRead={can('transfer:read')} focus={transferFocus} onChanged={transferChanged} onOpenRecord={openTransferRecord}
         localInputs={Object.entries(handoffBaselines).filter(([code,base])=>drafts[code]&&!sameConsultationDraft(drafts[code],base.draft)&&!queue.some(q=>q.id===code&&q.assignedSubject===identity.subject)).map(([code,base])=>({code,recordId:base.recordId,name:base.name,text:documentText(drafts[code].memo)}))}/>
-      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers?'workspace-main-hidden':''}`}>
+      {currentTab==='settings'&&<div className="workspace-settings-pane"><WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
+        blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}} embedded/></div>}
+      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers||currentTab==='settings'?'workspace-main-hidden':''}`}>
         {!showRecords&&<div className={`queue-pane ${mobilePanel==='queue'?'mobile-visible':''}`}>
           <QueuePanel key={`queue:${organizationId}:${identity.issuer}:${identity.subject}`} organizationId={organizationId} historyRefresh={timelineRefresh} onOpenHistory={openHistory} queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
             onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}
             />
         </div>}
-        <CustomerRecordsWorkspace key={`records:${organizationId}:${identity.issuer}:${identity.subject}`} draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:records`} active={showRecords} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} recordRefresh={timelineRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')&&!queueError} canEditCustomer={can('customer:write')&&!queueError&&!customerError}
+        {(['all','mine'] as const).map(scope=><ConsultationHistoryWorkspace key={`records:${scope}:${organizationId}:${identity.issuer}:${identity.subject}`} scope={scope} draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:records:${scope}`} active={currentTab===(scope==='all'?'customers':'tickets')} customers={Object.values(customers)} organizationId={organizationId} contentRefresh={identityRefresh} recordRefresh={timelineRefresh} accessKey={accessKey} canRead={canReadConsultation} canWrite={can('consultation:write')} canEditCustomer={can('customer:write')&&!customerError}
           canRequestFollowUp={can('followup:read')&&can('followup:write')} onRequestFollowUp={(code,name)=>{setFollowUpSource({code,name});setCurrentTab('followups');}}
-          historyMode focus={recordFocus} canTransfer={can('consultation:transfer')&&can('transfer:read')} onRequestTransfer={setTransferSource}
-          activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>
+          historyMode focus={scope==='all'?recordFocus:undefined} canTransfer={can('consultation:transfer')&&can('transfer:read')} onRequestTransfer={setTransferSource}
+          activeQueues={Object.fromEntries(queue.map(q=>[q.id,q.status||'']))} onCustomerSaved={c=>setCustomers(prev=>({...prev,[c.id]:c}))}/>)}
         {customer && item && !showRecords ? <div className="interaction-workspace flex flex-1 min-w-0 min-h-0"><div className={`interaction-editor flex flex-col flex-1 min-w-0 min-h-0 ${mobilePanel==='editor'?'mobile-visible':''}`}>
           <CustomerRecordsWorkspace key={`inline:${organizationId}:${identity.subject}`} embedded historyMode active={Boolean(inlineRecordFocus)} focus={inlineRecordFocus}
             draftStorageKey={`${consultationDraftKey(identity.issuer||'',identity.subject,organizationId)}:inline-records`} customers={Object.values(customers)} organizationId={organizationId} accessKey={accessKey}

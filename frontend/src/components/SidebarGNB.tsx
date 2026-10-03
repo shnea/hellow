@@ -16,6 +16,7 @@ interface SidebarGNBProps {
   showFollowups?:boolean;
   showTransfers?:boolean;
   supportLink?: string;
+  showHistory?:boolean;
 }
 
 export const SidebarGNB: React.FC<SidebarGNBProps> = ({
@@ -28,13 +29,14 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   showFollowups=false,
   showTransfers=false,
   supportLink,
+  showHistory=true,
 }) => {
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
   const menuItems = [
     { id: 'workspace', label: '상담 워크스페이스', icon: PhoneCall },
-    { id: 'customers', label: '고객·상담 이력', icon: Users },
-    { id: 'tickets', label: '상담 이력', icon: Ticket },
+    { id: 'customers', label: '전체 상담 이력', icon: Users },
+    { id: 'tickets', label: 'My 상담 이력', icon: Ticket },
     { id: 'followups', label: '콜백·방문 예약', icon: CalendarClock },
     { id: 'transfers', label: '상담 이관', icon: ArrowRightLeft },
     { id: 'stats', label: '상담 통계·리포트', icon: BarChart3 },
@@ -60,7 +62,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
       {/* Main Navigation Tabs */}
       <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
-        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)).map((item) => {
+        {menuItems.filter(item=>(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(!['customers','tickets'].includes(item.id)||showHistory)).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (

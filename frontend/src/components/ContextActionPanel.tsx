@@ -123,7 +123,7 @@ export const ContextActionPanel: React.FC<ContextActionPanelProps> = ({
             { id: 'call', label: '전화' },
             { id: 'email', label: '메일' },
             { id: 'chat', label: '채팅' },
-            { id: 'ticket', label: '티켓' },
+            { id: 'ticket', label: '문의' },
           ].map((ch) => (
             <button
               key={ch.id}

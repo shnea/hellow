@@ -201,12 +201,22 @@ public class PlatformClient {
 
   /** 파일 보기 티켓 발급 */
   public Map<String, Object> getViewTicket(String fileId) {
-    return restClient
+    Map<String, Object> ticket = restClient
         .post()
         .uri("/api/v1/files/" + fileId + "/view-ticket")
         .header("X-Platform-Key", properties.getApiKey())
         .retrieve()
         .body(Map.class);
+    if (ticket == null) throw new IllegalStateException("파일 재생 응답이 비어 있습니다.");
+    var result = new LinkedHashMap<>(ticket);
+    // Platform capabilities may be relative to its own origin, never the CRM origin.
+    var origin = java.net.URI.create(properties.getApiUrl());
+    for (String key : List.of("originalUrl", "previewUrl", "thumbnailUrl", "downloadUrl", "viewerUrl", "streamUrl", "shareUrl")) {
+      if (result.get(key) instanceof String url && !url.isBlank()) {
+        result.put(key, origin.resolve(url).toString());
+      }
+    }
+    return result;
   }
 
   private String calculateSha256(byte[] data) {

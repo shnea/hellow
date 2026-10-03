@@ -32,9 +32,17 @@ public class QueueController {
   public List<kr.shnea.hellow.routing.RoutingService.QueueView> list() {
     var actor = access.require("queue:read");
     org.springframework.data.jpa.domain.Specification<QueueItem> scope=BusinessScope.rows(actor);
-    // Unassigned requests form the shared intake queue only for staff allowed to accept.
-    if(actor.grants().containsKey("queue:accept"))scope=scope.or((root,query,cb)->cb.and(
-        cb.equal(root.get("organizationId"),actor.organizationId()),cb.equal(root.get("status"),QueueItem.QueueStatus.WAITING),cb.isNull(root.get("assignedSubject")),cb.isNull(root.get("ownerSubject"))));
+    // A routing offer grants visibility only to its recipient, never to every available agent.
+    if(actor.grants().containsKey("queue:accept"))scope=scope.or((root,query,cb)->{
+      var offer=query.subquery(Integer.class);var a=offer.from(kr.shnea.hellow.routing.AssignmentAttempt.class);
+      offer.select(cb.literal(1)).where(cb.equal(a.get("organizationId"),actor.organizationId()),
+          cb.equal(a.get("queueCode"),root.get("code")),cb.equal(a.get("agentIssuer"),actor.issuer()),
+          cb.equal(a.get("agentSubject"),actor.subject()),a.get("outcome").in(
+              kr.shnea.hellow.routing.AssignmentAttempt.Outcome.OFFERED,kr.shnea.hellow.routing.AssignmentAttempt.Outcome.RINGING),
+          cb.greaterThan(a.get("expiresAt"),java.time.Instant.now()));
+      return cb.and(cb.equal(root.get("organizationId"),actor.organizationId()),
+          cb.equal(root.get("status"),QueueItem.QueueStatus.WAITING),cb.exists(offer));
+    });
     return routing.decorate(queues.findAll(scope.and((root,query,cb)->root.get("status").in(List.of(QueueItem.QueueStatus.WAITING,QueueItem.QueueStatus.PROCESSING))),
         org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"createdAt")),actor);
   }

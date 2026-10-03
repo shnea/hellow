@@ -5,13 +5,13 @@ import { useState } from 'react';
 import './admin/admin.css';
 
 export interface WorkspaceOrganization {id:string;name:string;permissions:string[];}
-export function WorkspaceSettings({organizations,organizationId,platformAdmin,blockedReason,busy,onSwitch,onBack}:{
+export function WorkspaceSettings({organizations,organizationId,platformAdmin,blockedReason,busy,onSwitch,onBack,embedded=false}:{
   organizations:WorkspaceOrganization[];organizationId:string;platformAdmin:boolean;blockedReason:string;busy:boolean;
-  onSwitch:(id:string)=>Promise<void>;onBack:()=>void;
+  onSwitch:(id:string)=>Promise<void>;onBack:()=>void;embedded?:boolean;
 }) {
   const current=organizations.find(o=>o.id===organizationId);
   const [platform,setPlatform]=useState(false);
-  return <main className="admin-shell"><header className="admin-header"><h1>시스템 설정</h1><button onClick={onBack}>상담 화면으로 돌아가기</button></header>
+  return <section className="admin-shell"><header className="admin-header"><h1>시스템 설정</h1>{!embedded&&<button onClick={onBack}>상담 화면으로 돌아가기</button>}</header>
     <section className="admin-section admin-workspace-organization"><h2>작업 조직</h2><p>선택한 조직의 고객·상담과 권한을 사용합니다.</p>
       <label>현재 작업 조직<select aria-label="현재 작업 조직" value={organizationId} disabled={busy||Boolean(blockedReason)} onChange={e=>void onSwitch(e.target.value)}>
         {organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
@@ -22,5 +22,5 @@ export function WorkspaceSettings({organizations,organizationId,platformAdmin,bl
     {platformAdmin&&<nav className="admin-tabs" aria-label="관리 범위"><button aria-current={!platform?'page':undefined} onClick={()=>setPlatform(false)}>현재 조직 관리</button><button aria-current={platform?'page':undefined} onClick={()=>setPlatform(true)}>최고관리자</button></nav>}
     {current?.permissions.includes('template:personal')&&<details className="admin-personal-templates"><summary>내 템플릿 관리</summary><TemplateManagement key={`personal:${organizationId}`} scope="personal" organizationId={organizationId}/></details>}
     {(platformAdmin||current?.permissions.includes('organization:admin'))&&<AdminConsole key={`${platform}:${organizationId}`} platform={platform&&platformAdmin} embedded fixedOrganizationId={platform?undefined:organizationId}/>}
-  </main>;
+  </section>;
 }

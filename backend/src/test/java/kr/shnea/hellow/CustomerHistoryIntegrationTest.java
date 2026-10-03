@@ -72,6 +72,15 @@ class CustomerHistoryIntegrationTest {
     assertThat(own.path("items").size()).isEqualTo(1);assertThat(own.path("items").get(0).path("queueCode").asText()).isEqualTo("bob-history");
     mvc.perform(actor(get("/api/consultations").param("page","-1"),"alice","a")).andExpect(status().isBadRequest());
   }
+  @Test void myHistoryNarrowsOrganizationGrantAndFiltersAreCombined()throws Exception{
+    fixture("alice-filter","alice","a",true);fixture("bob-filter","bob","a",true);fixture("other-filter","eve","b",true);
+    var own=ok(mvc.perform(actor(get("/api/consultations").param("scope","mine"),"alice","a")));
+    assertThat(own.path("items").size()).isEqualTo(1);assertThat(own.path("items").get(0).path("queueCode").asText()).isEqualTo("alice-filter");
+    var filtered=ok(mvc.perform(actor(get("/api/consultations").param("name","접수").param("assignee","bob").param("status","COMPLETED"),"alice","a")));
+    assertThat(filtered.path("items").size()).isEqualTo(1);
+    assertThat(ok(mvc.perform(actor(get("/api/consultations").param("from","2099-01-01T00:00:00Z"),"alice","a"))).path("items").size()).isZero();
+    mvc.perform(actor(get("/api/consultations").param("scope","other"),"alice","a")).andExpect(status().isBadRequest());
+  }
   @Test void administratorEnteredLoginBindsVerifiedIdentityOnceWithoutChangingGrants()throws Exception{
     var m=members.saveAndFlush(new Membership("a",ISSUER,"login-name",Set.of("queue:read","consultation:read")));
     mvc.perform(get("/api/me").with(jwt().jwt(j->j.issuer(ISSUER).subject("immutable-123").claim("preferred_username","login-name"))))

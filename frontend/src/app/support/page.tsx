@@ -265,7 +265,7 @@ export default function CustomerSupportPage() {
                       }`}
                     >
                       <MessageSquare className="w-4 h-4" />
-                      온라인 티켓 접수
+                      온라인 문의 접수
                     </button>
                   </div>
                 </div>

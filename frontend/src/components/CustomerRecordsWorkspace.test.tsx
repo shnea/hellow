@@ -36,9 +36,9 @@ it('keeps a changed local document copyable when transfer or current scope remov
   expect(screen.getByText('화면에 없는 기록 #1 · 미저장 입력 보관')).toBeTruthy();expect((screen.getByLabelText('내 입력 · 읽고 복사할 수 있습니다') as HTMLTextAreaElement).value).toBe('변경 후 아직 저장하지 않은 입력');expect((screen.getByLabelText('내 입력 · 읽고 복사할 수 있습니다') as HTMLTextAreaElement).readOnly).toBe(true);
 });
 it('loads completed history when returning from the queue and supports requesting followup',async()=>{
-  let rows:unknown[]=[];const fetcher=vi.fn(async()=>Response.json(rows));vi.stubGlobal('fetch',fetcher);
+  let rows:unknown[]=[];const fetcher=vi.fn<(path:string)=>Promise<Response>>(async()=>Response.json(rows));vi.stubGlobal('fetch',fetcher);
   const view=render(<CustomerRecordsWorkspace {...props}/>);await flush();expect(screen.getByText('상담 기록 0건')).toBeTruthy();view.rerender(<CustomerRecordsWorkspace {...props} active={false}/>);rows=[record];view.rerender(<CustomerRecordsWorkspace {...props}/>);await flush();
-  expect(screen.getByText('상담 기록 1건')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'콜백·방문 요청'}));expect(props.onRequestFollowUp).toHaveBeenCalledWith('q','등록 고객');expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('상담 기록 1건')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'콜백·방문 요청'}));expect(props.onRequestFollowUp).toHaveBeenCalledWith('q','등록 고객');expect(fetcher.mock.calls.filter(call=>String(call[0]).startsWith('/api/consultations/'))).toHaveLength(2);
 });
 it('preserves a local draft and its version on background history refresh until explicit adoption',async()=>{
   let latest=record;const commands:unknown[]=[];
