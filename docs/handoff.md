@@ -1,5 +1,11 @@
 # 작업 인계 기록
 
+## 2026-10-03 PC 초기 마이크 확보 순서 수정
+
+- 사용자가 실제 PC에서 수락 뒤 시간0초/연결 실패를 보고했다. 같은 시점 서버에서 PC는 JOINED·track 없음, Wi-Fi 고객은 ACTIVE·마이크 송출을 확인했다. 사용자가 음소거를 조작해 마이크가 잡히자 PC 통화가 동작했다고 확인했다. 기존 코드는 `room.connect` 완료 후 마이크를 요청하므로 최초 PC에서 권한 확보 전 ICE 연결이 멈출 수 있었다.
+- `createLocalAudioTrack`으로 권한/장치를 먼저 확보한 뒤 Room에 연결하고 마이크 source로 publish한다. 재연결 때 음소거는 publish 전에 적용하며, 취소 뒤 늦게 허용된 track도 stop해 마이크가 남지 않게 한다. 권한 거부/장치 오류는 기존 구체적 안내를 유지한다. 관련12건과 lint·웹 production build 통과. 실제 합성 RTC의 상담사/고객×3개 viewport 총6개에서 자동 재생 복구와44px 버튼 접근을 다시 확인했고 최종 page/console 오류는 없었다. 실제 사용자에 대한 서비스 반영은 별도다.
+- 사용자의 공유기 캡처 `다운로드/화면 캡처 2026-10-03 222625.png`에서 여섯 포트 전달 규칙이 최종 합의와 일치함을 확인했다. 사용자에게 재입력을 요구하지 않았다. LTE는 여전히 미해결이며 내부 TURN 응답·공개 TURN timeout과 실제 모바일 LTE 실패를 추적 중이다. 개발 PC 실제IP .55, Docker의 호스트 TCP7881/UDP7882·3478 수신, Public 프로필 Docker Any 주소/포트 Allow를 확인했다. 운영 NAS 적용은 남아 있다.
+
 ## 2026-10-03 Media 포트 적용·자동 재생 복구 — LTE 원인 추적 중
 
 - 참가자0명을 확인하고 개발 LiveKit 1.13.7에 새 공개 포트/UDP TURN 설정을 적용했다. 짧은 개발 기본 Media 비밀값을 새 값으로 교체하고 기존 API 이미지 `ef6d41c`를 동일 키로 재시작했다. 비밀값은 Git 제외 환경 파일에만 보관한다. API healthy, Nginx 검사/reload, 새 공개 nodeIP와 TCP30163/UDP30164 광고를 확인했다. 실행 중 웹/API 소스는 여전히 `ef6d41c`·V15이며 후속 기능 코드 배포는 아니다. `output/media-port-deployment.json` 참고. 운영 NAS 미반영.

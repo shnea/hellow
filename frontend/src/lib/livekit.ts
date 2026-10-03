@@ -1,6 +1,6 @@
 'use client';
 
-import { Room, RoomEvent, Track, ConnectionState, Participant, DisconnectReason } from 'livekit-client';
+import { Room, RoomEvent, Track, ConnectionState, Participant, DisconnectReason, createLocalAudioTrack, type LocalAudioTrack } from 'livekit-client';
 
 export interface LiveKitCallbacks {
   onConnected?: (room: Room) => void;
@@ -17,6 +17,7 @@ export class LiveKitCallSession {
   private audioElements = new Map<Track,HTMLAudioElement>();
   private callbacks: LiveKitCallbacks;
   private disposed = false;
+  private microphone: LocalAudioTrack | null = null;
 
   constructor(callbacks: LiveKitCallbacks = {}) {
     this.callbacks = callbacks;
@@ -92,6 +93,12 @@ export class LiveKitCallSession {
     });
 
     try {
+      // Acquire permission before ICE gathering. Chromium may hide local addresses until
+      // capture is permitted; requesting the microphone after ICE can leave a new PC stuck.
+      const microphone=await createLocalAudioTrack();
+      if(this.disposed){microphone.stop();throw new Error('통화 연결이 취소되었습니다.');}
+      this.microphone=microphone;
+      if(muted)await microphone.mute();
       // 1. Nginx 프록시 WebSocket URL 시도
       const wsUrl = LiveKitCallSession.resolveWsUrl(url);
       try {
@@ -105,7 +112,7 @@ export class LiveKitCallSession {
 
       // 2. 마이크 활성화 및 로컬 오디오 스트림 송출
       if(this.disposed) { await room.disconnect(); throw new Error('통화 연결이 취소되었습니다.'); }
-      await room.localParticipant.setMicrophoneEnabled(!muted);
+      await room.localParticipant.publishTrack(microphone,{source:Track.Source.Microphone});
       if(this.disposed) { await room.disconnect(); throw new Error('통화 연결이 취소되었습니다.'); }
       this.callbacks.onConnected?.(room);
       this.callbacks.onAudioPlaybackChanged?.(room.canPlaybackAudio);
@@ -141,6 +148,8 @@ export class LiveKitCallSession {
 
   public disconnect(): void {
     this.disposed = true;
+    this.microphone?.stop();
+    this.microphone=null;
     if (this.room) {
       try {
         this.room.disconnect();
