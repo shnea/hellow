@@ -15,6 +15,7 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
   const targetRef=useRef(target);
   useEffect(()=>{targetRef.current=target;},[target]);
   const storageKey=target.storageKey;
+  const ownSender=target.kind==='customer'?'CUSTOMER':'AGENT';
   const merge=(rows:ChatMessage[])=>setMessages(previous=>{
     const all=new Map(previous.map(m=>[m.sequence,m]));rows.forEach(m=>all.set(m.sequence,m));return [...all.values()].sort((a,b)=>a.sequence-b.sequence);
   });
@@ -84,7 +85,7 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
       else if(e.key==='Home'||e.key==='End'){e.preventDefault();el.scrollTop=e.key==='Home'?0:el.scrollHeight;}
     }} onScroll={()=>{if(transcript.current){const el=transcript.current;stick.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;if(stick.current)setUnseen(false);}}}>
       {!messages.length&&<p className="chat-empty">{view?'아직 저장된 메시지가 없습니다.':'저장된 메시지를 확인하고 있습니다.'}</p>}
-      {messages.map(m=><article key={m.sequence} className={`chat-message chat-${m.sender.toLowerCase()}`}><div><strong>{m.senderName}</strong><time dateTime={m.createdAt}>{new Date(m.createdAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time></div><p>{m.body}</p></article>)}
+      {messages.map(m=><article key={m.sequence} className={`chat-message ${m.sender===ownSender?'chat-own':'chat-peer'}`}><div><strong>{m.senderName}</strong><time dateTime={m.createdAt}>{new Date(m.createdAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time></div><p>{m.body}</p></article>)}
     </div>
     {unseen&&<button type="button" className="chat-latest" onClick={()=>{stick.current=true;setUnseen(false);if(transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;}}>새 메시지 보기</button>}
     {!readOnly&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void send();}}>
