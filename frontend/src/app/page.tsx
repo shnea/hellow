@@ -22,6 +22,8 @@ import { savedClassification } from '@/lib/consultation-content';
 import { WorkspaceSettings } from '@/components/WorkspaceSettings';
 import { AgentStatusControl } from '@/components/AgentStatusControl';
 import { ReportingWorkspace } from '@/components/reporting/ReportingWorkspace';
+import {KnowledgeWorkspace} from '@/components/collaboration/KnowledgeWorkspace';
+import {InternalChatWorkspace} from '@/components/collaboration/InternalChatWorkspace';
 
 import {FollowUpWorkspace} from '@/components/followup/FollowUpWorkspace';
 import {followUpJson,type FollowUp,type ActiveFollowUp} from '@/lib/followup';
@@ -57,6 +59,11 @@ export default function ConsultationWorkspacePage() {
   const [historySelection,setHistorySelection]=useState<QueueItem|null>(null);
   const [inlineRecordFocus,setInlineRecordFocus]=useState<{id:number;revision:number}|null>(null);
   const [currentTab,setCurrentTab]=useState('workspace');
+  useEffect(()=>{if(new URL(window.location.href).searchParams.has('knowledge')){
+    // A stable document link selects its menu after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentTab('knowledge');
+  }},[]);
   const [transferSource,setTransferSource]=useState<TransferSource|null>(null);
   const [transferFocus,setTransferFocus]=useState<{id:string;revision:number;direction?:TransferDirection}|null>(null);
   const [transferRecordFocus,setTransferRecordFocus]=useState<{id:number;revision:number}|null>(null);
@@ -505,7 +512,7 @@ export default function ConsultationWorkspacePage() {
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
   return <><div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
-    <SidebarGNB agentName={identity.displayName||'이름 미확인 직원'} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')} showReports={can('report:read')||can('agent:monitor')}
+    <SidebarGNB agentName={identity.displayName||'이름 미확인 직원'} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')} showReports={can('report:read')||can('agent:monitor')} showKnowledge={can('knowledge:read')||can('knowledge:write')||can('knowledge:publish')} showInternalChat={can('internal-chat:read')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={setCurrentTab}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
@@ -514,7 +521,7 @@ export default function ConsultationWorkspacePage() {
         <span>{busy ? '서버 처리 중' : activeCall ? `통화 진행 중 · ${call.status === 'connected' ? '음성 연결됨' : call.status === 'error' ? '음성 연결 실패' : '연결 확인 중'}` : unfinishedCall?.callEnded ? '후처리 중 · 새 통화 수신 차단' : effectiveAgentState==='FOLLOW_UP'?'후속 업무 처리 중 · 새 상담 수신 차단':'진행 중인 통화 없음'}</span>
         {(activeFollowUp?.id||agentView?.followUpId)&&can('followup:read')&&<button className="text-indigo-300 underline" onClick={()=>openFollowUp((activeFollowUp?.id||agentView?.followUpId)!)}>처리 중인 예약으로 돌아가기</button>}
         {agentView?.workTransferId&&can('transfer:read')&&<button className="text-indigo-300 underline" onClick={()=>openTransfer(agentView.workTransferId!,'RECEIVED')}>응답 대기 이관 확인</button>}
-        {unfinishedCall && (showRecords || unfinishedCall.id !== selected) && <button className="text-indigo-300 underline" onClick={() => selectQueue(unfinishedCall.id)}>현재 상담으로 돌아가기</button>}</div>
+        {unfinishedCall && (currentTab!=='workspace' || showRecords || unfinishedCall.id !== selected) && <button className="text-indigo-300 underline" onClick={() => selectQueue(unfinishedCall.id)}>현재 상담으로 돌아가기</button>}</div>
       {can('queue:read')&&can('queue:accept')&&<AgentStatusControl view={agentView} state={effectiveAgentState} organizationId={organizationId} busy={busy} error={agentError} onChange={changeAgent} onRetry={()=>setRefresh(v=>v+1)}/>}
       {callTransfer?.status==='CONNECTING'&&<div className="transfer-record-header" role="status"><p>통화 이관 · {call.status==='connected'?'음성 연결의 서버 확인 중':'마이크와 음성 연결 준비 중'} · 확인 전까지 기존 상담사가 맡습니다.</p><button onClick={()=>openTransfer(callTransfer.id,'RECEIVED')}>이관 상태·거절 확인</button></div>}
       {call.error&&<div role="alert" className="transfer-record-header text-amber-200"><p>{call.error}</p>{mediaCode&&<button onClick={call.retry}>음성 연결 다시 시도</button>}</div>}
@@ -531,6 +538,8 @@ export default function ConsultationWorkspacePage() {
         {can('followup:read')&&<button onClick={()=>setCurrentTab('followups')}>예약</button>}
         {can('transfer:read')&&<button onClick={()=>setCurrentTab('transfers')}>상담 이관</button>}
         {(can('report:read')||can('agent:monitor'))&&<button onClick={()=>setCurrentTab('stats')}>현황·통계</button>}
+        {can('internal-chat:read')&&<button onClick={()=>setCurrentTab('internal-chat')}>조직 내부 채팅</button>}
+        {(can('knowledge:read')||can('knowledge:write')||can('knowledge:publish'))&&<button onClick={()=>setCurrentTab('knowledge')}>지식관리</button>}
         <button onClick={()=>setCurrentTab('settings')}>설정</button>
       </nav>
       {queueError && <div role="alert" className="p-3 text-amber-200 bg-amber-950"><span>{queueError}</span><button className="ml-3 underline" onClick={() => setRefresh(v => v + 1)}>다시 조회</button></div>}
@@ -546,7 +555,9 @@ export default function ConsultationWorkspacePage() {
       {currentTab==='settings'&&<div className="workspace-settings-pane"><WorkspaceSettings organizations={identity.organizations} organizationId={organizationId} platformAdmin={Boolean(identity.platformAdmin)}
         blockedReason={receivingBlocked} busy={busy} onSwitch={switchOrganization} onBack={()=>{setCurrentTab('workspace');refreshIdentity();}} embedded/></div>}
       <ReportingWorkspace key={`reports:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} active={currentTab==='stats'} organizationId={organizationId} accessKey={accessKey} canMonitor={can('agent:monitor')} canReport={can('report:read')} canReadHistory={canReadConsultation} onHistory={()=>setCurrentTab(canReadAllHistory?'customers':'tickets')}/>
-      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers||currentTab==='settings'||currentTab==='stats'?'workspace-main-hidden':''}`}>
+      <KnowledgeWorkspace key={`knowledge:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} active={currentTab==='knowledge'} organizationId={organizationId} storageKey={`hellow-knowledge:${organizationId}:${identity.issuer}:${identity.subject}`} canRead={can('knowledge:read')} canWrite={can('knowledge:write')} canPublish={can('knowledge:publish')} teamId={identity.organizations.find(o=>o.id===organizationId)?.teamId}/>
+      <InternalChatWorkspace key={`internal:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} active={currentTab==='internal-chat'} organizationId={organizationId} storageKey={`hellow-internal:${organizationId}:${identity.issuer}:${identity.subject}`} canRead={can('internal-chat:read')} canWrite={can('internal-chat:write')}/>
+      <div className={`workspace-layout flex flex-1 min-h-0 ${showFollowUps||showTransfers||currentTab==='settings'||currentTab==='stats'||currentTab==='knowledge'||currentTab==='internal-chat'?'workspace-main-hidden':''}`}>
         {!showRecords&&<div className={`queue-pane ${mobilePanel==='queue'?'mobile-visible':''}`}>
           <QueuePanel key={`queue:${organizationId}:${identity.issuer}:${identity.subject}:${accessKey}`} canRead={can('queue:read')} organizationId={organizationId} historyRefresh={timelineRefresh} onOpenHistory={openHistory} queueItems={queue} selectedQueueId={selected} onSelectQueueItem={selectQueue} callBlocked={Boolean(receivingBlocked)||Boolean(agentError)} onAcceptCall={can('queue:accept') && !busy && !queueError ? accept : undefined}
             onReject={can('queue:accept')&&!busy&&!agentError?reject:undefined}

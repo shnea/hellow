@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { PhoneCall, Users, Ticket, CalendarClock, ArrowRightLeft, BarChart3, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
+import { PhoneCall, Users, Ticket, CalendarClock, ArrowRightLeft, BarChart3, BookOpen, MessageSquare, Settings, ChevronUp, ExternalLink, LogIn } from 'lucide-react';
 import { AgentStatus } from '../types';
 import { buildLogoutUrl } from '@/lib/pkce';
 import { apiJson } from '@/lib/api';
@@ -16,6 +16,7 @@ interface SidebarGNBProps {
   showFollowups?:boolean;
   showTransfers?:boolean;
   showReports?:boolean;
+  showKnowledge?:boolean;showInternalChat?:boolean;
   supportLink?: string;
   showHistory?:boolean;showAllHistory?:boolean;
 }
@@ -29,7 +30,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   showSettings=false,
   showFollowups=false,
   showTransfers=false,
-  showReports=false,
+  showReports=false,showKnowledge=false,showInternalChat=false,
   supportLink,
   showHistory=true,showAllHistory=false,
 }) => {
@@ -41,6 +42,8 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
     { id: 'tickets', label: 'My 상담 이력', icon: Ticket },
     { id: 'followups', label: '콜백·방문 예약', icon: CalendarClock },
     { id: 'transfers', label: '상담 이관', icon: ArrowRightLeft },
+    { id: 'internal-chat', label: '조직 내부 채팅', icon: MessageSquare },
+    { id: 'knowledge', label: '지식관리', icon: BookOpen },
     { id: 'stats', label: '상담 현황·통계', icon: BarChart3 },
     { id: 'settings', label: '시스템 설정', icon: Settings },
   ];
@@ -64,7 +67,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
 
       {/* Main Navigation Tabs */}
       <nav className="flex-1 flex flex-col space-y-2 w-full px-2">
-        {menuItems.filter(item=>(item.id!=='stats'||showReports)&&(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(item.id!=='customers'||showAllHistory)&&(item.id!=='tickets'||showHistory)).map((item) => {
+        {menuItems.filter(item=>(item.id!=='knowledge'||showKnowledge)&&(item.id!=='internal-chat'||showInternalChat)&&(item.id!=='stats'||showReports)&&(item.id!=='settings'||showSettings)&&(item.id!=='followups'||showFollowups)&&(item.id!=='transfers'||showTransfers)&&(item.id!=='customers'||showAllHistory)&&(item.id!=='tickets'||showHistory)).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (

@@ -9,6 +9,8 @@ export interface AdminInvitation { id: string; recipientEmail: string; expiresAt
 export interface AdminEvent { id: number; occurredAt: string; action: string; actorName?: string;actorSubject?: string; target: string | null; details: string | null; }
 export interface SettingsView { version: number; overrides: Record<string,string>; effective: Record<string,string>; }
 export const permissionLabels: Record<string,string> = {
+  'knowledge:read':'게시된 지식 조회', 'knowledge:write':'지식 문서·FAQ 작성', 'knowledge:publish':'지식 게시·보관',
+  'internal-chat:read':'조직 내부 채팅 참여·조회', 'internal-chat:write':'조직 내부 채팅 전송·방 관리',
   'agent:monitor':'상담사 상태 현황 조회', 'report:read':'상담·통화·콜백 통계 조회',
   'recording:read':'통화 녹음 재생·다운로드', 'recording:manage':'통화 녹음 저장 재시도',
   'organization:admin':'조직 관리', 'customer:read':'고객 조회', 'customer:write':'고객 등록·수정',
@@ -16,13 +18,15 @@ export const permissionLabels: Record<string,string> = {
   'consultation:write':'상담 기록 작성', 'consultation:transfer':'상담 이관 요청', 'transfer:read':'상담 이관 조회·응답',
   'followup:read':'후속 업무 조회','followup:write':'후속 업무 작성·처리','followup:assign':'후속 업무 재배정','template:personal':'내 템플릿 관리',
 };
-export const agentPermissions = Object.keys(permissionLabels).filter(key=>!['organization:admin','followup:assign','recording:manage','recording:read','agent:monitor','report:read'].includes(key));
+export const agentPermissions = Object.keys(permissionLabels).filter(key=>!['organization:admin','followup:assign','recording:manage','recording:read','agent:monitor','report:read','knowledge:publish'].includes(key));
 export function adminJson<T>(path:string, organizationId:string, options:RequestInit={}) {
   const headers=new Headers(options.headers);
   if(organizationId) headers.set('X-Organization-ID',organizationId);
   return apiJson<T>(path,{...options,headers});
 }
 export const actionLabels:Record<string,string> = {
+  'knowledge.created':'지식 작성','knowledge.edited':'지식 수정','knowledge.publish':'지식 게시','knowledge.archive':'지식 보관','knowledge.restore':'지식 복원',
+  'internal-chat.created':'내부 대화방 생성','internal-chat.members':'내부 대화방 참여자 변경','internal-chat.left':'내부 대화방 나가기',
   'followup.created':'후속 요청 접수','followup.edited':'후속 내용 수정','followup.scheduled':'후속 일정 확정·변경','followup.reassigned':'후속 담당 재배정',
   'followup.in_progress':'후속 처리 시작','followup.completed':'후속 처리 완료','followup.failed':'후속 실패 기록','followup.cancelled':'후속 취소',
   'agent.state.change':'상담사 수신 상태 변경','queue.routing.restart':'상담 배정 다시 시작',

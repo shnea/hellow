@@ -21,6 +21,7 @@ interface ShneaConsultationEditorProps {
   onChangeText?: (text: string) => void;
 
   readOnly?: boolean;
+  attachmentAdapter?: AttachmentAdapter;
 }
 
 // 문자열을 EditorDocument로 안전하게 변환
@@ -51,6 +52,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
   initialText = '',
   onChangeText,
   readOnly = false,
+  attachmentAdapter,
 }) => {
   const [mounted, setMounted] = useState(false);
   const [editorValue, setEditorValue] = useState<EditorDocument>(() => textToDocument(initialText));
@@ -262,7 +264,7 @@ export const ShneaConsultationEditor: React.FC<ShneaConsultationEditorProps> = (
           className="flex flex-1 min-h-0 flex-col"
           value={editorValue}
           documentKey={documentKey}
-          attachments={attachments}
+          attachments={attachmentAdapter || attachments}
           editable={!readOnly}
           appearance={{
             fontSize: 13.5,

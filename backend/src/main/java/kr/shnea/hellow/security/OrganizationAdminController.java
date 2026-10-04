@@ -22,7 +22,7 @@ public class OrganizationAdminController {
   private final kr.shnea.hellow.followup.FollowUpRepository followups;
   private final kr.shnea.hellow.transfer.WorkTransferRepository transfers;
   public static final Set<String> PERMISSIONS = Set.of("organization:admin", "customer:read", "customer:write",
-      "queue:read", "queue:accept", "consultation:read", "consultation:write", "consultation:transfer", "transfer:read", "followup:read", "followup:write", "followup:assign", "template:personal", "recording:read", "recording:manage", "agent:monitor", "report:read");
+      "queue:read", "queue:accept", "consultation:read", "consultation:write", "consultation:transfer", "transfer:read", "followup:read", "followup:write", "followup:assign", "template:personal", "recording:read", "recording:manage", "agent:monitor", "report:read", "knowledge:read", "knowledge:write", "knowledge:publish", "internal-chat:read", "internal-chat:write");
   public OrganizationAdminController(WorkspaceAccess access, AdminAccess admin, OrganizationRepository organizations,
       MembershipRepository memberships, AuditEvents audit, AuditEventRepository events,kr.shnea.hellow.routing.RoutingLockRepository routingLock,kr.shnea.hellow.queue.QueueItemRepository queues,kr.shnea.hellow.followup.FollowUpRepository followups,kr.shnea.hellow.transfer.WorkTransferRepository transfers) {
     this.routingLock=routingLock;this.access = access; this.admin = admin; this.organizations = organizations;
