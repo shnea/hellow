@@ -2,6 +2,8 @@
 
 ## 2026-10-05 조직 내부 채팅·지식관리 메뉴
 
+- **개발 반영 완료: API·웹 `bf352cd`, DB V25.** 아래 구현 커밋은 main에 push했고 배포 기록 커밋은 실행 이미지 SHA와 구분한다.
+
 - 사용자 요청의 두 기능만 구현했다. 탭은 상담 이관·콜백·방문 예약과 같은 **좌측 메뉴**를 뜻한다고 확인했다. 지식은 문서/FAQ 목록·검색·편집·게시/보관/복원·고정 링크·버전 이력, 내부 채팅은 조직 내1:1/참여자 그룹·참여 관리·메시지/읽음/미읽음·재접속을 제공한다. My 상담 이력 디자인·최대240px 조건·상대 왼쪽/내 메시지 오른쪽을 유지한다. 상세 계약은 [조직 협업](team-collaboration.md).
 - V25의 새 테이블6개와 knowledge:read/write/publish, internal-chat:read/write 권한을 추가했다. 기존 권한 자동 부여는 없다. 현재 Membership·기능 권한·문서 공개 범위/방 참여를 다시 검사한다. 게시본의 본문·종류·공개 범위·첨부를 수정 초안과 분리하고 충돌은 입력 보존 후409로 처리한다. 그룹 생성자는 나머지 참여자 제거 후 퇴장한다. 조직 간 채팅·팀 자동 방·외부 푸시·AI·관리자 이전은 이번 범위 밖이다.
 - 기존 플랫폼 PRIVATE·보존 정책·청크 저장을 재사용하며 파일50MiB, 메시지 첨부5개·문서 명시적 첨부50개다. 요청 UUID/바이트 변경 검사·짧은 뷰 티켓·현재 접근 경계를 적용했다. 메시지/파일의 응답 유실·새로고침은 같은 UUID와 IndexedDB Blob으로 재전송한다. 전송 결과가 미확인인 방은 퇴장을 차단한다.
@@ -10,7 +12,9 @@
 - 실제 HTTP/SSE·두 직원 브라우저로 게시본 갱신/원문 링크/버전 이력, 새 메뉴 간 지식 초안·기존 상담 초안 보존, 좌우 대화·6MiB PRIVATE 파일·응답 유실 후 재전송 중복0·오프라인 누락 복원·비활성 메뉴 읽음 보존·그룹 참여 제거를 확인했다. 격리 Nginx에서6MiB 업로드·동일 UUID/변경 바이트409·50MiB+1byte API 거부·SSE/no-store를 확인했다. OIDC/파일 공급자는 **합성 검수 구성**이며 새 기능의 실제 공급자/실기기 수락과 구분한다.
 - 증거 `output/team-ui/`, `output/team-final-ui/`(PC1440×900/mobile375×812/tablet768×1024/landscape1024×768), `output/team-proxy-proof.json`, `output/backend-team-final-tests/`는 Git 제외로 보존한다. 첫 UI 검사에서 모바일 전송 버튼 잘림을 한 번에 수정하고 확인했다. 검수 도구의 중복 selector·그룹 관리 version 대기 및 peer 캡처 타이밍을 수정했으며 데이터/API 검사를 우회하지 않았다. detector1회는 기존 Sidebar 로고 gradient1건, 신규 협업 화면0건이다. 기존 DESIGN/comp drift는 정비하지 않는다.
 - 전용 역할 대신 새로운 일반 에이전트가 Impeccable finish reviewer/documenter 지침을 각각 적용했다. 최종13장과 소스의 일치 검토는 **ship**, 수정 요구 없음(`output/team-finish-review.md`). documenter는 기존 목록·채팅 시스템의 일치를 확인하고 제품/디자인 정본을 변경하지 않았다(`output/team-documentation.md`). 기존 DESIGN 부재·comp/config drift·로고/Editor hint 결함은 새 규칙으로 편입하거나 정비하지 않았다.
-- **개발 반영 대기:** 이 검증 단위 커밋·push 후 신규 동결 백업/복원 V24→V25·기존 전체 데이터/권한 보존 확인과 서비스 전환을 진행한다. 실제 사용자 계정의 권한을 대신 변경하지 않는다. 조직 관리자에서 새 권한을 설정한 직원에게 메뉴가 표시된다.
+- 진행 통화/고객 채팅/미결 이관0을 재확인하고 API·웹·Nginx 동결 후 신규 백업·복원 DB에서 V24→V25 적용을 검사했다. 복원 DB와 실제 DB 모두 **기존29개 테이블 모든 행·전체 열 hash 일치**, 새6개 테이블 빈 상태를 확인하고 정상 worker를 복구했다. 고객8/접수55/상담76/채팅 메시지7/녹음8/이관4/감사1103과 기존 역할·직원 권한을 보존했다. 증거 `output/team-collaboration-deployment.json`, 백업 `output/backups/hellow-team-collaboration-deploy-20261005_021359.dump`, 복원 DB `hellow_team_collaboration_frozen_20261005_021359`를 유지한다.
+- API02:15:01·웹02:14:43 KST 시작. API·웹·DB healthy, Nginx 검사/reload·신규 협업 경로51MiB/SSE 설정, 공개3경로200, 공개 CSS·JS의 두 메뉴/신규 API 포함을 확인했다. DB·LiveKit·Redis·Egress의 이미지/시작 시각은 전후 동일하다. 격리 검수 API·DB·Nginx·로컬 웹/JWKS·파일 공급자를 중지하고 결과 복사용 컨테이너만 제거했으며 DB·백업·PNG/XML/JSON은 보존했다.
+- **남은 수락:** 실제 직원의 기능 권한 설정·새 기능의 실제 PRIVATE 공급자/삼성 기기 수락·운영 NAS 반영은 별도다. 실제 사용자 계정의 권한을 대신 변경하지 않는다. 조직 관리자에서 새 권한을 설정한 직원에게 메뉴가 표시된다. 다음 개발은 사용자 새 지시에 따른다.
 
 ## 2026-10-04 이름 전용 프로필 칩·채팅 이미지50MB
 
