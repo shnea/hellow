@@ -4,6 +4,8 @@ import {ApiError} from '@/lib/api';
 import {SupportHttpError} from '@/lib/support-session';
 import {chatFetch,chatJson,readChatEvents,type ChatMessage,type ChatTarget,type ChatView} from '@/lib/chat';
 import './chat.css';
+import {ChatImage} from './ChatImage';
+import {ChatImageComposer} from './ChatImageComposer';
 
 interface Pending {clientMessageId:string;body:string;}
 export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:boolean}){
@@ -11,6 +13,7 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
   const [connection,setConnection]=useState('대화를 불러오고 있습니다.'),[error,setError]=useState('');
   const [draft,setDraft]=useState(''),[pending,setPending]=useState<Pending|null>(null),[ready,setReady]=useState(false);
   const [sending,setSending]=useState(false),[ending,setEnding]=useState(false),[retry,setRetry]=useState(0),[unseen,setUnseen]=useState(false);
+  const [imagePending,setImagePending]=useState(false),[imageSending,setImageSending]=useState(false);
   const transcript=useRef<HTMLDivElement>(null),stick=useRef(true),cursor=useRef(0),inFlight=useRef(false);
   const targetRef=useRef(target);
   useEffect(()=>{targetRef.current=target;},[target]);
@@ -60,7 +63,7 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
     catch{setError('전송할 내용을 보관하지 못했습니다. 브라우저 저장소를 확인한 뒤 다시 시도해 주세요.');return false;}
   };
   const send=async()=>{
-    if(inFlight.current||!ready||readOnly||(!pending&&!view?.canSend))return;
+    if(inFlight.current||imageSending||!ready||readOnly||(!pending&&!view?.canSend))return;
     const outgoing=pending||{clientMessageId:crypto.randomUUID(),body:draft};if(!outgoing.body.trim())return;
     if(!store(draft,outgoing))return;
     inFlight.current=true;setPending(outgoing);setSending(true);setError('');
@@ -69,12 +72,12 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
     }catch(e){setError(`${(e as Error).message} 같은 메시지로 다시 시도할 수 있습니다.`);}
     finally{inFlight.current=false;setSending(false);}
   };
-  const end=async()=>{if(ending||sending||pending||readOnly||!view?.canSend)return;setEnding(true);setError('');
+  const end=async()=>{if(ending||sending||pending||imagePending||imageSending||readOnly||!view?.canSend)return;setEnding(true);setError('');
     try{const result=await chatJson<ChatView>(targetRef.current,'end',{});setView(result);setConnection('대화가 종료되었습니다. 기록은 보존됩니다.');setRetry(v=>v+1);}
     catch(e){setError(`${(e as Error).message} 종료 여부를 다시 확인해 주세요.`);}finally{setEnding(false);}
   };
   return <section className="chat-panel" aria-label="고객 실시간 대화">
-    <header className="chat-heading"><h2>실시간 대화</h2>{!readOnly&&<button type="button" disabled={!view?.canSend||ending||sending||Boolean(pending)} onClick={()=>void end()}>{ending?'종료 확인 중…':'대화 종료'}</button>}</header>
+    <header className="chat-heading"><h2>실시간 대화</h2>{!readOnly&&<button type="button" disabled={!view?.canSend||ending||sending||Boolean(pending)||imagePending||imageSending} onClick={()=>void end()}>{ending?'종료 확인 중…':'대화 종료'}</button>}</header>
     <p role="status" className="chat-connection">{connection}{readOnly?' · 읽기 전용':''}</p>
     {error&&<p role="alert" className="chat-error">{error}</p>}
     <div className="chat-transcript" ref={transcript} tabIndex={0} role="log" aria-label="대화 메시지" aria-live="polite" aria-relevant="additions" onKeyDown={e=>{
@@ -85,12 +88,13 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
       else if(e.key==='Home'||e.key==='End'){e.preventDefault();el.scrollTop=e.key==='Home'?0:el.scrollHeight;}
     }} onScroll={()=>{if(transcript.current){const el=transcript.current;stick.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;if(stick.current)setUnseen(false);}}}>
       {!messages.length&&<p className="chat-empty">{view?'아직 저장된 메시지가 없습니다.':'저장된 메시지를 확인하고 있습니다.'}</p>}
-      {messages.map(m=><article key={m.sequence} className={`chat-message ${m.sender===ownSender?'chat-own':'chat-peer'}`}><div><strong>{m.senderName}</strong><time dateTime={m.createdAt}>{new Date(m.createdAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time></div><p>{m.body}</p></article>)}
+      {messages.map(m=><article key={m.sequence} className={`chat-message ${m.sender===ownSender?'chat-own':'chat-peer'}`}><div className="chat-message-header"><strong>{m.senderName}</strong><time dateTime={m.createdAt}>{new Date(m.createdAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time></div>{m.body&&<p>{m.body}</p>}{m.image&&<ChatImage message={m} target={target} readOnly={readOnly} onLoad={()=>{if(stick.current&&transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;}}/>}</article>)}
     </div>
     {unseen&&<button type="button" className="chat-latest" onClick={()=>{stick.current=true;setUnseen(false);if(transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;}}>새 메시지 보기</button>}
     {!readOnly&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void send();}}>
       <label>메시지<textarea rows={3} maxLength={10000} value={draft} disabled={!ready||!view?.canSend||Boolean(pending)} onChange={e=>{setDraft(e.target.value);store(e.target.value,pending);}} placeholder={view?.state==='CLOSED'?'종료된 대화입니다.':'메시지를 입력해 주세요.'}/></label>
-      <div><span>{pending?sending?'서버 저장 확인 중…':'전송 결과를 확인하지 못했습니다. 같은 메시지로 재시도합니다.':'서버에 저장된 메시지가 대화에 표시됩니다.'}</span><button type="submit" disabled={!ready||sending||(!pending&&(!view?.canSend||!draft.trim()))}>{sending?'전송 중…':pending?'같은 메시지 재시도':'메시지 전송'}</button></div>
+      <div><span>{pending?sending?'서버 저장 확인 중…':'전송 결과를 확인하지 못했습니다. 같은 메시지로 재시도합니다.':'서버에 저장된 메시지가 대화에 표시됩니다.'}</span><button type="submit" disabled={!ready||sending||imageSending||(!pending&&(!view?.canSend||!draft.trim()))}>{sending?'전송 중…':pending?'같은 메시지 재시도':'메시지 전송'}</button></div>
     </form>}
+    {!readOnly&&target.kind==='customer'&&<ChatImageComposer target={target} canSend={Boolean(view?.canSend)} disabled={sending||ending||Boolean(pending)} onPendingChange={setImagePending} onSendingChange={setImageSending} onSent={message=>merge([message])}/>}
   </section>;
 }

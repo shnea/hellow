@@ -19,18 +19,19 @@ public class ChatService {
   public ChatService(QueueItemRepository queues,ChatMessageRepository messages,OrganizationRepository organizations,Clock clock){
     this.queues=queues;this.messages=messages;this.organizations=organizations;this.clock=clock;
   }
-  public record Message(long sequence,String sender,String senderName,String clientMessageId,String body,Instant createdAt){}
+  public record Image(String name,String mime,long size){}
+  public record Message(long sequence,String sender,String senderName,String clientMessageId,String body,Instant createdAt,Image image){}
   public record View(String queueCode,String state,Instant endedAt,boolean canSend,List<Message> messages,long cursor,boolean hasMore){}
-  private Message view(ChatMessage m){return new Message(m.getSequence(),m.getSender(),m.getSenderName(),m.getClientMessageId(),m.getBody(),m.getCreatedAt());}
+  Message view(ChatMessage m){return new Message(m.getSequence(),m.getSender(),m.getSenderName(),m.getClientMessageId(),m.getBody(),m.getCreatedAt(),m.getImageFileId()==null?null:new Image(m.getImageName(),m.getImageMime(),m.getImageSize()));}
   @Transactional
   public void initialize(QueueItem queue,String body){
     queue.enableChat();
     messages.save(new ChatMessage(queue,queue.nextChatSequence(),"CUSTOMER","CUSTOMER","고객","initial",body,clock.instant()));
   }
   private boolean closed(QueueItem q){return q.getChatEndedAt()!=null||q.supportExpired(clock.instant())||q.getStatus()==QueueItem.QueueStatus.COMPLETED||q.getStatus()==QueueItem.QueueStatus.CANCELLED;}
-  private boolean active(QueueItem q){return !closed(q)&&q.getStatus()==QueueItem.QueueStatus.PROCESSING;}
+  boolean active(QueueItem q){return !closed(q)&&q.getStatus()==QueueItem.QueueStatus.PROCESSING;}
   private void chat(QueueItem q){if(!q.isChatEnabled())throw new ResponseStatusException(NOT_FOUND,"실시간 대화가 없는 접수입니다.");}
-  private QueueItem customer(String session,boolean lock){
+  QueueItem customer(String session,boolean lock){
     if(session==null||session.isBlank())throw new ResponseStatusException(NOT_FOUND);
     var q=(lock?queues.lockSession(session):queues.findBySessionId(session)).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
     chat(q);
@@ -38,7 +39,7 @@ public class ChatService {
     if(q.supportExpired(clock.instant()))throw new ResponseStatusException(GONE,"채팅 세션이 만료되었습니다.");
     return q;
   }
-  private QueueItem staff(WorkspaceAccess.Actor actor,String code,boolean lock){
+  QueueItem staff(WorkspaceAccess.Actor actor,String code,boolean lock){
     var q=(lock?queues.lockByCode(actor.organizationId(),code):queues.findByOrganizationIdAndCode(actor.organizationId(),code)).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
     actor.requireRow(q);chat(q);return q;
   }
@@ -58,7 +59,7 @@ public class ChatService {
     if(body==null||body.isBlank()||body.length()>10000)throw new ResponseStatusException(BAD_REQUEST,"메시지는 1~10000자여야 합니다.");
     var previous=messages.findByQueueIdAndSenderKeyAndClientMessageId(q.getId(),key,id);
     if(previous.isPresent()){
-      if(!previous.get().getBody().equals(body))throw new ResponseStatusException(CONFLICT,"같은 메시지 ID의 내용이 변경되었습니다.");
+      if(previous.get().getImageFileId()!=null||!previous.get().getBody().equals(body))throw new ResponseStatusException(CONFLICT,"같은 메시지 ID의 내용이 변경되었습니다.");
       return view(previous.get());
     }
     if(!active(q))throw new ResponseStatusException(CONFLICT,"수락된 진행 중 채팅에서만 전송할 수 있습니다.");

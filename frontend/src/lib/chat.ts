@@ -1,7 +1,7 @@
 import {apiFetch,ApiError,jsonBody} from './api';
 import {SupportHttpError} from './support-session';
 
-export interface ChatMessage {sequence:number;sender:'CUSTOMER'|'AGENT';senderName:string;clientMessageId:string;body:string;createdAt:string;}
+export interface ChatMessage {sequence:number;sender:'CUSTOMER'|'AGENT';senderName:string;clientMessageId:string;body:string;createdAt:string;image?:{name:string;mime:string;size:number}|null;}
 export interface ChatView {queueCode:string;state:'WAITING'|'OPEN'|'CLOSED';endedAt:string|null;canSend:boolean;messages:ChatMessage[];cursor:number;hasMore:boolean;}
 export type ChatTarget = {kind:'customer';sessionId:string;storageKey:string}|{kind:'staff';queueCode:string;organizationId:string;storageKey:string};
 export async function chatFetch(target:ChatTarget,action:string,options:RequestInit={}){
@@ -21,6 +21,10 @@ export async function chatFetch(target:ChatTarget,action:string,options:RequestI
 export async function chatJson<T>(target:ChatTarget,action:string,data?:unknown,signal?:AbortSignal):Promise<T>{
   const response=await chatFetch(target,action,{...(data!==undefined?jsonBody(data):{}),signal});
   return response.json() as Promise<T>;
+}
+export async function sendChatImage(target:ChatTarget,file:Blob,name:string,clientMessageId:string):Promise<ChatMessage>{
+  const body=new FormData();body.append('file',file,name);body.append('clientMessageId',clientMessageId);
+  return (await chatFetch(target,'images',{method:'POST',body})).json() as Promise<ChatMessage>;
 }
 // Fetch streaming permits authentication headers; EventSource would put capabilities in URLs.
 export async function readChatEvents(response:Response,onView:(view:ChatView)=>void){

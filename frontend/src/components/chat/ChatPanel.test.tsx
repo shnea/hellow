@@ -4,6 +4,7 @@ import {ChatPanel} from './ChatPanel';
 import {chatJson,chatFetch,readChatEvents,type ChatView} from '@/lib/chat';
 import {SupportHttpError} from '@/lib/support-session';
 vi.mock('@/lib/chat',()=>({chatJson:vi.fn(),chatFetch:vi.fn(),readChatEvents:vi.fn()}));
+vi.mock('@/lib/chat-image-outbox',()=>({chatImageOutbox:vi.fn().mockResolvedValue(null)}));
 const target={kind:'customer' as const,sessionId:'capability',storageKey:'test-chat'};
 const initial:ChatView={queueCode:'q',state:'OPEN',endedAt:null,canSend:true,cursor:1,hasMore:false,messages:[{sequence:1,sender:'CUSTOMER',senderName:'고객',clientMessageId:'initial',body:'처음 문의',createdAt:'2026-10-04T00:00:00Z'}]};
 beforeEach(()=>{sessionStorage.clear();vi.mocked(chatJson).mockReset().mockResolvedValue(initial);vi.mocked(chatFetch).mockReset().mockResolvedValue({} as Response);vi.mocked(readChatEvents).mockReset().mockImplementation(()=>new Promise(()=>{}));});

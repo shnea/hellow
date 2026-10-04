@@ -20,6 +20,11 @@ public class ChatMessage {
   @Column(nullable=false,length=36) private String clientMessageId;
   @Column(nullable=false,columnDefinition="TEXT") private String body;
   @Column(nullable=false) private Instant createdAt;
+  private String imageFileId;
+  private String imageName;
+  @Column(length=32) private String imageMime;
+  private Long imageSize;
+  @Column(length=64) private String imageSha256;
   protected ChatMessage(){}
   public ChatMessage(QueueItem queue,long sequence,String senderKey,String sender,String senderName,String clientMessageId,String body,Instant now){
     this.queue=queue;this.sequence=sequence;this.senderKey=senderKey;this.sender=sender;
@@ -31,4 +36,12 @@ public class ChatMessage {
   public String getClientMessageId(){return clientMessageId;}
   public String getBody(){return body;}
   public Instant getCreatedAt(){return createdAt;}
+  public void attachImage(String fileId,String name,String mime,long size,String sha256){
+    imageFileId=fileId;imageName=name;imageMime=mime;imageSize=size;imageSha256=sha256;
+  }
+  public String getImageFileId(){return imageFileId;}
+  public String getImageName(){return imageName;}
+  public String getImageMime(){return imageMime;}
+  public Long getImageSize(){return imageSize;}
+  public String getImageSha256(){return imageSha256;}
 }

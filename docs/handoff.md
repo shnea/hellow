@@ -1,5 +1,14 @@
 # 작업 인계 기록
 
+## 2026-10-04 고객 채팅 이미지 첨부
+
+- **구현·격리 검증 완료, 개발 반영 준비 중.** 사용자 요청에 따라 고객이 수락된 진행 중 CHAT에서 JPG·PNG를 전송하도록 확장했다. 전송 전 미리보기/취소, 고객·상담사·읽기 전용 이력의 저장 이미지/원본 보기·조회 실패 재시도를 제공한다. 기존 좌우 말풍선·상담 기록/초안·음성 경로를 유지한다. 한 장5MiB·1600만 화소·대화20장과 JDK 디코더/기존 PRIVATE 파일 저장을 위임 판단했으며 [고객 채팅 계약](customer-chat.md#고객-이미지-첨부)에 근거·제약을 기록했다.
+- V23 이미지 메타데이터/내용 제약, 텍스트와 같은 Queue 잠금·sequence/고객 UUID·hash 중복 복원을 적용했다. 플랫폼 PRIVATE·보존 정책·청크 업로드를 재사용하며 공급자 실패는 DB 롤백/같은 업로드 ID 복구다. 대화 DTO에는 플랫폼 ID/hash/URL을 넣지 않는다. 뷰 티켓은 현재 고객 capability 또는 직원 queue:read/이력 consultation:read와 해당 대화 범위를 확인한다. 공유 URL은 반환하지 않는다. IndexedDB 원본 Blob/UUID 저장을 완료한 뒤 전송하며 응답 유실·새로고침에도 같은 이미지로 재시도한다.
+- Java21 전체 API build **184건 중175건 통과·실패0**, 기존 보고 opt-in9건 skip. 신규 이미지 통합7건에서 이미지/권한/단기 티켓·동시 중복·종료 ACK·텍스트 ID 충돌·바이트 변경·SVG/위장/5MB 초과·공급자 실패/롤백·20장 quota·JPEG 실검사·이력 권한·만료를 확인했다. 프런트 전체156건/34파일, 최종 관련10건/3파일·lint·TypeScript/production·Docker 웹 build 통과.
+- 격리 PostgreSQL V22→V23·Hibernate validate/health에서 기존29개 테이블 모든 행·기존 열 hash와 채팅 원문163건을 보존했다(`output/chat-image-migration-proof.json`). 실제 HTTP/SSE·대화 저장과 합성 PRIVATE 플랫폼 protocol에서 전송/미리보기·응답 유실/Blob·UUID 복원·중복0·조회 장애 복구·종료 후 이력 이미지를 확인했다. 합성 PNG를 명시했고 실제 사용자 계정/기기·새 이미지의 실제 공급자 저장 수락과 구분한다.
+- PC/모바일 선택·수신·조회 오류·이력7장과 최종 소스를 두 회차 안에 검수했다. 발신 헤더 적용 범위·미리보기 높이·한글 복구 안내를 한 번에 보완했으며 독립 일반 finish reviewer 대체 결과 **ship**, 수정 요구 없음. detector1회 빈 배열. 증거 `output/chat-images-ui/proof.json`·PNG7장, `output/chat-images-review.md`, `output/backend-chat-images-tests/`를 Git 제외로 보존한다.
+- 다음 순서: 커밋/push → 진행 통화/채팅/미결 이관0 재확인·동결 백업/새 복원 DB → 기존29개 테이블 전 행·열 보존과 V23 → 개발 API·웹/Nginx 반영·health/공개 CSS → 배포 기록. API `6a5b73d`·웹 `8b42e83`·실제 DB V22는 배포 전 기준이다. NAS·HEIC/WebP·일반 파일·상담사 이미지 전송·보류 태블릿 패널은 이 단위에 포함하지 않는다.
+
 ## 2026-10-04 고객 채팅 말풍선 좌우 배치
 
 - 사용자 지적에 따라 고객·상담사 공통 ChatPanel을 상대방 왼쪽·내 쪽 오른쪽으로 수정했다. 고객 화면은 CUSTOMER, 상담사/이력 화면은 AGENT가 오른쪽이다. 표시명·시각·본문 왼쪽 정렬을 유지하고 내 쪽 indigo·상대방 slate, 내용에 맞는 너비·최대75ch/85%로 구분했다. 계약은 [고객 채팅](customer-chat.md)에 기록했다.
