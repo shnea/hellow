@@ -6,7 +6,7 @@ import {loadSupportRequest, prepareSupportMicrophone, storeSupportRequest, suppo
   supportStorageKey, validateSupportSession, type SupportRequest, type SupportSession} from '@/lib/support-session';
 
 export type SupportStep = 'RESTORING' | 'FORM' | 'PENDING' | 'WAITING' | 'PROCESSING' | 'FINISHED' | 'CANCELLED' | 'EXPIRED' | 'UNAVAILABLE' | 'CALLBACK_REQUESTED';
-const stepFor = (session: SupportSession): SupportStep => session.status === 'COMPLETED' || session.status === 'CALL_ENDED'
+const stepFor = (session: SupportSession): SupportStep => session.status === 'COMPLETED' || session.status === 'CALL_ENDED' || Boolean(session.chatEndedAt)
   ? 'FINISHED' : session.status === 'CANCELLED' ? 'CANCELLED' : session.status;
 
 export function useSupportSession(code: string) {

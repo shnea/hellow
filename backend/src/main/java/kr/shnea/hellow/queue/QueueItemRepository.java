@@ -30,7 +30,7 @@ public interface QueueItemRepository extends JpaRepository<QueueItem, Long>, org
 
   Optional<QueueItem> findByRequestKey(String key);
 
-  @org.springframework.data.jpa.repository.Query("select q from QueueItem q where q.supportExpiresAt<=:now and (q.status=kr.shnea.hellow.queue.QueueItem$QueueStatus.WAITING or (q.status=kr.shnea.hellow.queue.QueueItem$QueueStatus.PROCESSING and q.type=kr.shnea.hellow.queue.QueueItem$ItemType.CALL and q.callEnded=false))")
+  @org.springframework.data.jpa.repository.Query("select q from QueueItem q where q.supportExpiresAt<=:now and (q.status=kr.shnea.hellow.queue.QueueItem$QueueStatus.WAITING or (q.status=kr.shnea.hellow.queue.QueueItem$QueueStatus.PROCESSING and ((q.type=kr.shnea.hellow.queue.QueueItem$ItemType.CALL and q.callEnded=false) or (q.chatEnabled=true and q.chatEndedAt is null))))")
   List<QueueItem> expiredSupportWork(java.time.Instant now);
 
   @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)

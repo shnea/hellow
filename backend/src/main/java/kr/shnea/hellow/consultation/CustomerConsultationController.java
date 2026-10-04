@@ -78,6 +78,7 @@ public class CustomerConsultationController {
     result.put("customerName",q.getCustomerName());result.put("phoneNumber",q.getPhoneNumber());result.put("companyName",q.getCompanyName());result.put("customerType",q.getCustomerType());result.put("customerRegistered",q.getCustomerCode()!=null);
     result.put("contactVersion",q.getVersion());result.put("contactEditable",actor.can("customer:write",q));result.put("createdAt",q.getCreatedAt());result.put("receivedAt",q.getCreatedAt());result.put("type",q.getType());result.put("processingStatus",q.getStatus());result.put("agentName",names.resolve(actor.organizationId(),q.getOwnerIssuer(),q.getOwnerSubject(),q.getAssignedAgent()));
     result.put("categoryMain","일반 상담");result.put("categorySub",q.getInquiryType()==null?"일반 문의":q.getInquiryType());result.put("status",q.getStatus());result.put("memo",q.getSummary());result.put("tags","");
+    result.put("chatEnabled",q.isChatEnabled());
     boolean processing=q.getStatus()==QueueItem.QueueStatus.PROCESSING||q.getStatus()==QueueItem.QueueStatus.WAITING;
     result.put("processing",processing);result.put("editable",actor.can("consultation:write",q)&&!processing);recordingStatus(result,actor,q.getCode());return result;
   }
@@ -87,6 +88,7 @@ public class CustomerConsultationController {
     view.put("agentName",names.resolve(actor.organizationId(),record.getOwnerIssuer(),record.getOwnerSubject(),record.getAgentName()));
     view.put("receivedAt",intake.map(QueueItem::getCreatedAt).orElse(record.getCreatedAt()));view.put("type",intake.map(q->q.getType().name()).orElse("MANUAL"));
     view.put("processingStatus",intake.map(q->q.getStatus().name()).orElse(record.getStatus().name()));
+    view.put("chatEnabled",intake.map(QueueItem::isChatEnabled).orElse(false));
     var customer=record.getCustomerCode()==null?Optional.<kr.shnea.hellow.customer.Customer>empty():customers.findByOrganizationIdAndCode(actor.organizationId(),record.getCustomerCode());
     view.put("customerName",customer.map(c->c.getName()).orElseGet(()->intake.map(QueueItem::getCustomerName).orElse("상담 고객")));
     view.put("phoneNumber",customer.map(c->c.getPhoneNumber()).orElseGet(()->intake.map(QueueItem::getPhoneNumber).orElse("")));

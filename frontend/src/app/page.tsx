@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {ConsultationDetailDialog} from '@/components/ConsultationDetailDialog';
 import {RecordingPlayer} from '@/components/RecordingPlayer';
+import {ChatPanel} from '@/components/chat/ChatPanel';
 import {FollowUpRequestDialog} from '@/components/followup/FollowUpRequestDialog';
 import { SidebarGNB } from '@/components/SidebarGNB';
 import { QueuePanel } from '@/components/QueuePanel';
@@ -74,6 +75,7 @@ export default function ConsultationWorkspacePage() {
   const activeFollowUpRef=useRef<ActiveFollowUp|null>(null);
   const [followUpStateError,setFollowUpStateError]=useState('');
   const [mobilePanel,setMobilePanel]=useState<'queue'|'editor'|'history'>('editor');
+  const [chatRecordView,setChatRecordView]=useState<Record<string,boolean>>({});
   const [dismissedOffers,setDismissedOffers]=useState<string[]>([]);
   const receivedOffer=useRef<string|null>(null);
   const markReceived=useCallback((id:string)=>{receivedOffer.current=id;},[]);
@@ -270,7 +272,7 @@ export default function ConsultationWorkspacePage() {
   const unfinishedCall=queue.find(q=>q.type==='call'&&q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
   const unfinishedInteraction=queue.find(q=>q.status==='PROCESSING'&&q.assignedSubject===identity?.subject);
   const receivingBlocked=unfinishedInteraction ? unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded ? '후처리 중입니다. 상담 기록을 저장·완료한 뒤 새 상담을 수락할 수 있습니다.' : '상담 중입니다. 현재 상담과 후처리를 완료해 주세요.' : agentView?.state==='TRANSFER_PENDING'?'상담 이관 응답 대기 중입니다. 요청을 처리한 뒤 새 상담 수신·조직 변경이 가능합니다.':activeFollowUp?.processing||agentView?.state==='FOLLOW_UP'?'후속 업무 처리 중입니다. 예약 업무를 종료한 뒤 새 상담을 수락할 수 있습니다.':followUpStateError?'후속 업무 상태를 확인하지 못했습니다. 다시 조회한 뒤 수신·조직 변경이 가능합니다.':'';
-  const effectiveAgentState:AgentState|undefined=unfinishedInteraction?(unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded?'AFTER_CALL':'CALLING'):activeFollowUp?.processing?'FOLLOW_UP':agentView?.state;
+  const effectiveAgentState:AgentState|undefined=unfinishedInteraction?(unfinishedInteraction.type==='call'&&unfinishedInteraction.callEnded||unfinishedInteraction.chatEnabled&&unfinishedInteraction.chatEndedAt?'AFTER_CALL':'CALLING'):activeFollowUp?.processing?'FOLLOW_UP':agentView?.state;
   const sidebarStatus:AgentStatus=effectiveAgentState==='AWAY'?'away':effectiveAgentState==='OFFLINE'||!effectiveAgentState?'offline':effectiveAgentState==='AVAILABLE'?'online':'busy';
   const incoming=!receivingBlocked&&!agentError?queue.find(q=>q.status==='WAITING'&&q.canAccept===true&&q.offer&&q.offer.subject===identity?.subject&&!dismissedOffers.includes(q.offer.id)):undefined;
   const showFollowUps=currentTab==='followups';
@@ -582,11 +584,17 @@ export default function ConsultationWorkspacePage() {
           {draftConflicts[item.id]&&writable&&<div className="p-3 bg-slate-900 text-sm" role="status"><p>저장된 기록이 변경되었습니다. 내 입력은 유지됩니다.</p><details><summary className="py-2">최신 서버 본문 확인</summary><p className="whitespace-pre-wrap">{documentText(draftConflicts[item.id].editorDocument||draftConflicts[item.id].memo)}</p></details><button disabled={busy} className="underline py-2" onClick={()=>{versions.current[item.id]=draftConflicts[item.id].version;setDraftConflicts(prev=>{const copy={...prev};delete copy[item.id];return copy;});}}>최신 버전에 내 입력 다시 적용 준비</button></div>}
           {writable&&can('consultation:transfer')&&can('transfer:read')&&<div className="transfer-record-header"><button disabled={busy||!draftReady[item.id]||Boolean(queueError)} onClick={requestQueueTransfer}>{item.type==='call'&&!item.callEnded?'통화 이관 요청':'업무 이관 요청'}</button><span className="text-sm text-slate-300">{item.type==='call'&&!item.callEnded?'음성 연결 확인까지 현재 통화를 유지합니다.':'변경한 내용은 먼저 저장해 주세요.'}</span></div>}
           {canReadConsultation&&<RecordingPlayer key={item.id} queueCode={item.id} active={!showRecords&&!inlineRecordFocus&&currentTab==='workspace'} accessKey={accessKey} hideEmpty/>}
+          {item.chatEnabled&&<>
+            <nav className="interaction-chat-tabs" aria-label="현재 상담 보기"><button type="button" aria-pressed={!chatRecordView[item.id]} onClick={()=>setChatRecordView(v=>({...v,[item.id]:false}))}>고객 대화</button><button type="button" aria-pressed={Boolean(chatRecordView[item.id])} onClick={()=>setChatRecordView(v=>({...v,[item.id]:true}))}>상담 기록</button></nav>
+            <div hidden={Boolean(chatRecordView[item.id])} className="interaction-chat-view"><ChatPanel key={`chat:${organizationId}:${identity.issuer}:${identity.subject}:${item.id}:${item.status}:${item.assignedSubject}:${accessKey}`} target={{kind:'staff',queueCode:item.id,organizationId,storageKey:`hellow_chat_staff:${organizationId}:${identity.issuer}:${identity.subject}:${item.id}`}}/></div>
+          </>}
+          <div hidden={Boolean(item.chatEnabled&&!chatRecordView[item.id])} className="interaction-record-view">
           {writable && !draftReady[item.id] ? <p role="status" className="p-5">저장된 초안을 확인하고 있습니다.</p> : <ActiveWorkspace key={`${item.id}:${writable}`} customer={customer} queueCode={item.id} organizationId={organizationId} contentRefresh={identityRefresh}
             initialDraft={drafts[item.id]} onDraftChange={draft => setDrafts(prev => ({ ...prev, [item.id]: draft }))} readOnly={!writable || !can('consultation:write') || Boolean(queueError)} customerReadOnly={!can('customer:write')||customer.canEdit===false||Boolean(queueError)} busy={busy}
             callDuration={activeCall === item.id ? call.duration : 0} isCallActive={activeCall === item.id} mediaStatus={call.status} isMuted={call.isMuted} onMute={call.setMuted} onEndCall={endCall}
             onStartCall={() => notify('info', '발신 미지원', '현재는 고객이 요청한 웹 음성 상담을 수락할 수 있습니다.')} onOpenTransfer={requestQueueTransfer} canTransfer={can('consultation:transfer')&&can('transfer:read')&&Boolean(draftReady[item.id])}
             onSaveConsultation={save} onRegisterCustomer={data => changeCustomer(data, true)} onUpdateCustomer={data => changeCustomer(data, false)} quotedText={quotedText} onClearQuotedText={() => setQuotedText('')} />}
+          </div>
           </div>
         </div><div className={`interaction-history flex flex-col w-96 shrink-0 min-h-0 ${mobilePanel==='history'?'mobile-visible':''}`}>
           {timelineError && <p role="alert" className="p-2 text-amber-300">{timelineError}<button className="ml-2 underline" onClick={() => setTimelineRefresh(v=>v+1)}>이력 다시 조회</button></p>}

@@ -10,9 +10,10 @@ import { customerProfile, type ServerQueue, type ServerCustomer, type Consultati
 import type { CustomerProfile } from '@/types';
 import {sameConsultationDraft} from '@/lib/work-transfer';
 import {RecordingPlayer} from './RecordingPlayer';
+import {ChatPanel} from './chat/ChatPanel';
 import type {TransferSource} from './transfer/WorkTransferRequestDialog';
 
-interface RecordData { canRequestFollowUp?:boolean; customerName?:string;phoneNumber?:string;companyName?:string;customerType?:string;customerRegistered?:boolean;contactVersion?:number;contactEditable?:boolean; categoryId?:string|null;categoryPath?:string|null;resultId?:string|null;resultName?:string; id:number;version:number;customerCode:string|null;queueCode:string|null;categoryMain:string;categorySub:string;
+interface RecordData { chatEnabled?:boolean;canRequestFollowUp?:boolean; customerName?:string;phoneNumber?:string;companyName?:string;customerType?:string;customerRegistered?:boolean;contactVersion?:number;contactEditable?:boolean; categoryId?:string|null;categoryPath?:string|null;resultId?:string|null;resultName?:string; id:number;version:number;customerCode:string|null;queueCode:string|null;categoryMain:string;categorySub:string;
   status:string;memo:string;editorDocument:string|null;tags:string;agentName:string;createdAt:string;editable?:boolean;processing?:boolean;currentAssigneeName?:string|null; }
 interface Revision { id:number;actorName:string;changedAt:string;beforeDocument:string; }
 const draft=(r:RecordData):ConsultationDraft=>({...savedClassification(r),resultId:r.resultId??null,resultName:r.resultName||'',status:r.status.toLowerCase(),memo:r.editorDocument||r.memo||'',selectedTags:r.tags?.split(',').filter(Boolean)||[]});
@@ -26,6 +27,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
 }) {
   const [selectedCustomer,setSelectedCustomer]=useState('');
   const [selected,setSelected]=useState<number|null>(null);
+  const [chatRecords,setChatRecords]=useState<Record<number,boolean>>({});
   const [page,setPage]=useState(0);const [hasMore,setHasMore]=useState(false);
   const [directRecordId,setDirectRecordId]=useState<number|null>(null);
   const [search,setSearch]=useState('');
@@ -167,6 +169,7 @@ export function CustomerRecordsWorkspace({customers,organizationId,draftStorageK
         {record&&canTransfer&&!readOnly&&canWrite&&record.editable!==false&&!ongoing&&onRequestTransfer&&<button disabled={busy||loading||stale} className="underline p-1 shrink-0" onClick={requestTransfer}>업무 이관 요청</button>}
         {record&&<button className="underline p-1 shrink-0" onClick={()=>void loadRevisions()}>변경 이력</button>}</div>
       {record?.queueCode&&<RecordingPlayer key={record.queueCode} queueCode={record.queueCode} active={active&&canRead} accessKey={accessKey}/>}
+      {record?.chatEnabled&&record.queueCode&&active&&canRead&&<div><button className="p-3 underline chat-history-toggle" type="button" aria-expanded={Boolean(chatRecords[record.id])} onClick={()=>setChatRecords(v=>({...v,[record.id]:!v[record.id]}))}>고객 대화 기록 {chatRecords[record.id]?'접기':'보기'}</button>{chatRecords[record.id]&&<ChatPanel readOnly key={`history:${organizationId}:${record.id}:${accessKey}`} target={{kind:'staff',queueCode:record.queueCode,organizationId,storageKey:`hellow_chat_history:${organizationId}:${record.id}:${accessKey}`}}/>}</div>}
       {canRead&&revisions&&<div className="p-3 bg-slate-950 max-h-64 overflow-auto text-sm"><button className="underline mb-2" onClick={()=>setRevisions(null)}>변경 이력 닫기</button>{!revisions.length&&<p>변경 이력이 없습니다.</p>}{revisions.map(r=><details key={r.id} className="py-2"><summary>{new Date(r.changedAt).toLocaleString('ko-KR')} · {r.actorName}</summary><p className="whitespace-pre-wrap mt-2">{JSON.parse(r.beforeDocument).memo}</p></details>)}</div>}
       {record&&customer?<ActiveWorkspace key={`${organizationId}:${record.id}`} customer={customer} queueCode={record.id<0?record.queueCode!: `record-${record.id}`} organizationId={organizationId} contentRefresh={contentRefresh} initialDraft={drafts[record.id]} onDraftChange={d=>{setDrafts(prev=>({...prev,[record.id]:d}));setDirtyRecords(prev=>({...prev,[record.id]:!sameConsultationDraft(d,draft(record))}));}}
         readOnly={readOnly||!canWrite||record.editable===false||Boolean(ongoing)||stale} customerReadOnly={readOnly||!canEditCustomer||customer.canEdit===false} recordMode busy={busy} mediaStatus="idle" onMute={()=>undefined} callDuration={0} isCallActive={false} onEndCall={()=>{}} onStartCall={()=>{}} onOpenTransfer={()=>{}}

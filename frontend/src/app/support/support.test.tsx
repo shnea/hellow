@@ -43,7 +43,7 @@ it('form sends a ticket with branding and does not claim fake estimated time or 
   fireEvent.change(screen.getByLabelText(/성함 \/ 담당자명/),{target:{value:'입력 고객'}});
   fireEvent.change(screen.getByLabelText(/연락처/),{target:{value:'01012345678'}});
   fireEvent.change(screen.getByLabelText('문의 요약 및 요청 사항'),{target:{value:'입력 문의'}});
-  fireEvent.click(screen.getByRole('button',{name:'온라인 문의 접수'}));fireEvent.click(screen.getByRole('button',{name:branding.buttonLabel}));
+  fireEvent.click(screen.getByRole('button',{name:'실시간 채팅'}));fireEvent.click(screen.getByRole('button',{name:branding.buttonLabel}));
   await screen.findByRole('heading',{name:'문의가 접수되었습니다'});
   expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({channel:'CHAT',customerName:'입력 고객',message:'입력 문의'});
   expect(screen.queryByText(/평균 대기|예상 대기|종단간/)).toBeNull();expect(media.created).not.toHaveBeenCalled();

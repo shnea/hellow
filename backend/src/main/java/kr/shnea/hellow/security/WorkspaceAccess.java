@@ -38,8 +38,11 @@ public class WorkspaceAccess {
   }
 
   public Actor require(String permission) {
-    String organizationId = organizationId();
-    Jwt jwt = identity();
+    return require(organizationId(),identity(),permission);
+  }
+
+  /** Stream deliveries re-check current membership and scopes, never reuse an old grant. */
+  public Actor require(String organizationId,Jwt jwt,String permission) {
     var member =
         memberships
             .findByOrganizationIdAndIssuerAndSubjectAndActiveTrue(

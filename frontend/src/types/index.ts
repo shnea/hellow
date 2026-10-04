@@ -11,6 +11,7 @@ export interface QueueItem {
   assignedSubject?: string | null;
   assignedAgent?: string | null;
   callEnded?: boolean;
+  chatEnabled?:boolean;chatEndedAt?:string|null;
   callStartedAt?:string|null;callEndedAt?:string|null;mediaMissingSince?:string|null;
   version?: number;
   offer?: {id:string;subject:string;name:string;expiresAt:string;received:boolean}|null;

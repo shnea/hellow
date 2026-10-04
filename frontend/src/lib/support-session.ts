@@ -19,6 +19,7 @@ export interface SupportSession {
   waitingCount: number;
   callStartedAt?:string|null;callEndedAt?:string|null;mediaMissingSince?:string|null;
   expiresAt: string;
+  chatEnabled?:boolean;chatEndedAt?:string|null;
 }
 
 export class SupportHttpError extends Error {

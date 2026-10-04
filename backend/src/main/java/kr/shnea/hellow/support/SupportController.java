@@ -25,11 +25,13 @@ public class SupportController {
   private final int pendingLimit;
   private final CustomerIdentityService customerIdentity;
   private final StaffNames staffNames;
+  private final kr.shnea.hellow.chat.ChatService chat;
 
   public SupportController(
       QueueItemRepository queues, OrganizationRepository organizations, LiveKitService media,
       kr.shnea.hellow.settings.SupportSettingsService settings,java.time.Clock clock,com.fasterxml.jackson.databind.ObjectMapper json,
-      @org.springframework.beans.factory.annotation.Value("${hellow.public-pending-limit:100}") int pendingLimit,CustomerIdentityService customerIdentity,StaffNames staffNames) {
+      @org.springframework.beans.factory.annotation.Value("${hellow.public-pending-limit:100}") int pendingLimit,CustomerIdentityService customerIdentity,StaffNames staffNames,kr.shnea.hellow.chat.ChatService chat) {
+    this.chat=chat;
     this.staffNames=staffNames;
     this.queues = queues;
     this.organizations = organizations;
@@ -98,6 +100,7 @@ public class SupportController {
     if(q.getType()==QueueItem.ItemType.CALL)q.awaitCallbackUntil(clock.instant().plusSeconds(30));
     q.setInquiryType(r.inquiryType());
     queues.save(q);
+    if("CHAT".equals(r.channel()))chat.initialize(q,r.message());
     return response(q);
   }
 
@@ -171,6 +174,7 @@ public class SupportController {
         "channel",q.getType()==QueueItem.ItemType.CALL?"CALL":"CHAT",
         "waitingCount",count));
     result.put("expiresAt",q.getSupportExpiresAt());
+    result.put("chatEnabled",q.isChatEnabled());result.put("chatEndedAt",q.getChatEndedAt());
     result.put("mediaMissingSince",q.getMediaMissingSince());result.put("callStartedAt",q.getCallStartedAt());result.put("callEndedAt",q.getCallEndedAt());
     return result;
   }

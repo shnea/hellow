@@ -7,6 +7,7 @@ import {LiveKitCallSession} from '@/lib/livekit';
 import {useSupportSession} from '@/hooks/use-support-session';
 import {supportJson,rememberSupportResume} from '@/lib/support-session';
 import {CallReconnectNotice} from '@/components/CallReconnectNotice';
+import {ChatPanel} from '@/components/chat/ChatPanel';
 import {useCallClock} from '@/hooks/use-call-clock';
 import './support.css';
 
@@ -267,7 +268,7 @@ export default function CustomerSupportPage() {
                       }`}
                     >
                       <MessageSquare className="w-4 h-4" />
-                      온라인 문의 접수
+                      실시간 채팅
                     </button>
                   </div>
                 </div>
@@ -305,7 +306,12 @@ export default function CustomerSupportPage() {
           <p className="my-4 text-sm text-slate-300 break-words">{request?.customerName} · {request?.inquiryType}</p>
           <button disabled={submitting||!organizationName} onClick={()=>void flow.submit()} className={buttonClass}>{submitting?'확인 중…':'기존 요청 확인·재시도'}</button>
         </div>}
-        {step==='WAITING'&&<div className={panelClass}>
+        {session?.chatEnabled&&['WAITING','PROCESSING','FINISHED','CANCELLED'].includes(step)&&<div className="support-chat">
+          <p className="px-4 pt-4 text-sm text-slate-300">{session.assignedAgent?`담당자 · ${session.assignedAgent}`:'상담사 연결을 기다리고 있습니다.'}</p>
+          <ChatPanel key={session.sessionId} target={{kind:'customer',sessionId:session.sessionId,storageKey:`hellow_chat_customer:${organizationCode}:${session.sessionId}`}}/>
+          {step==='WAITING'&&<div className="px-4 pb-4"><button disabled={submitting} onClick={()=>void flow.cancel()} className={buttonClass}>상담 요청 취소</button></div>}
+        </div>}
+        {step==='WAITING'&&!session?.chatEnabled&&<div className={panelClass}>
           <Headphones className="w-12 h-12 text-indigo-400 mx-auto mb-4"/>
           <h1 className="text-2xl font-bold">{session?.channel==='CALL'?'상담사 연결을 기다리고 있습니다':'문의가 접수되었습니다'}</h1>
           <p className="mt-3 text-slate-300">{session?.channel==='CALL'?'상담사가 요청을 수락하면 음성 연결을 준비합니다. 이 화면을 유지해 주세요.':'담당자가 문의 내용을 확인할 때까지 기다려 주세요. 이 화면에서 처리 상태를 확인할 수 있습니다.'}</p>
@@ -313,7 +319,7 @@ export default function CustomerSupportPage() {
           <p className="mb-6 text-sm text-slate-300 break-words">{request?.customerName} · {request?.inquiryType}</p>
           <button disabled={submitting} onClick={()=>void flow.cancel()} className={buttonClass}>{submitting?'취소 확인 중…':'상담 요청 취소'}</button>
         </div>}
-        {step==='PROCESSING'&&<div className={panelClass}>
+        {step==='PROCESSING'&&!session?.chatEnabled&&<div className={panelClass}>
           {isVoice?<PhoneCall className="w-12 h-12 text-emerald-400 mx-auto mb-4"/>:<MessageSquare className="w-12 h-12 text-indigo-400 mx-auto mb-4"/>}
           <h1 className="text-2xl font-bold">{isVoice?'음성 상담':'문의 처리 중'}</h1>
           <p className="my-3 text-slate-300 break-words">{session?.assignedAgent?`담당자 · ${session.assignedAgent}`:'담당자가 요청을 확인하고 있습니다.'}</p>
@@ -336,7 +342,7 @@ export default function CustomerSupportPage() {
         </div>}
         {['FINISHED','CANCELLED','EXPIRED'].includes(step)&&<div className={panelClass}>
           {step==='FINISHED'?<CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4"/>:<AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4"/>}
-          <h1 className="text-2xl font-bold">{step==='EXPIRED'?'접수 화면의 이용 시간이 만료되었습니다':step==='CANCELLED'?'상담 요청이 취소되었습니다':session?.status==='CALL_ENDED'?'통화가 종료되었습니다':'상담이 완료되었습니다'}</h1>
+          <h1 className="text-2xl font-bold">{step==='EXPIRED'?'접수 화면의 이용 시간이 만료되었습니다':step==='CANCELLED'?'상담 요청이 취소되었습니다':session?.chatEndedAt?'채팅 대화가 종료되었습니다':session?.status==='CALL_ENDED'?'통화가 종료되었습니다':'상담이 완료되었습니다'}</h1>
           <p className="my-6 text-slate-300">{step==='EXPIRED'?'접수 기록은 보존됩니다. 추가 문의가 필요하면 새 요청을 접수해 주세요.':session?.status==='CALL_ENDED'?'담당자는 통화 후 상담 기록을 정리합니다. 추가 문의가 필요하면 새 요청을 접수해 주세요.':'추가 문의가 필요하면 새 요청을 접수해 주세요.'}</p>
           <button onClick={newRequest} disabled={submitting} className={buttonClass}>새로운 상담 문의하기</button>
         </div>}

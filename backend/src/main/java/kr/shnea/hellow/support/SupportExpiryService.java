@@ -17,6 +17,7 @@ public class SupportExpiryService {
       if(!q.supportExpired(clock.instant()))return;
       if(q.getStatus()==QueueItem.QueueStatus.WAITING)q.cancel();
       else if(q.getStatus()==QueueItem.QueueStatus.PROCESSING&&q.getType()==QueueItem.ItemType.CALL)q.endCall();
+      else if(q.getStatus()==QueueItem.QueueStatus.PROCESSING&&q.isChatEnabled())q.endChat(clock.instant());
       // Accepted tickets and saved records remain staff work after customer access expires.
     });
   }

@@ -238,7 +238,7 @@ public class RoutingService {
     String state;
     String code=null;
     if(!jobs.isEmpty()){
-      var q=jobs.getFirst();state=q.getType()==QueueItem.ItemType.CALL&&q.isCallEnded()?"AFTER_CALL":"CALLING";
+      var q=jobs.getFirst();state=q.getType()==QueueItem.ItemType.CALL&&q.isCallEnded()||q.isChatEnabled()&&q.getChatEndedAt()!=null?"AFTER_CALL":"CALLING";
       if(org.equals(q.getOrganizationId()))code=q.getCode();
     }else if(!followups.activeForIdentity(p.getIssuer(),p.getSubject()).isEmpty()){state="FOLLOW_UP";}
     else if(!reserved.isEmpty()){state="TRANSFER_PENDING";}

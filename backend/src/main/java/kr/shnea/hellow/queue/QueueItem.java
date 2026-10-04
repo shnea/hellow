@@ -70,6 +70,17 @@ public class QueueItem extends kr.shnea.hellow.security.OrganizationOwned {
   @Column(unique = true)
   private String requestKey;
 
+  @Column(nullable=false) private boolean chatEnabled;
+  @Column(nullable=false) private long chatSequence;
+  private java.time.Instant chatEndedAt;
+  public boolean isChatEnabled(){return chatEnabled;}
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public long getChatSequence(){return chatSequence;}
+  public java.time.Instant getChatEndedAt(){return chatEndedAt;}
+  public void enableChat(){chatEnabled=true;}
+  public long nextChatSequence(){return ++chatSequence;}
+  public void endChat(java.time.Instant now){if(chatEnabled&&chatEndedAt==null)chatEndedAt=now;}
+
   private java.time.Instant supportExpiresAt;
   private java.time.Instant callbackDueAt;
   private Long callbackFollowUpId;

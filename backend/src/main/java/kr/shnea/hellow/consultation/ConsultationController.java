@@ -27,6 +27,7 @@ public class ConsultationController {
   private final kr.shnea.hellow.content.CatalogService catalog;
   private final kr.shnea.hellow.customer.CustomerIdentityService customerIdentity;
   private final ConsultationRevisionRepository revisions;
+  private final java.time.Clock clock;
 
   public ConsultationController(
       ConsultationRepository consultations,
@@ -34,7 +35,8 @@ public class ConsultationController {
       TimelineRepository timelines,
       WorkspaceAccess access,
       ObjectMapper json,
-      AttachmentRepository attachments,kr.shnea.hellow.content.CatalogService catalog,kr.shnea.hellow.customer.CustomerIdentityService customerIdentity,ConsultationRevisionRepository revisions) {
+      AttachmentRepository attachments,kr.shnea.hellow.content.CatalogService catalog,kr.shnea.hellow.customer.CustomerIdentityService customerIdentity,ConsultationRevisionRepository revisions,java.time.Clock clock) {
+    this.clock=clock;
     this.consultations = consultations;
     this.queues = queues;
     this.timelines = timelines;
@@ -89,6 +91,8 @@ public class ConsultationController {
       if(Objects.equals(prior.getEditorDocument(),r.editorDocument().toString())&&Objects.equals(prior.getCategoryMain(),r.categoryMain())&&Objects.equals(prior.getCategorySub(),r.categorySub())&&Objects.equals(prior.getCategoryId(),r.categoryId())&&Objects.equals(prior.getResultId(),r.resultId())&&Objects.equals(prior.getTags(),r.tags())&&Objects.equals(prior.getMemo(),r.memo()))return prior;
     }
     if(!historical)q.requireOwner(actor.subject());
+    if(!historical&&r.complete()&&q.isChatEnabled()&&q.getChatEndedAt()==null&&!q.supportExpired(clock.instant()))
+      throw new ResponseStatusException(CONFLICT,"채팅을 종료한 뒤 상담을 완료해 주세요.");
     if (!historical && r.complete() && q.getType() == QueueItem.ItemType.CALL && !q.isCallEnded())
       throw new ResponseStatusException(CONFLICT, "통화를 종료한 뒤 상담을 완료해 주세요.");
     if (!"shnea-editor".equals(r.editorDocument().path("format").asText())

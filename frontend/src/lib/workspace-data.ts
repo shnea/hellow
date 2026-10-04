@@ -8,6 +8,7 @@ export interface ServerQueue { assignedDisplayName?:string;
   status: QueueItem['status']; assignedSubject: string | null; assignedAgent: string | null;
   callStartedAt?:string|null;callEndedAt?:string|null;mediaMissingSince?:string|null;
   callEnded: boolean; version: number;mediaAgentIdentity?:string|null;
+  chatEnabled?:boolean;chatEndedAt?:string|null;
   offer?:QueueItem['offer'];canAccept?:boolean;routingPaused?:boolean;attemptCount?:number;
 }
 export interface ServerCustomer {
@@ -25,6 +26,7 @@ export function queueItem(q: ServerQueue): QueueItem {
     priority: q.priority, summary: q.summary, unread: q.unread, isRegistered: q.registered,
     isComplainant: q.complainant, status: q.status, assignedSubject: q.assignedSubject,
     assignedAgent: q.assignedDisplayName||q.assignedAgent, callEnded: q.callEnded,callStartedAt:q.callStartedAt,callEndedAt:q.callEndedAt,mediaMissingSince:q.mediaMissingSince, version: q.version,mediaAgentIdentity:q.mediaAgentIdentity,
+    chatEnabled:q.chatEnabled,chatEndedAt:q.chatEndedAt,
     offer:q.offer,canAccept:q.canAccept,routingPaused:q.routingPaused,attemptCount:q.attemptCount };
 }
 export function customerProfile(c: ServerCustomer): CustomerProfile {

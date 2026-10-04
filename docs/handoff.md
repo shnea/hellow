@@ -1,5 +1,18 @@
 # 작업 인계 기록
 
+## 2026-10-04 F02 고객 실시간 채팅
+
+- **코드·격리 검증 완료, 개발 반영 준비 중.** 사용자 목표는 고객 실시간 채팅의 양방향 대화·재접속·저장·종료다. 기존 개발 API `aea94bf`·웹 `225d61b`·DB V21과 이번 결과를 구분한다. 최종 데이터/API·정책·초안/권한 계약은 [고객 채팅 계약](customer-chat.md)에 둔다.
+- 신규 공개 CHAT만 기존 접수/ACD에 저장 대화를 연결한다. Queue 잠금·서버 sequence·발신 Identity tuple/UUID 유일성으로 전송·중복·종료·이관을 직렬화한다. HTTP POST+인증 fetch SSE/1초 DB 조회를 선택했고 capability는 새 채팅 API의 헤더로 보낸다. 매 전달에서 활성 조직·권한·세션을 재검사한다. 새 유료 서비스/별도 메시지 브로커는 추가하지 않았다.
+- 대기에는 최초 문의·수락 안내·취소, 수락 후 양방향 대화, 종료 후 저장 대화·직원 후처리, 이력의 읽기 전용 대화를 제공한다. 대화/상담 기록 전환과 문서 초안을 유지하고 원문을 자동 덮어쓰지 않는다. 전송 전 원문/UUID를 보관해 응답 유실·새로고침 때 같은 ID로 재시도한다. 마이크를 요구하지 않으며 음성/콜백 경로를 유지한다.
+- Java21 전체 Gradle build/API 이미지 **177건 중168건 통과·실패0**, 보고용 PostgreSQL opt-in9건 skip. 채팅 통합10건에서 중복/종료 경합·구독 권한 회수·만료 worker·긴 표시명/Identity 경계·legacy 문의를 검사했다. 만료 worker의 대상 조회 누락과 독립 채팅 scheduler 미작동을 실제 검사로 찾아 수정했다.
+- 프런트 전체 **152건/33파일**, 마지막 키보드 보완 뒤 관련 **11건/3파일** 통과. 최종 lint·TypeScript 포함 production build 및 Docker 웹 build 통과. 문서/whitespace 검사도 통과했다. 검사 fixture의 API method·표시명 선택·컴파일·수신 타이밍 문제는 검사 준비를 고쳤고 제품 계약을 검사에 맞춰 우회하지 않았다.
+- 합성 OIDC/JWKS·격리 PostgreSQL17의 실제 HTTP/SSE 두 브라우저에서 공개 폼→ACD 수락·양방향 전송·새로고침·오프라인 복원·종료·초안, 실제 WORK 이관·이전 담당 읽기/새 담당 쓰기·100건 초과 순서/동시 중복을 확인했다. 최종 API 재시작 후 원문 전체·중복 ACK·cursor·SSE 전달을 확인했다. 공개 메시지에는 내부 상담/이관 메모가 없다.
+- 다섯 viewport의 대화·대기·긴 원문/미읽음·전송 중·장애·종료·이력 **18장**을 열었다. 문서 가로 넘침0·페이지 오류0, 작은 화면 전송, 장애 중 별도 상담 저장·마이크 미요청·Tab/PageDown과 초점을 확인했다. 독립 일반 에이전트가 전용 Impeccable reviewer/documenter를 대신했다. 최초 키보드 접근 finding과 documenter의 이력 버튼36px 상속을 수정했고 두 항목 **resolved/ship** 판정을 받았다. detector1회는 기존 support 선택색 warning1개이며 전체 무경고로 보고하지 않는다. 기존 DESIGN/comp drift와 보류 태블릿 문서 패널은 정비하지 않았다.
+- 개발 V21 백업을 새 격리 DB로 복원해 최종 V22/Hibernate validate/health와 기존 **28개 테이블 모든 행·기존 열 hash 일치**, 과거 접수 chatEnabled=false/sequence0/end NULL을 확인했다. 원본 DB와 복원본을 삭제하지 않았다. 검증용 데이터·권한·OIDC는 별도 `chat_fixture_final_*` DB에만 있고 실제 계정에는 적용하지 않았다.
+- Git 제외 증거: `output/chat-ui/{proof,final-proof}.json`·PNG18장, `chat-boundary-proof.json`, `chat-restart-proof.json`, `chat-final-migration-proof.json`, `backend-chat-final-tests/`, `chat-finish-{review,verdict}.md`, `chat-documentation.md`. 최초 백업 `output/backups/hellow-chat-validation-20261004_202500.dump`와 복원 DB를 보존한다. 다른 clone에 이 output 도구가 있다고 가정하지 않는다.
+- 다음 순서: 구현 커밋/push → 진행 통화/미결 이관 확인·새 백업 → 동결 복원 DB/실제 DB V21→V22·기존 전 행/열 보존 → 개발 API/웹·Nginx·공개 채팅 번들 확인 → 배포 결과 기록. 실제 삼성 기기/실사용 OIDC 수락은 별도다. 운영 NAS·유료 공급자·고객 피드백·태블릿 가운데 문서 패널은 범위 밖/보류를 유지한다. 다음 신규 기능은 새 지시에 따른 F03 지식관리다.
+
 ## 2026-10-04 목록·현황 디자인 일치
 
 - 사용자 요청에 따라 콜백·방문 예약, 상담이관, 상담 현황·기본 통계의 제목·설명·버튼·필터·표·페이지 이동을 기존 My 상담 이력에 맞췄다. 공통 `work-list.css`를 사용하고 적은 조회 조건이 한 줄을 채우지 않도록 각각 최대240px·flex grow0으로 제한했다. [디자인 기준](workspace-list-design.md)에 상세를 기록했다.
