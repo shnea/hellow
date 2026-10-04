@@ -1,4 +1,4 @@
-import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
+import {render,screen,fireEvent,waitFor,cleanup,within} from '@testing-library/react';
 import {afterEach,beforeEach,it,expect,vi} from 'vitest';
 import {KnowledgeWorkspace} from './KnowledgeWorkspace';
 import {workJson} from '@/lib/team-collaboration';
@@ -8,8 +8,13 @@ vi.mock('../ShneaConsultationEditor',()=>({ShneaConsultationEditor:({initialText
 const fixture={id:'doc',version:2,title:'게시 지식',category:'기술',kind:'DOCUMENT',visibility:'ORGANIZATION',state:'PUBLISHED',revision:1,publishedRevision:1,unpublishedChanges:false,document:'{"format":"shnea-editor","content":{"type":"doc"}}',attachments:[],authorName:'직원',updatedAt:'2026-10-04T00:00:00Z',editable:true,publishable:true};
 const props={active:true,organizationId:'a',storageKey:'knowledge-test',canRead:true,canWrite:true,canPublish:true};
 const api=vi.mocked(workJson);
-beforeEach(()=>{sessionStorage.clear();window.history.replaceState(null,'','/');api.mockReset();api.mockImplementation(async(path)=>path.startsWith('/api/knowledge?')?{items:[fixture],hasMore:false}:fixture);});
+beforeEach(()=>{HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};sessionStorage.clear();window.history.replaceState(null,'','/');api.mockReset();api.mockImplementation(async(path)=>path.startsWith('/api/knowledge?')?{items:[fixture],hasMore:false}:fixture);});
 afterEach(cleanup);
+it('목록 조건과 초안을 유지하며 팝업으로 열고 닫기·Escape로 목록에 돌아온다',async()=>{
+ render(<KnowledgeWorkspace {...props}/>);await screen.findByText('게시 지식');fireEvent.change(screen.getByLabelText('제목·분류·본문'),{target:{value:'기술'}});fireEvent.click(screen.getByRole('button',{name:'게시 지식 열기'}));const dialog=await screen.findByRole('dialog',{name:'지식 상세보기'});fireEvent.change(await within(dialog).findByLabelText('제목'),{target:{value:'팝업 초안'}});
+ expect(screen.getByLabelText('제목·분류·본문').getAttribute('value')).toBe('기술');expect(document.querySelector('.list-table tbody tr')).not.toBeNull();fireEvent.click(within(dialog).getByRole('button',{name:'닫기'}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());expect(new URL(window.location.href).searchParams.has('knowledge')).toBe(false);
+ fireEvent.click(screen.getByRole('button',{name:'게시 지식 열기'}));const reopened=await screen.findByRole('dialog');expect((await within(reopened).findByLabelText('제목') as HTMLInputElement).value).toBe('팝업 초안');fireEvent(reopened,new Event('cancel',{bubbles:true,cancelable:true}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+});
 it('비활성 메뉴는 조회하지 않고 활성 메뉴에서 조직별 목록·검색을 조회한다',async()=>{
  const {rerender}=render(<KnowledgeWorkspace {...props} active={false}/>);expect(api).not.toHaveBeenCalled();rerender(<KnowledgeWorkspace {...props}/>);await screen.findByText('게시 지식');fireEvent.change(screen.getByLabelText('제목·분류·본문'),{target:{value:'찾을 본문'}});fireEvent.click(screen.getByRole('button',{name:'검색'}));await waitFor(()=>expect(api.mock.calls.some(([path,org])=>path.includes('q=%EC%B0%BE%EC%9D%84')&&org==='a')).toBe(true));
 });

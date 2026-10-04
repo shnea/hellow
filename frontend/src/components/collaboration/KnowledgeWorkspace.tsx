@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import type {AttachmentAdapter} from '@shnea/editor';
-import {BookOpen,ArrowLeft,Plus,Link as LinkIcon} from 'lucide-react';
+import {BookOpen,Plus,Link as LinkIcon} from 'lucide-react';
 import {ApiError,jsonBody} from '@/lib/api';
 import {readDocument} from '@/lib/editor-document';
 import {workJson,workUpload,workTime,knowledgeKinds,knowledgeStates,visibilityLabels,type Knowledge,type KnowledgeRevision,type WorkFile,type WorkPage} from '@/lib/team-collaboration';
@@ -20,6 +20,8 @@ export function KnowledgeWorkspace({active,organizationId,storageKey,canRead,can
   const [drafts,setDrafts]=useState<Record<string,Draft>>({}),[history,setHistory]=useState<(WorkPage<KnowledgeRevision>&{page:number})|null>(null),[loading,setLoading]=useState(false),[busy,setBusy]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[refresh,setRefresh]=useState(0),[ready,setReady]=useState(false);
   const flight=useRef(false),mounted=useRef(false),detailAbort=useRef<AbortController|null>(null);
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{const el=dialog.current;if(active&&allowed&&selected){if(!el?.open)el?.showModal();}else el?.close();},[active,allowed,selected]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   useEffect(()=>{if(!active||ready)return;
     void Promise.resolve().then(()=>{if(!mounted.current)return;try{const saved=sessionStorage.getItem(storageKey);if(saved)setDrafts(JSON.parse(saved));setReady(true);
@@ -70,15 +72,18 @@ export function KnowledgeWorkspace({active,organizationId,storageKey,canRead,can
   const copyLink=async()=>{if(!doc)return;try{const url=new URL('/',window.location.origin);url.searchParams.set('knowledge',doc.id);await navigator.clipboard.writeText(url.href);setNotice('문서 링크를 복사했습니다. 링크를 여는 직원의 권한을 확인합니다.');}catch{setError('링크를 복사하지 못했습니다. 주소창의 문서 주소를 복사해 주세요.');}};
   if(!allowed)return null;
   return <section hidden={!active} className="crm-list-workspace knowledge-workspace" aria-label="지식관리">
-    <header className="list-heading"><div><h1>지식관리</h1><p>문서와 FAQ를 검색하고, 확인된 내용을 조직에 게시합니다.</p></div><div className="work-actions">{selected?<button onClick={()=>choose(null)} disabled={busy}><ArrowLeft size={16}/>목록으로</button>:canWrite&&<button className="work-primary" onClick={create} disabled={!ready}><Plus size={16}/>지식 작성</button>}<button onClick={()=>setRefresh(x=>x+1)} disabled={busy}>다시 조회</button></div></header>
-    {error&&<p className="list-error" role="alert">{error}</p>}{notice&&<p role="status" className="work-notice">{notice}</p>}
-    {!selected?<><button className="list-filter-toggle" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(x=>!x)}>조회 조건 {filtersOpen?'접기':'열기'}</button>
+    <header className="list-heading"><div><h1>지식관리</h1><p>문서와 FAQ를 검색하고, 확인된 내용을 조직에 게시합니다.</p></div><div className="work-actions">{canWrite&&<button className="work-primary" onClick={create} disabled={!ready}><Plus size={16}/>지식 작성</button>}<button onClick={()=>setRefresh(x=>x+1)} disabled={busy}>다시 조회</button></div></header>
+    {!selected&&<>{error&&<p className="list-error" role="alert">{error}</p>}{notice&&<p role="status" className="work-notice">{notice}</p>}</>}
+    <button className="list-filter-toggle" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(x=>!x)}>조회 조건 {filtersOpen?'접기':'열기'}</button>
       <form className={`list-filters ${filtersOpen?'filters-open':''}`} onSubmit={e=>{e.preventDefault();setQuery(q);setPage(0);}}><label>제목·분류·본문<input maxLength={200} value={q} onChange={e=>setQ(e.target.value)} placeholder="지식 검색"/></label><label>종류<select value={kind} onChange={e=>{setKind(e.target.value);setPage(0);}}><option value="">전체</option>{Object.entries(knowledgeKinds).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>상태<select value={state} onChange={e=>{setState(e.target.value);setPage(0);}}><option value="">전체</option>{Object.entries(knowledgeStates).filter(([k])=>k==='PUBLISHED'||canWrite||canPublish).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button type="submit">검색</button></form>
       <div className="list-meta"><span>{loading?'조회 중…':`현재 페이지 ${rows.length}건`}</span><span>접근 가능한 지식만 표시 · 페이지당30건</span></div>
       <div className="list-table"><table><thead><tr><th>제목</th><th>종류·분류</th><th>공개 범위</th><th>상태</th><th>수정 시각</th><th>열기</th></tr></thead><tbody>{rows.map(v=><tr key={v.id}><td className="list-row-main"><strong>{v.title}</strong><small>{v.authorName}</small></td><td>{knowledgeKinds[v.kind]} · {v.category||'분류 없음'}</td><td>{visibilityLabels[v.visibility]}</td><td>{knowledgeStates[v.state]}{v.publishedRevision&&v.unpublishedChanges?' · 수정 초안':''}</td><td className="list-row-time"><time dateTime={v.updatedAt}>{workTime(v.updatedAt)}</time></td><td className="list-row-action"><button onClick={()=>choose(v.id)} aria-label={`${v.title} 열기`}>열기</button></td></tr>)}</tbody></table>{!loading&&!rows.length&&<p className="list-empty"><BookOpen size={24}/>{query||kind||state?'조회 조건에 맞는 지식이 없습니다.':'아직 접근 가능한 지식이 없습니다.'}{canWrite?'지식 작성으로 첫 문서를 추가해 주세요.':'게시된 문서와 조회 권한을 확인해 주세요.'}</p>}</div>
       <footer className="list-pagination"><button disabled={page===0||loading} onClick={()=>setPage(x=>x-1)}>이전</button><span>{page+1}페이지</span><button disabled={!hasMore||loading} onClick={()=>setPage(x=>x+1)}>다음</button></footer>
-    </>:<div className="knowledge-detail">
-      {selected!=='new'&&!doc?<p role="status">문서를 확인하고 있습니다.</p>:<>
+    <dialog ref={dialog} className="knowledge-detail-dialog crm-list-dialog" aria-label={selected==='new'?'지식 작성':'지식 상세보기'} onCancel={e=>{e.preventDefault();e.stopPropagation();if(!busy)choose(null);}}>
+      <header className="list-dialog-heading"><h2>{selected==='new'?'지식 작성':'지식 상세보기'}</h2><button autoFocus disabled={busy} onClick={()=>choose(null)}>닫기</button></header>
+      {selected&&<div className="knowledge-detail list-dialog-body">
+      {error&&<p className="list-error" role="alert">{error}</p>}{notice&&<p role="status" className="work-notice">{notice}</p>}
+      {selected!=='new'&&!doc?error?<button onClick={()=>setRefresh(x=>x+1)} disabled={busy}>문서 다시 조회</button>:<p role="status">문서를 확인하고 있습니다.</p>:<>
         <div className="work-actions">{doc&&<><span>{knowledgeStates[doc.state]} · 버전{doc.revision}{doc.publishedRevision?` · 게시 버전${doc.publishedRevision}`:''}</span><button onClick={()=>void copyLink()}><LinkIcon size={16}/>링크 복사</button>{(doc.editable||doc.publishable)&&<button onClick={()=>void revisions()} disabled={busy}>버전 이력</button>}</>}{editable&&<button className="work-primary" disabled={busy||!draft||stale||!dirty} onClick={()=>void save()}>{busy?'저장 확인 중…':'초안 저장'}</button>}{doc?.publishable&&<>{doc.state==='ARCHIVED'?<button disabled={busy} onClick={()=>void transition('restore')}>초안으로 복원</button>:<><button disabled={busy||dirty} onClick={()=>void transition('publish')}>게시</button><button disabled={busy||dirty} onClick={()=>void transition('archive')}>보관</button></>}</>}</div>
         {dirty&&<p className="work-notice">저장하지 않은 초안이 있습니다. 메뉴나 문서를 바꿔도 이 브라우저 탭에 보관합니다.</p>}
         {stale&&<div role="alert" className="list-error"><p>서버 문서가 변경되었습니다. 내 입력은 보존했습니다. 아래 최신 본문을 확인한 뒤 적용해 주세요.</p><details><summary>최신 본문 확인</summary><ShneaConsultationEditor documentKey={`latest:${doc!.id}:${doc!.version}`} queueCode="" organizationId={organizationId} readOnly initialText={doc!.document} attachmentAdapter={adapter}/></details><button disabled={busy} onClick={()=>patch({expectedVersion:doc!.version})}>확인한 최신 버전에 내 초안 적용</button></div>}
@@ -87,5 +92,6 @@ export function KnowledgeWorkspace({active,organizationId,storageKey,canRead,can
         {history&&<div className="knowledge-history"><h2>버전 이력</h2><p>이전 버전을 초안에 가져온 뒤 저장·게시할 수 있습니다.</p>{history.items.map(v=><div key={v.revision}><span>버전{v.revision} · {v.title} · {v.editorName} · {workTime(v.createdAt)}</span>{editable&&<button disabled={busy} onClick={()=>{patch({title:v.title,category:v.category,kind:v.kind,visibility:v.visibility,document:v.document,attachments:v.attachments});setNotice(`버전${v.revision}을 초안에 가져왔습니다. 확인 후 저장해 주세요.`);}}>초안으로 가져오기</button>}</div>)}<div className="list-pagination"><button disabled={busy||!history.page} onClick={()=>void revisions(history.page-1)}>이전 버전 페이지</button><span>{history.page+1}페이지</span><button disabled={busy||!history.hasMore} onClick={()=>void revisions(history.page+1)}>다음 버전 페이지</button></div></div>}
       </>}
     </div>}
+    </dialog>
   </section>;
 }

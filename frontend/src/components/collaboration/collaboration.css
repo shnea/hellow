@@ -9,6 +9,7 @@
 .knowledge-workspace small{display:block;color:#cbd5e1;margin-top:4px}
 .knowledge-workspace .list-empty,.internal-chat-workspace .list-empty{display:flex;flex-direction:column;align-items:center;gap:12px}
 .knowledge-detail{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;scrollbar-color:#475569 #0f172a}
+.knowledge-detail-dialog{margin:auto;border:1px solid #475569;scrollbar-color:#475569 #0f172a}
 .knowledge-detail h2,.internal-room-form h2{font-size:17px;font-weight:600}
 .knowledge-fields{display:flex;flex-wrap:wrap;gap:12px}
 .knowledge-fields label{display:grid;gap:6px;flex:0 1 240px;max-width:240px;font-size:13px;min-width:130px}

@@ -54,6 +54,6 @@ export function WorkAttachment({file,path,organizationId,previewImage=false,onLo
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={preview} alt={file.name} referrerPolicy="no-referrer" onLoad={onLoad} onError={()=>{setPreview('');setPreviewError('이미지를 불러오지 못했습니다.');}}/>
     </button>:previewError?<span className="work-image-error"><span role="alert">{previewError}</span><button type="button" onClick={()=>setRetry(v=>v+1)}>이미지 다시 불러오기</button></span>:<span role="status">이미지 미리보기 확인 중…</span>)}
-    <button type="button" onClick={()=>void open()} disabled={busy}><Paperclip size={14}/><span>{file.name}</span><small>{(file.size/1024/1024).toFixed(1)}MB · {busy?'확인 중…':'원본 보기'}</small></button>{error&&<span role="alert" className="list-error">{error} 다시 눌러 주세요.</span>}
+    {isImage&&preview?<small>{file.name} · {(file.size/1024/1024).toFixed(1)}MB</small>:<button type="button" onClick={()=>void open()} disabled={busy}><Paperclip size={14}/><span>{file.name}</span><small>{(file.size/1024/1024).toFixed(1)}MB · {busy?'확인 중…':'원본 보기'}</small></button>}{error&&<span role="alert" className="list-error">{error} 다시 눌러 주세요.</span>}
   </span>;
 }
