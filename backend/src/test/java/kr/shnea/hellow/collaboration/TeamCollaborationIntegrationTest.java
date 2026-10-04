@@ -211,6 +211,63 @@ class TeamCollaborationIntegrationTest {
   }
 
   @Test
+  void unreadCountsIncomingAcrossAllPagesAndRespectsCurrentParticipation() throws Exception {
+    var first = direct();
+    String id = first.path("id").asText();
+    send(id, "alice", UUID.randomUUID().toString(), "내 메시지");
+    mvc.perform(actor(get("/api/internal-chat/unread"), "alice", "a"))
+        .andExpect(jsonPath("$.count").value(0));
+    send(id, "bob", UUID.randomUUID().toString(), "상대 메시지");
+    for (int i = 0; i < 30; i++) {
+      var group =
+          response(
+              mvc.perform(
+                  actor(post("/api/internal-chat/rooms"), "alice", "a")
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          body(
+                              Map.of(
+                                  "requestId",
+                                  UUID.randomUUID(),
+                                  "kind",
+                                  "GROUP",
+                                  "name",
+                                  "검수 " + i,
+                                  "participantIds",
+                                  List.of(bob))))));
+      send(group.path("id").asText(), "bob", UUID.randomUUID().toString(), "수신 원문");
+    }
+    mvc.perform(actor(get("/api/internal-chat/unread"), "alice", "a"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.count").value(31))
+        .andExpect(header().string("Cache-Control", "no-store"));
+    mvc.perform(actor(get("/api/internal-chat/rooms"), "alice", "a"))
+        .andExpect(jsonPath("$.items.length()").value(30));
+    mvc.perform(
+            actor(post("/api/internal-chat/rooms/" + id + "/read"), "alice", "a")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(Map.of("sequence", 2))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.unread").value(0));
+    mvc.perform(actor(get("/api/internal-chat/unread"), "alice", "a"))
+        .andExpect(jsonPath("$.count").value(30));
+    mvc.perform(actor(get("/api/internal-chat/unread"), "eve", "b"))
+        .andExpect(jsonPath("$.count").value(0));
+    mvc.perform(
+            actor(post("/api/internal-chat/rooms/" + id + "/leave"), "bob", "a")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(Map.of("expectedVersion", 2))))
+        .andExpect(status().isOk());
+    mvc.perform(actor(get("/api/internal-chat/unread"), "bob", "a"))
+        .andExpect(jsonPath("$.count").value(0));
+    var member = members.findById(alice).orElseThrow();
+    member.getPermissions().clear();
+    members.saveAndFlush(member);
+    mvc.perform(actor(get("/api/internal-chat/unread"), "alice", "a"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void knowledgeScopesVersionConflictAndIdempotentCreateAreStrict() throws Exception {
     String request = UUID.randomUUID().toString();
     var payload = write(0, "작성", "ORGANIZATION", "DOCUMENT", request);

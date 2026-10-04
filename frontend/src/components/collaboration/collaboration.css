@@ -23,6 +23,10 @@
 .work-attachment button{max-width:100%;white-space:normal!important;text-align:left!important;justify-content:flex-start;flex-wrap:wrap}
 .work-attachment button span{overflow-wrap:anywhere;min-width:0}
 .work-attachment small{color:#cbd5e1;font-size:11px}
+.work-attachment button.work-image-open{display:block;padding:0;border:0;background:transparent;overflow:hidden;border-radius:6px}
+.work-image-open img{display:block;max-width:min(280px,100%);max-height:180px;object-fit:contain}
+.work-image-error{display:grid;gap:6px;font-size:12px;color:#fecdd3}
+.internal-image-pending{max-width:80px;max-height:64px;object-fit:contain;border-radius:6px;flex-shrink:0}
 .work-file-select{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px;color:#e2e8f0}
 .work-file-select input{max-width:100%;width:240px;font-size:12px}
 .internal-layout{display:flex;flex:1;min-height:0;gap:16px}
@@ -49,6 +53,8 @@
 .internal-conversation .chat-error button{margin-left:8px}
 .internal-pending{display:flex;align-items:center;gap:8px;color:#c7d2fe;overflow-wrap:anywhere}
 .internal-pending span{min-width:0}
+.internal-conversation .chat-composer .internal-pending{justify-content:flex-start;flex-wrap:nowrap}
+.internal-pending span{flex:1}.internal-pending :is(svg,button){flex-shrink:0}
 .internal-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .internal-conversation .chat-composer label.work-file-select{position:relative;display:flex;gap:6px;align-items:center;min-height:44px;padding:8px 12px;border:1px solid #475569;border-radius:6px;width:fit-content;cursor:pointer}
 .internal-composer-actions .work-file-select input{position:absolute;inset:0;opacity:0;width:100%;height:100%;min-height:0;padding:0;cursor:pointer}

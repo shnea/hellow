@@ -24,6 +24,8 @@ import { AgentStatusControl } from '@/components/AgentStatusControl';
 import { ReportingWorkspace } from '@/components/reporting/ReportingWorkspace';
 import {KnowledgeWorkspace} from '@/components/collaboration/KnowledgeWorkspace';
 import {InternalChatWorkspace} from '@/components/collaboration/InternalChatWorkspace';
+import {UnreadBadge} from '@/components/chat/UnreadBadge';
+import {useInternalUnread} from '@/lib/use-internal-unread';
 
 import {FollowUpWorkspace} from '@/components/followup/FollowUpWorkspace';
 import {followUpJson,type FollowUp,type ActiveFollowUp} from '@/lib/followup';
@@ -271,6 +273,7 @@ export default function ConsultationWorkspacePage() {
   const can = (permission: string) => identity?.organizations.find(o => o.id === organizationId)?.permissions.includes(permission) || false;
   const currentOrganization=identity?.organizations.find(o=>o.id===organizationId);
   const accessKey=JSON.stringify([currentOrganization?.teamId,Object.entries(currentOrganization?.scopes||{}).sort(),currentOrganization?.permissions.slice().sort()]);
+  const internalChatUnread=useInternalUnread(organizationId,can('internal-chat:read'),`${identity?.issuer}:${identity?.subject}:${accessKey}`);
   const canReadConsultation=can('consultation:read');
   const canReadAllHistory=canReadConsultation&&['TEAM','ORGANIZATION'].includes(currentOrganization?.scopes?.['consultation:read']||'');
   // Synchronize navigation after a server permission refresh.
@@ -514,7 +517,7 @@ export default function ConsultationWorkspacePage() {
   return <><div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
     <SidebarGNB agentName={identity.displayName||'이름 미확인 직원'} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')} showReports={can('report:read')||can('agent:monitor')} showKnowledge={can('knowledge:read')||can('knowledge:write')||can('knowledge:publish')} showInternalChat={can('internal-chat:read')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
-      onTabChange={setCurrentTab}
+      internalChatUnread={internalChatUnread} onTabChange={setCurrentTab}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />
     <div className="flex flex-1 flex-col min-w-0">
       <div className="workspace-heading px-4 py-2 border-b border-slate-800 flex items-center justify-between text-sm"><span>{identity.organizations.find(o => o.id === organizationId)?.name} · {identity.name}</span>
@@ -538,7 +541,7 @@ export default function ConsultationWorkspacePage() {
         {can('followup:read')&&<button onClick={()=>setCurrentTab('followups')}>예약</button>}
         {can('transfer:read')&&<button onClick={()=>setCurrentTab('transfers')}>상담 이관</button>}
         {(can('report:read')||can('agent:monitor'))&&<button onClick={()=>setCurrentTab('stats')}>현황·통계</button>}
-        {can('internal-chat:read')&&<button onClick={()=>setCurrentTab('internal-chat')}>조직 내부 채팅</button>}
+        {can('internal-chat:read')&&<button onClick={()=>setCurrentTab('internal-chat')}>조직 내부 채팅<UnreadBadge count={internalChatUnread}/></button>}
         {(can('knowledge:read')||can('knowledge:write')||can('knowledge:publish'))&&<button onClick={()=>setCurrentTab('knowledge')}>지식관리</button>}
         <button onClick={()=>setCurrentTab('settings')}>설정</button>
       </nav>

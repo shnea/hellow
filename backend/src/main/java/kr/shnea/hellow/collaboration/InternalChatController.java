@@ -40,6 +40,13 @@ public class InternalChatController {
     return service.list(page);
   }
 
+  public record Unread(long count) {}
+
+  @GetMapping("/unread")
+  public Unread unread() {
+    return new Unread(service.unread());
+  }
+
   @PostMapping("/rooms")
   public InternalChatService.RoomView create(@RequestBody InternalChatService.Create r) {
     return service.create(r);

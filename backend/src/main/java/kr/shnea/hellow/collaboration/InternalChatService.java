@@ -166,7 +166,7 @@ public class InternalChatService {
         r.kind,
         name,
         r.sequence,
-        messages.countByRoomIdAndSequenceGreaterThan(r.id, p.readSequence),
+        messages.unreadInRoom(r.id, p.readSequence, a.issuer(), a.subject()),
         preview,
         people,
         r.kind.equals("GROUP") && r.creatorMemberId.equals(p.membershipId),
@@ -235,6 +235,13 @@ public class InternalChatService {
     if (page < 0 || page > 100000) throw new ResponseStatusException(BAD_REQUEST);
     var rows = rooms.rooms(a.organizationId(), me(a).getId(), PageRequest.of(page, 30));
     return new RoomPage(rows.getContent().stream().map(r -> view(a, r)).toList(), rows.hasNext());
+  }
+
+  @Transactional(readOnly = true)
+  public long unread() {
+    var a = access.require("internal-chat:read");
+    return messages.unreadInOrganization(
+        a.organizationId(), me(a).getId(), a.issuer(), a.subject());
   }
 
   private void join(InternalRoom r, Long member) {

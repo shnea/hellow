@@ -9,6 +9,15 @@ const target={kind:'customer' as const,sessionId:'capability',storageKey:'test-c
 const initial:ChatView={queueCode:'q',state:'OPEN',endedAt:null,canSend:true,cursor:1,hasMore:false,messages:[{sequence:1,sender:'CUSTOMER',senderName:'고객',clientMessageId:'initial',body:'처음 문의',createdAt:'2026-10-04T00:00:00Z'}]};
 beforeEach(()=>{sessionStorage.clear();vi.mocked(chatJson).mockReset().mockResolvedValue(initial);vi.mocked(chatFetch).mockReset().mockResolvedValue({} as Response);vi.mocked(readChatEvents).mockReset().mockImplementation(()=>new Promise(()=>{}));});
 afterEach(()=>cleanup());
+it('Enter로 전송하고 Shift+Enter·한글 조합·반복 키는 전송하지 않는다',async()=>{
+  vi.mocked(chatJson).mockImplementation(async(_t,action,data)=>action==='messages'?{...initial.messages[0],...(data as object),sequence:2}:initial);
+  render(<ChatPanel target={target}/>);const input=screen.getByRole('textbox',{name:'메시지'});
+  await waitFor(()=>expect((input as HTMLTextAreaElement).disabled).toBe(false));fireEvent.change(input,{target:{value:'엔터 검수'}});
+  fireEvent.keyDown(input,{key:'Enter',shiftKey:true});fireEvent.keyDown(input,{key:'Enter',isComposing:true});fireEvent.keyDown(input,{key:'Enter',keyCode:229});fireEvent.keyDown(input,{key:'Enter',repeat:true});
+  expect(vi.mocked(chatJson).mock.calls.filter(([,action])=>action==='messages')).toHaveLength(0);
+  fireEvent.keyDown(input,{key:'Enter'});await screen.findByText('엔터 검수');
+  expect(vi.mocked(chatJson).mock.calls.filter(([,action])=>action==='messages')).toHaveLength(1);
+});
 it('응답 유실 뒤 같은 ID로 재시도하고 새로고침에서도 보관한 메시지를 사용한다',async()=>{
   const sends:{clientMessageId:string;body:string}[]=[];
   vi.mocked(chatJson).mockImplementation(async(_target,action,data)=>{if(action==='messages'){const value=data as typeof sends[number];sends.push(value);if(sends.length===1)throw new Error('응답 유실');return {...initial.messages[0],...value,sequence:2};}return initial;});

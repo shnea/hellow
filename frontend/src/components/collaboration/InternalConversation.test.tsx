@@ -11,6 +11,14 @@ const props={roomId:'room',organizationId:'a',storageKey:'internal-test',active:
 const api=vi.mocked(workJson),events=vi.mocked(internalEvents);
 beforeEach(()=>{sessionStorage.clear();api.mockReset();events.mockReset();vi.mocked(chatImageOutbox).mockResolvedValue(null);api.mockImplementation(async(path)=>path.endsWith('/read')?room:{room,messages:[message(1,true),message(2,false)],cursor:2,hasMore:false});events.mockImplementation(()=>new Promise(()=>{}));});
 afterEach(()=>{cleanup();vi.useRealTimers();});
+it('Enter로 전송하고 Shift+Enter·한글 조합 Enter는 본문을 보존한다',async()=>{
+  api.mockImplementation(async(path,org,opts)=>opts?.method==='POST'&&path.endsWith('/messages')?{...message(3,true),...JSON.parse(String(opts.body))}:{room,messages:[message(2,false)],cursor:2,hasMore:false});
+  render(<InternalConversation {...props}/>);await screen.findByText('상대 원문');const input=screen.getByRole('textbox',{name:'메시지'});fireEvent.change(input,{target:{value:'내 줄바꿈\n두 번째 줄'}});
+  fireEvent.keyDown(input,{key:'Enter',shiftKey:true});fireEvent.keyDown(input,{key:'Enter',isComposing:true});
+  expect(api.mock.calls.filter(([p,,o])=>p.endsWith('/messages')&&o?.method==='POST')).toHaveLength(0);
+  fireEvent.keyDown(input,{key:'Enter'});await waitFor(()=>expect(api.mock.calls.filter(([p,,o])=>p.endsWith('/messages')&&o?.method==='POST')).toHaveLength(1));
+  const sent=api.mock.calls.find(([p,,o])=>p.endsWith('/messages')&&o?.method==='POST')![2]!.body;expect(JSON.parse(String(sent)).body).toBe('내 줄바꿈\n두 번째 줄');
+});
 it('서버 own 기준으로 상대 왼쪽·내 메시지 오른쪽을 적용한다',async()=>{
  render(<InternalConversation {...props}/>);expect((await screen.findByText('내 원문')).closest('article')?.classList.contains('chat-own')).toBe(true);expect(screen.getByText('상대 원문').closest('article')?.classList.contains('chat-peer')).toBe(true);
 });

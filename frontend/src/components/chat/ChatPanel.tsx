@@ -6,6 +6,7 @@ import {chatFetch,chatJson,readChatEvents,type ChatMessage,type ChatTarget,type 
 import './chat.css';
 import {ChatImage} from './ChatImage';
 import {ChatImageComposer} from './ChatImageComposer';
+import {submitChatOnEnter} from '@/lib/chat-keyboard';
 
 interface Pending {clientMessageId:string;body:string;}
 export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:boolean}){
@@ -92,7 +93,8 @@ export function ChatPanel({target,readOnly=false}:{target:ChatTarget;readOnly?:b
     </div>
     {unseen&&<button type="button" className="chat-latest" onClick={()=>{stick.current=true;setUnseen(false);if(transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;}}>새 메시지 보기</button>}
     {!readOnly&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void send();}}>
-      <label>메시지<textarea rows={3} maxLength={10000} value={draft} disabled={!ready||!view?.canSend||Boolean(pending)} onChange={e=>{setDraft(e.target.value);store(e.target.value,pending);}} placeholder={view?.state==='CLOSED'?'종료된 대화입니다.':'메시지를 입력해 주세요.'}/></label>
+      <label>메시지<textarea rows={3} maxLength={10000} value={draft} disabled={!ready||!view?.canSend||Boolean(pending)} onKeyDown={e=>submitChatOnEnter(e,()=>void send(),ready&&!sending&&!imageSending&&Boolean(view?.canSend)&&!pending)} onChange={e=>{setDraft(e.target.value);store(e.target.value,pending);}} placeholder={view?.state==='CLOSED'?'종료된 대화입니다.':'메시지를 입력해 주세요.'}/></label>
+      <small className="chat-keyboard-hint">Enter 전송 · Shift+Enter 줄바꿈</small>
       <div><span>{pending?sending?'서버 저장 확인 중…':'전송 결과를 확인하지 못했습니다. 같은 메시지로 재시도합니다.':'서버에 저장된 메시지가 대화에 표시됩니다.'}</span><button type="submit" disabled={!ready||sending||imageSending||(!pending&&(!view?.canSend||!draft.trim()))}>{sending?'전송 중…':pending?'같은 메시지 재시도':'메시지 전송'}</button></div>
     </form>}
     {!readOnly&&target.kind==='customer'&&<ChatImageComposer target={target} canSend={Boolean(view?.canSend)} disabled={sending||ending||Boolean(pending)} onPendingChange={setImagePending} onSendingChange={setImageSending} onSent={message=>merge([message])}/>}

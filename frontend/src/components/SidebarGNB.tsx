@@ -5,6 +5,7 @@ import { PhoneCall, Users, Ticket, CalendarClock, ArrowRightLeft, BarChart3, Boo
 import { AgentStatus } from '../types';
 import { buildLogoutUrl } from '@/lib/pkce';
 import { apiJson } from '@/lib/api';
+import {UnreadBadge} from './chat/UnreadBadge';
 
 interface SidebarGNBProps {
   agentName: string;
@@ -17,6 +18,7 @@ interface SidebarGNBProps {
   showTransfers?:boolean;
   showReports?:boolean;
   showKnowledge?:boolean;showInternalChat?:boolean;
+  internalChatUnread?:number;
   supportLink?: string;
   showHistory?:boolean;showAllHistory?:boolean;
 }
@@ -31,6 +33,7 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
   showFollowups=false,
   showTransfers=false,
   showReports=false,showKnowledge=false,showInternalChat=false,
+  internalChatUnread=0,
   supportLink,
   showHistory=true,showAllHistory=false,
 }) => {
@@ -80,9 +83,10 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900'
               }`}
               title={item.label}
-              aria-label={item.label}
+              aria-label={item.id==='internal-chat'&&internalChatUnread>0?`${item.label}, 미읽음 메시지 ${internalChatUnread}개`:item.label}
             >
               <Icon className="w-5 h-5" />
+              {item.id==='internal-chat'&&<UnreadBadge count={internalChatUnread} className="chat-menu-badge"/>}
               {isActive && (
                 <span className="absolute left-0 w-1 h-5 bg-white rounded-r-full" />
               )}
