@@ -4,7 +4,9 @@
 
 - 사용자 지적에 따라 고객·상담사 공통 ChatPanel을 상대방 왼쪽·내 쪽 오른쪽으로 수정했다. 고객 화면은 CUSTOMER, 상담사/이력 화면은 AGENT가 오른쪽이다. 표시명·시각·본문 왼쪽 정렬을 유지하고 내 쪽 indigo·상대방 slate, 내용에 맞는 너비·최대75ch/85%로 구분했다. 계약은 [고객 채팅](customer-chat.md)에 기록했다.
 - 관련 프런트6건/2파일·lint·TypeScript 포함 production build·Docker 웹 build 통과. 실제 고객/상담사 페이지에 합성 메시지를 넣어1440×900·375×812에서 좌우 배치·짧은 말풍선·긴 원문·85% 제한·가로 넘침0·페이지 오류0을 검사하고 캡처4장을 열었다. Git 제외 증거 `output/chat-alignment-ui/proof.json`·PNG4장. detector1회는 빈 배열이며 독립 일반 finish reviewer 대체 검토는 **ship**, 수정 요구 없음(`output/chat-alignment-review.md`).
-- 개발 웹 선택 반영을 준비한다. API `6a5b73d`·DB V22·Media/Redis/Egress를 유지하며 실제 계정/기기 수락은 별도다. 진행 통화/채팅/미결 이관0을 확인했고 반영 직전 다시 검사한다. 기존 DESIGN/comp drift·보류 태블릿 패널·NAS는 변경 범위 밖이다.
+- 일반 documenter 대체 검토도 소스·계약·4장 캡처에서 기존 시스템과 좌우 배치/너비 기준의 일치를 확인했다(`output/chat-alignment-documentation.md`). 기존 DESIGN/comp drift·보류 태블릿 패널·NAS는 변경 범위 밖이다.
+- **개발 웹 `8b42e83`·21:31:23 KST 반영 완료**, API `6a5b73d`·DB V22 유지. 진행 통화/채팅/미결 이관0 재확인·신규 DB 백업 후 웹만 교체했다. API·DB·LiveKit·Redis·Egress 이미지/시작 시각 전후 동일, API·웹·DB healthy, Nginx 검사/reload·외부3경로200·실제 앱 CSS의 좌우 margin/content-fit/75ch·85%를 확인했다. API는 동일 이미지의 새 태그만 준비했고 실행 컨테이너를 교체하지 않았다.
+- 구현 커밋/push 완료, 이 배포 기록 커밋은 실행 이미지 SHA와 별도다. 증거 `output/chat-alignment-deployment.json`, 백업 `output/backups/hellow-chat-alignment-20261004_213122.dump`를 보존한다. 임시 API/DB/웹/JWKS는 중지했다. 실제 계정·기기에서 새로고침 후 화면 수락은 별도다. 다음 신규 기능은 새 지시에 따르며 이번에는 채팅 표시만 수정했다.
 
 ## 2026-10-04 F02 개발 서버 반영 완료
 
