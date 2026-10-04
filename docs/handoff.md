@@ -2,14 +2,16 @@
 
 ## 2026-10-05 채팅 Enter 전송·이미지 미리보기·메뉴 미읽음
 
-- **구현·검증 완료, 개발 배포 준비 중.** 사용자 요청에 따라 고객/상담사 채팅과 조직 내부 채팅에 Enter 전송·Shift+Enter 줄바꿈을 적용했다. 한글 조합 Enter·키 반복은 전송하지 않으며 기존 전송 가능 상태·UUID 복구를 유지한다. 상세 계약은 [고객 채팅](customer-chat.md)·[조직 협업](team-collaboration.md).
+- **개발 반영 완료: API·웹 `f7ed68b`, DB V25 유지.** 구현 커밋은 main에 push했으며 배포 기록 커밋은 실행 이미지 SHA와 구분한다. 사용자 요청에 따라 고객/상담사 채팅과 조직 내부 채팅에 Enter 전송·Shift+Enter 줄바꿈을 적용했다. 한글 조합 Enter·키 반복은 전송하지 않으며 기존 전송 가능 상태·UUID 복구를 유지한다. 상세 계약은 [고객 채팅](customer-chat.md)·[조직 협업](team-collaboration.md).
 - 내부 채팅은 선택한 이미지의 로컬 썸네일·취소, 저장한 PRIVATE 이미지의 썸네일·원본 보기·조회 실패 재시도를 제공한다. 기존 플랫폼 저장·단기 조회 티켓을 재사용하며 thumbnail→preview→original 순으로 사용한다. 이미지 Blob URL은 해제하고 일반 파일은 기존 첨부 표시를 유지한다. 고객 채팅의 기존 이미지 미리보기도 유지한다.
 - 조직 내부 채팅의 좌측/모바일 메뉴에 모든 참여 방의 **상대가 보낸 미읽음 합계**를 표시한다. 0은 숨김, 1~99는 숫자, 100부터99+다. 현재 조직·Membership·read 권한·활성 참여를 서버에서 검사하고 내 메시지는 제외한다. 전체 메뉴에서5초 조회, 창 활성화·읽음 성공 때 갱신하며 조직/계정/권한 변화의 이전 응답은 버린다. 외부 푸시·음성 알림은 추가하지 않았다.
 - Java21 전체 build **194건 중185건 통과·실패0**, 기존 보고 opt-in9건 skip. 신규 통합 검사는30개 첫 페이지 밖 방의 미읽음·내 메시지 제외·읽음 감소·퇴장·다른 조직·권한 회수를 확인했다. 프런트 전체 **169건/38파일**, 마지막 선택 미리보기 배치 뒤 관련13건/4파일·lint 경고0·TypeScript/production build를 확인했다. DB migration은 없고 V25를 유지한다.
 - 실제 격리 HTTP/SSE·PostgreSQL·두 직원 브라우저에서 고객 채팅 Enter, 내부 Shift+Enter 원문/Enter·한글 조합 방지, 상대101건/내 메시지 제외·99+·읽음0, 6MiB PNG 선택/저장/수신 썸네일·조회 오류 재시도를 확인했다. OIDC/PRIVATE 공급자는 합성 검수 구성이다. PC1440×900/mobile375×812의8장·가로 넘침0·페이지 오류0 증거는 `output/chat-enhancements-ui/`에 보존한다. 모바일 선택 미리보기를 파일명/취소와 한 줄로 묶어 전송 버튼이 viewport 안에 보이도록 한 번 보완했다.
 - 증거 `output/backend-chat-enhancements-tests/`, `output/chat-enhancements-restart-proof.json`(협업6개 테이블 재시작 hash 일치)을 보존한다. detector1회는 기존 Sidebar 로고 gradient1건, 새 대상0건이다. 최종 Docker API·웹 build도 통과했다. 기존 DESIGN 부재·comp drift는 이번 일반 확장에서 정비하지 않는다.
 - 전용 역할 대신 새로운 일반 에이전트가 Impeccable finish reviewer/documenter 지침을 각각 적용했다. 최종8장과 소스의 일치 검토는 **ship**, 수정 요구 없음(`output/chat-enhancements-review.md`). documenter는 기존 시스템과 변경 계약의 일치를 확인하고 디자인 정본을 변경하지 않았다(`output/chat-enhancements-documentation.md`). 기존 DESIGN 부재와 Sidebar gradient를 새 규칙으로 편입하지 않았다.
-- **남은 일:** 커밋/push와 개발 서버 V25 배포·35개 기존 테이블 모든 행/열 hash 보존 확인. 실제 PRIVATE 공급자·삼성 기기 수락과 운영 NAS 반영은 별도이며 실제 사용자 계정의 권한은 대신 변경하지 않는다.
+- 진행 통화/고객 채팅/미결 이관0을 재확인하고 API·웹·Nginx를 동결했다. 신규 백업·복원 DB와 실제 DB에서 **35개 기존 테이블 모든 행·전체 열 hash 일치**를 확인한 뒤 정상 worker를 복구했다. 고객8/접수55/상담76/고객 채팅7/녹음8/이관4/감사1128과 새 내부 방1/메시지3·지식 문서1/파일1 및 기존 권한을 보존했다. 증거 `output/chat-enhancements-deployment.json`, 백업 `output/backups/hellow-chat-enhancements-deploy-20261005_025636.dump`, 복원 DB `hellow_chat_enhancements_frozen_20261005_025636`를 유지한다.
+- API02:57:40·웹02:57:22 KST 시작. API·웹·DB healthy, Nginx 검사/reload·기존51MiB/SSE 설정, 공개3경로200과 공개 CSS·JS의 새 배지/썸네일/키 안내·미읽음 API를 확인했다. DB·LiveKit·Redis·Egress의 이미지/시작 시각은 전후 동일하다. 격리 검수 API·DB·로컬 웹/JWKS/파일 공급자를 중지하고 결과 복사용 컨테이너만 제거했다. DB·백업·PNG/XML/JSON은 보존했다.
+- **남은 수락:** 실제 PRIVATE 공급자·삼성 기기 수락과 운영 NAS 반영은 별도이며 실제 사용자 계정의 권한은 대신 변경하지 않는다. 이 요청의 개발 구현·배포는 완료했고 다음 개발은 사용자 새 지시에 따른다.
 
 ## 2026-10-05 조직 내부 채팅·지식관리 메뉴
 
