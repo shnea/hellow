@@ -2,12 +2,14 @@
 
 ## 2026-10-04 이름 전용 프로필 칩·채팅 이미지50MB
 
-- **코드·격리 검증 완료, 개발 반영 준비 중.** 사용자가 좌측 하단 로그아웃 칩에 이름만 표시하고 이미지 한도를50MB로 늘리라고 명시했다. `/api/me`의 검증된 nickname/name을 별도 displayName으로 제공하며 칩·펼친 메뉴에는 아이디를 제외했다. 긴 이름은 칩 안에서 생략하고 툴팁·메뉴에 전체 이름을 표시한다. 다른 표시명의 기존 name(loginId) 계약은 유지한다.
+- **개발 반영 완료: API·웹 `9767e34`, DB V24.** 사용자가 좌측 하단 로그아웃 칩에 이름만 표시하고 이미지 한도를50MB로 늘리라고 명시했다. `/api/me`의 검증된 nickname/name을 별도 displayName으로 제공하며 칩·펼친 메뉴에는 아이디를 제외했다. 긴 이름은 칩 안에서 생략하고 툴팁·메뉴에 전체 이름을 표시한다. 다른 표시명의 기존 name(loginId) 계약은 유지한다.
 - 플랫폼의 기존 PRIVATE·보존 정책·청크 업로드/조회 티켓을 그대로 사용한다. 한 장50MiB(52,428,800bytes), 공개 Nginx51MiB, 기존1600만 화소·대화20장을 유지한다. 이미 적용된 V23은 수정하지 않고 V24로 이미지 용량 CHECK만 확장한다. 상세는 [고객 채팅 계약](customer-chat.md#고객-이미지-첨부).
 - Java21 전체 build **185건 중176건 통과·실패0**, 별도 보고 opt-in9건 skip. 새 통합 검사는 정상5MiB 초과PNG의 승인·플랫폼 전달을 확인했고50MiB 초과·위장 파일 거부/기존 권한·중복·복구 검사를 유지했다. 프런트 관련42건/4파일·lint·TypeScript/production·최종 Docker 웹/API build 통과.
 - 실제 격리 Nginx·API·PostgreSQL V24와 합성 PRIVATE 공급자로 정상PNG6,437,039bytes 업로드·고객/상담사 미리보기·대화 종료/완료를 확인했다. `/api/me` 이름과 칩 이름-only·로그아웃 메뉴, desktop1440×900/mobile375×812의 넘침0·페이지 오류0을 확인했다. 검수 스크립트의 모바일 숨김 칩 selector·메뉴 backdrop 닫기 오류는 검수 도구를 수정했다. 실제 개발 DB에 검수 접수를 만들지 않았다.
 - 증거 `output/chat-image-limit-ui/proof.json`·PNG6장, `output/backend-chat-image-limit-tests/`. 초기 detector(page/Composer)1회 빈 배열, 긴 이름 넘침은 한 번에 보완했다. 독립 일반 finish reviewer 대체 검토는 요청한 이름-only/50MB 범위에서 **ship**, 수정 요구 없음(`output/chat-image-limit-review.md`). 일반 documenter 대체 검토도6장·소스·기존 시스템의 일치를 확인했다(`output/chat-image-limit-documentation.md`). 기존 DESIGN/comp drift는 정비하지 않았다.
-- 다음: 검수 결과 기록·커밋/push → 진행 통화/채팅/미결 이관0·신규 동결 백업/복원 V23→V24 → 모든 기존 행/열과 이미지 메타데이터 보존 → 개발 API/웹/Nginx 반영 및 결과 기록. API·웹 `00bfb0a`, 실제 DB V23은 배포 전 기준이다. 실제 사용자 계정/삼성 기기·새 이미지의 실제 공급자 수락은 별도이며 운영 NAS·HEIC/WebP·일반 파일·상담사 이미지 전송은 이 단위 범위 밖이다.
+- 구현 커밋/push 후 신규 동결 백업·복원 V23→V24와 실제 DB에서 **기존29개 테이블 모든 행·전체 열 hash가 일치**했다. 기존 고객8/접수55/상담76/채팅 메시지7/녹음8/이관4/감사1077과 모든 이미지 메타데이터·권한을 보존했다. 진행 통화/채팅/미결 이관0 재확인 후 전환했고 정상 worker 설정을 복구했다.
+- API22:53:12·웹22:52:54 KST 시작. API·웹·DB healthy, Nginx 검사/reload·실제 설정51MiB, 외부3경로200 및 공개 웹 JS의50MB/displayName을 확인했다. DB·LiveKit·Redis·Egress 이미지/시작 시각은 전후 동일하다. 증거 `output/chat-image-limit-deployment.json`, 신규 백업 `output/backups/hellow-chat-image-limit-deploy-20261004_225214.dump`와 복원 DB는 보존한다. 이 배포 기록 커밋은 실행 이미지 SHA와 별도다.
+- 임시 검수 API·DB·Nginx·로컬 웹/JWKS·합성 파일 공급자를 중지했고 DB·백업·PNG/XML/JSON은 보존했다. 실제 사용자 계정/삼성 기기·새 이미지의 실제 공급자 수락은 별도이며 운영 NAS·HEIC/WebP·일반 파일·상담사 이미지 전송은 이 단위 범위 밖이다. 다음 작업은 새 사용자 지시에 따른다.
 
 ## 2026-10-04 고객 채팅 이미지 첨부
 
