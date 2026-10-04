@@ -34,7 +34,7 @@ import './workspace.css';
 import './routing.css';
 import type { AgentStatus, CustomerProfile, QueueItem, TimelineItem } from '@/types';
 
-interface Identity { issuer?:string;subject: string; name: string; platformAdmin?: boolean; organizations: { id: string; name: string; publicCode?: string; permissions: string[];scopes?:Record<string,string>;teamId?:string }[]; }
+interface Identity { issuer?:string;subject: string; name: string; displayName?: string; platformAdmin?: boolean; organizations: { id: string; name: string; publicCode?: string; permissions: string[];scopes?:Record<string,string>;teamId?:string }[]; }
 interface SavedConsultation { id:number;status?:string;categoryId?:string|null;categoryPath?:string|null;resultId?:string|null;resultName?:string; version: number; categoryMain: string; categorySub: string; tags: string; editorDocument: string; memo: string; }
 const savedDraft=(saved:SavedConsultation):ConsultationDraft=>({...savedClassification(saved),resultId:saved.resultId??null,resultName:saved.resultName||'',status:saved.status?.toLowerCase()||'in_progress',selectedTags:saved.tags?.split(',').filter(Boolean)||[],memo:saved.editorDocument||saved.memo||''});
 interface HandoffBaseline {recordId:number;name:string;draft:ConsultationDraft;}
@@ -505,7 +505,7 @@ export default function ConsultationWorkspacePage() {
     {identity?.platformAdmin && <a href="/admin/platform" className="text-indigo-300 underline">최고관리자 화면으로 이동</a>}
   </main>;
   return <><div className="crm-shell flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
-    <SidebarGNB agentName={identity.name} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')} showReports={can('report:read')||can('agent:monitor')}
+    <SidebarGNB agentName={identity.displayName||'이름 미확인 직원'} currentTab={currentTab} showSettings showHistory={canReadConsultation} showAllHistory={canReadAllHistory} showFollowups={can('followup:read')} showTransfers={can('transfer:read')} showReports={can('report:read')||can('agent:monitor')}
       supportLink={identity.organizations.find(o=>o.id===organizationId)?.publicCode?`/support?org=${encodeURIComponent(identity.organizations.find(o=>o.id===organizationId)!.publicCode!)}`:undefined}
       onTabChange={setCurrentTab}
       agentStatus={sidebarStatus} statusLabel={effectiveAgentState?agentStateLabels[effectiveAgentState]:'상태 확인 중'} />

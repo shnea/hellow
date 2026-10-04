@@ -56,6 +56,7 @@ public class IdentityController {
         "loginId", Optional.ofNullable(jwt.getClaimAsString("preferred_username")).filter(v->!v.equals(jwt.getSubject())).orElse(""),
         "name",
         StaffNames.identity(jwt),
+        "displayName", StaffNames.label(jwt.getClaimAsString("nickname"),jwt.getClaimAsString("name")),
         "organizations",
         orgs, "platformAdmin", admin.isPlatformAdmin());
   }

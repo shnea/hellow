@@ -74,10 +74,18 @@ class ChatImageIntegrationTest {
     assertThat(chat.customerRead(session,0).messages()).hasSize(3);
   }
   @Test void invalidSvgSpoofedAndOversizedFilesNeverReachPlatform()throws Exception{
-    for(var f:List.of(new MockMultipartFile("file","image.png","image/png","<svg onload='attack()'/ >".getBytes()),new MockMultipartFile("file","large.png","image/png",new byte[5*1024*1024+1]),new MockMultipartFile("file","empty.png","image/png",new byte[0]))){
+    for(var f:List.of(new MockMultipartFile("file","image.png","image/png","<svg onload='attack()'/ >".getBytes()),new MockMultipartFile("file","large.png","image/png",new byte[50*1024*1024+1]),new MockMultipartFile("file","empty.png","image/png",new byte[0]))){
       mvc.perform(multipart("/api/support/chat/images").file(f).param("clientMessageId",UUID.randomUUID().toString()).header("X-Support-Session",session)).andExpect(status().isBadRequest());
     }
     verify(platform,never()).uploadFile(any(org.springframework.web.multipart.MultipartFile.class),anyString());assertThat(chat.customerRead(session,0).cursor()).isEqualTo(1);
+  }
+  @Test void validImageAboveOldFiveMiBLimitReachesPlatform()throws Exception{
+    var bitmap=new BufferedImage(1600,1200,BufferedImage.TYPE_INT_RGB);var random=new Random(24);
+    for(int y=0;y<bitmap.getHeight();y++)for(int x=0;x<bitmap.getWidth();x++)bitmap.setRGB(x,y,random.nextInt());
+    var output=new ByteArrayOutputStream();ImageIO.write(bitmap,"png",output);var bytes=output.toByteArray();
+    assertThat(bytes.length).isGreaterThan(5*1024*1024).isLessThanOrEqualTo(50*1024*1024);
+    mvc.perform(multipart("/api/support/chat/images").file(new MockMultipartFile("file","synthetic-large.png","image/png",bytes)).param("clientMessageId",UUID.randomUUID().toString()).header("X-Support-Session",session)).andExpect(status().isOk()).andExpect(jsonPath("$.image.size").value(bytes.length));
+    verify(platform).uploadFile(any(org.springframework.web.multipart.MultipartFile.class),anyString());
   }
   @Test void platformFailureRollsBackSequenceAndSameIdCanRecover()throws Exception{
     String id=UUID.randomUUID().toString();

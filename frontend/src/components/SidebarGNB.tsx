@@ -117,8 +117,8 @@ export const SidebarGNB: React.FC<SidebarGNBProps> = ({
           aria-expanded={statusMenuOpen}
         >
           <div className="relative">
-            <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-semibold text-slate-200">
-              {agentName}
+            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-semibold text-slate-200">
+              <span className="max-w-full truncate" title={agentName}>{agentName}</span>
             </div>
             {/* Live Status indicator dot */}
             <span

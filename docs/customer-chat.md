@@ -29,13 +29,13 @@
 ## 고객 이미지 첨부
 
 - 고객이 수락된 진행 중 CHAT에서 JPG·PNG를 한 장씩 전송한다. 전송 전 미리보기·선택 취소, 저장 후 대화 안 미리보기·원본 보기, 조회 실패 때 다시 불러오기를 제공한다. 상담사·읽기 전용 이력도 같은 메시지 순서로 이미지를 읽는다. 기존 상대방 왼쪽/내 쪽 오른쪽을 유지한다.
-- 이 최소판의 위임 판단은 한 장5MiB·1600만 화소·대화당20장이다. 기존 JVM ImageIO로 실제 JPEG/PNG를 검사해 추가 유료 서비스/디코더 없이 위장 파일·SVG·큰 픽셀 수를 거부한다. 원본 bytes를 PRIVATE로 저장하며 EXIF 제거·재인코딩을 약속하지 않는다. 모바일 HEIC/WebP·일반 문서는 지원 범위 밖이며 JPG/PNG 변환이 필요하다.
+- 사용자 요청으로 한 장50MiB로 늘렸으며 1600만 화소·대화당20장 기준을 유지한다. 기존 JVM ImageIO로 실제 JPEG/PNG를 검사해 추가 유료 서비스/디코더 없이 위장 파일·SVG·큰 픽셀 수를 거부한다. 원본 bytes를 PRIVATE로 저장하며 EXIF 제거·재인코딩을 약속하지 않는다. 모바일 HEIC/WebP·일반 문서는 지원 범위 밖이며 JPG/PNG 변환이 필요하다.
 - 고객 `POST /api/support/chat/images`는 기존 capability 헤더와 multipart `file`·`clientMessageId`를 받는다. Queue 잠금 안에서 크기/디코드/정책·quota·현재 상태와 같은 ID의 SHA256/크기/MIME를 확인한다. 텍스트와 같은 sequence를 배정하고 client ID의 텍스트↔이미지 충돌/내용 변경은409다. 중복 ACK는 종료 뒤에도 반환하며 신규 전송은 거부한다.
 - 플랫폼의 기존 PRIVATE·보존 정책·재개 가능한 청크 업로드를 사용한다. 서버가 조직/접수/고객/전송 UUID를 플랫폼 request ID로 namespacing한다. 공급자 실패 때 sequence/메시지를 롤백한다. 외부 업로드 완료 후 DB 실패는 같은 플랫폼 ID로 복구한다. 중도 포기한 외부 업로드의 정리는 공급자의 보존 정책에 맡기며 파일 삭제 작업을 새로 약속하지 않는다.
 - V23은 기존 chat_messages에 이미지 file ID/이름/MIME/크기/hash 열과 내용 제약만 추가한다. 과거 텍스트·순서·접수·권한을 유지한다. 대화 DTO의 image는 이름/MIME/크기만 담고 플랫폼 ID/hash/영구 URL은 노출하지 않는다. 상담 문서 첨부로 자동 복사하지 않는다.
 - `GET /api/support/chat/images/{sequence}/views`와 직원 `/api/chat/{code}/images/{sequence}/views`는 매 발급에 현재 세션/조직/행 범위를 확인한다. 직원은 queue:read, 이력 `history=true`는 consultation:read를 적용한다. 다른 대화의 파일 ID를 지정할 수 없다. 원본/미리보기/썸네일 단기 티켓만 no-store로 반환한다. 공유 URL을 반환하지 않고 같은 이미지 optimizer/cache를 거치지 않는다. 발급된 단기 티켓의 유효 기한까지의 접근은 기존 플랫폼 계약과 같으며 즉시 무효화를 약속하지 않는다.
 - 고객은 요청 전에 IndexedDB에 원본 Blob·파일명·UUID를 함께 커밋한다. 응답 불명/새로고침 뒤 같은 bytes/UUID로 재시도하며 ACK 뒤 보관함을 비운다. 로컬 보관 실패면 전송하지 않는다. 확정 거부는 선택 취소/재선택을 제공한다. 이미지 전송 중에는 텍스트 전송/종료를 막고 선택/미확인 이미지가 있으면 종료를 막는다. 다른 기기 복원·브라우저 저장소 수동 삭제 후 원본 복원은 지원하지 않는다.
-- Nginx 공개 접수 경로는 multipart 여유를 포함해6MiB까지 받으며 서버의 이미지5MiB 한도를 유지한다. 헤더 capability와 단기 티켓/원문을 일반 로그·Git 문서에 남기지 않는다. 운영 NAS 적용은 개발 반영과 별도다.
+- Nginx 공개 접수 경로는 multipart 여유를 포함해51MiB까지 받으며 서버의 이미지50MiB 한도를 유지한다. 헤더 capability와 단기 티켓/원문을 일반 로그·Git 문서에 남기지 않는다. 운영 NAS 적용은 개발 반영과 별도다.
 
 ## 검증·보존 근거
 

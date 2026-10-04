@@ -1,13 +1,22 @@
 # 작업 인계 기록
 
+## 2026-10-04 이름 전용 프로필 칩·채팅 이미지50MB
+
+- **코드·격리 검증 완료, 개발 반영 준비 중.** 사용자가 좌측 하단 로그아웃 칩에 이름만 표시하고 이미지 한도를50MB로 늘리라고 명시했다. `/api/me`의 검증된 nickname/name을 별도 displayName으로 제공하며 칩·펼친 메뉴에는 아이디를 제외했다. 긴 이름은 칩 안에서 생략하고 툴팁·메뉴에 전체 이름을 표시한다. 다른 표시명의 기존 name(loginId) 계약은 유지한다.
+- 플랫폼의 기존 PRIVATE·보존 정책·청크 업로드/조회 티켓을 그대로 사용한다. 한 장50MiB(52,428,800bytes), 공개 Nginx51MiB, 기존1600만 화소·대화20장을 유지한다. 이미 적용된 V23은 수정하지 않고 V24로 이미지 용량 CHECK만 확장한다. 상세는 [고객 채팅 계약](customer-chat.md#고객-이미지-첨부).
+- Java21 전체 build **185건 중176건 통과·실패0**, 별도 보고 opt-in9건 skip. 새 통합 검사는 정상5MiB 초과PNG의 승인·플랫폼 전달을 확인했고50MiB 초과·위장 파일 거부/기존 권한·중복·복구 검사를 유지했다. 프런트 관련42건/4파일·lint·TypeScript/production·최종 Docker 웹/API build 통과.
+- 실제 격리 Nginx·API·PostgreSQL V24와 합성 PRIVATE 공급자로 정상PNG6,437,039bytes 업로드·고객/상담사 미리보기·대화 종료/완료를 확인했다. `/api/me` 이름과 칩 이름-only·로그아웃 메뉴, desktop1440×900/mobile375×812의 넘침0·페이지 오류0을 확인했다. 검수 스크립트의 모바일 숨김 칩 selector·메뉴 backdrop 닫기 오류는 검수 도구를 수정했다. 실제 개발 DB에 검수 접수를 만들지 않았다.
+- 증거 `output/chat-image-limit-ui/proof.json`·PNG6장, `output/backend-chat-image-limit-tests/`. 초기 detector(page/Composer)1회 빈 배열, 긴 이름 넘침은 한 번에 보완했다. 독립 일반 finish reviewer 대체 검토는 요청한 이름-only/50MB 범위에서 **ship**, 수정 요구 없음(`output/chat-image-limit-review.md`). 일반 documenter 대체 검토도6장·소스·기존 시스템의 일치를 확인했다(`output/chat-image-limit-documentation.md`). 기존 DESIGN/comp drift는 정비하지 않았다.
+- 다음: 검수 결과 기록·커밋/push → 진행 통화/채팅/미결 이관0·신규 동결 백업/복원 V23→V24 → 모든 기존 행/열과 이미지 메타데이터 보존 → 개발 API/웹/Nginx 반영 및 결과 기록. API·웹 `00bfb0a`, 실제 DB V23은 배포 전 기준이다. 실제 사용자 계정/삼성 기기·새 이미지의 실제 공급자 수락은 별도이며 운영 NAS·HEIC/WebP·일반 파일·상담사 이미지 전송은 이 단위 범위 밖이다.
+
 ## 2026-10-04 고객 채팅 이미지 첨부
 
-- **구현·격리 검증 완료, 개발 반영 준비 중.** 사용자 요청에 따라 고객이 수락된 진행 중 CHAT에서 JPG·PNG를 전송하도록 확장했다. 전송 전 미리보기/취소, 고객·상담사·읽기 전용 이력의 저장 이미지/원본 보기·조회 실패 재시도를 제공한다. 기존 좌우 말풍선·상담 기록/초안·음성 경로를 유지한다. 한 장5MiB·1600만 화소·대화20장과 JDK 디코더/기존 PRIVATE 파일 저장을 위임 판단했으며 [고객 채팅 계약](customer-chat.md#고객-이미지-첨부)에 근거·제약을 기록했다.
+- **초기 이미지 구현 개발 반영 완료: API·웹 `00bfb0a`, DB V23.** 사용자 요청에 따라 고객이 수락된 진행 중 CHAT에서 JPG·PNG를 전송하도록 확장했다. 전송 전 미리보기/취소, 고객·상담사·읽기 전용 이력의 저장 이미지/원본 보기·조회 실패 재시도를 제공한다. 기존 좌우 말풍선·상담 기록/초안·음성 경로를 유지한다. 한 장5MiB·1600만 화소·대화20장과 JDK 디코더/기존 PRIVATE 파일 저장을 위임 판단했으며 [고객 채팅 계약](customer-chat.md#고객-이미지-첨부)에 근거·제약을 기록했다.
 - V23 이미지 메타데이터/내용 제약, 텍스트와 같은 Queue 잠금·sequence/고객 UUID·hash 중복 복원을 적용했다. 플랫폼 PRIVATE·보존 정책·청크 업로드를 재사용하며 공급자 실패는 DB 롤백/같은 업로드 ID 복구다. 대화 DTO에는 플랫폼 ID/hash/URL을 넣지 않는다. 뷰 티켓은 현재 고객 capability 또는 직원 queue:read/이력 consultation:read와 해당 대화 범위를 확인한다. 공유 URL은 반환하지 않는다. IndexedDB 원본 Blob/UUID 저장을 완료한 뒤 전송하며 응답 유실·새로고침에도 같은 이미지로 재시도한다.
 - Java21 전체 API build **184건 중175건 통과·실패0**, 기존 보고 opt-in9건 skip. 신규 이미지 통합7건에서 이미지/권한/단기 티켓·동시 중복·종료 ACK·텍스트 ID 충돌·바이트 변경·SVG/위장/5MB 초과·공급자 실패/롤백·20장 quota·JPEG 실검사·이력 권한·만료를 확인했다. 프런트 전체156건/34파일, 최종 관련10건/3파일·lint·TypeScript/production·Docker 웹 build 통과.
 - 격리 PostgreSQL V22→V23·Hibernate validate/health에서 기존29개 테이블 모든 행·기존 열 hash와 채팅 원문163건을 보존했다(`output/chat-image-migration-proof.json`). 실제 HTTP/SSE·대화 저장과 합성 PRIVATE 플랫폼 protocol에서 전송/미리보기·응답 유실/Blob·UUID 복원·중복0·조회 장애 복구·종료 후 이력 이미지를 확인했다. 합성 PNG를 명시했고 실제 사용자 계정/기기·새 이미지의 실제 공급자 저장 수락과 구분한다.
 - PC/모바일 선택·수신·조회 오류·이력7장과 최종 소스를 두 회차 안에 검수했다. 발신 헤더 적용 범위·미리보기 높이·한글 복구 안내를 한 번에 보완했으며 독립 일반 finish reviewer 대체 결과 **ship**, 수정 요구 없음. detector1회 빈 배열. 증거 `output/chat-images-ui/proof.json`·PNG7장, `output/chat-images-review.md`, `output/backend-chat-images-tests/`를 Git 제외로 보존한다.
-- 다음 순서: 커밋/push → 진행 통화/채팅/미결 이관0 재확인·동결 백업/새 복원 DB → 기존29개 테이블 전 행·열 보존과 V23 → 개발 API·웹/Nginx 반영·health/공개 CSS → 배포 기록. API `6a5b73d`·웹 `8b42e83`·실제 DB V22는 배포 전 기준이다. NAS·HEIC/WebP·일반 파일·상담사 이미지 전송·보류 태블릿 패널은 이 단위에 포함하지 않는다.
+- 초기 개발 반영은 API22:31:08·웹22:30:51 KST 완료. 동결 백업/새 복원 DB와 실제 V22→V23의 기존29개 테이블 모든 행·기존 열 hash 보존, 진행 통화/채팅/미결 이관0, API·웹·DB healthy·Nginx 검사/reload·외부3경로200, DB·LiveKit·Redis·Egress 이미지/시작 시각 보존을 확인했다. 증거 `output/chat-images-deployment.json`, 백업 `output/backups/hellow-chat-images-deploy-20261004_223011.dump`를 유지한다. 위5MiB는 초기 위임 판단이며 위 최신50MiB 계약으로 변경했다. 일반 documenter의 기존 시스템 일치 검토는 `output/chat-images-documentation.md`에 보존했다.
 
 ## 2026-10-04 고객 채팅 말풍선 좌우 배치
 

@@ -24,7 +24,7 @@ export function ChatImageComposer({target,canSend,disabled,onPendingChange,onSen
   },[selected]);
   const choose=(file:File|undefined)=>{
     if(!file)return;
-    if(!['image/jpeg','image/png'].includes(file.type)||file.size===0||file.size>5*1024*1024){setError('JPG·PNG 이미지를 최대 5MB까지 선택해 주세요.');return;}
+    if(!['image/jpeg','image/png'].includes(file.type)||file.size===0||file.size>50*1024*1024){setError('JPG·PNG 이미지를 최대 50MB까지 선택해 주세요.');return;}
     setSelected({file,name:file.name,clientMessageId:crypto.randomUUID()});setAttempted(false);setRejected(false);setError('');onPendingChange(true);
   };
   const send=async()=>{
@@ -49,7 +49,7 @@ export function ChatImageComposer({target,canSend,disabled,onPendingChange,onSen
     catch{setError('이미지 보관을 취소하지 못했습니다. 다시 시도해 주세요.');}
   };
   return <section className="chat-image-composer" aria-label="이미지 첨부">
-    <div className="chat-image-actions"><button type="button" disabled={!ready||disabled||sending||attempted||!canSend} onClick={()=>picker.current?.click()}>이미지 첨부</button><span>JPG·PNG · 최대 5MB · 대화당 20장</span></div>
+    <div className="chat-image-actions"><button type="button" disabled={!ready||disabled||sending||attempted||!canSend} onClick={()=>picker.current?.click()}>이미지 첨부</button><span>JPG·PNG · 최대 50MB · 대화당 20장</span></div>
     <input ref={picker} type="file" accept="image/jpeg,image/png" hidden onChange={e=>{choose(e.target.files?.[0]);e.target.value='';}}/>
     {selected&&<div className="chat-image-selection">
       {/* eslint-disable-next-line @next/next/no-img-element */}

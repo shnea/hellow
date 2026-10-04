@@ -31,7 +31,7 @@ it('로컬 보관 실패 때 파일을 전송하지 않고 선택한 원본을 �
 });
 it('SVG·초과 용량은 선택 단계에서 거부하며 취소는 전송을 만들지 않는다',async()=>{
   const pane=mount();await pick(pane.container,new File(['<svg/>'],'bad.svg',{type:'image/svg+xml'}));expect(screen.getByRole('alert').textContent).toContain('JPG·PNG');
-  await pick(pane.container,new File([new Uint8Array(5*1024*1024+1)],'large.png',{type:'image/png'}));expect(screen.queryByRole('button',{name:'이미지 전송'})).toBeNull();
+  await pick(pane.container,new File([new Uint8Array(50*1024*1024+1)],'large.png',{type:'image/png'}));expect(screen.queryByRole('button',{name:'이미지 전송'})).toBeNull();
   await pick(pane.container);fireEvent.click(screen.getByRole('button',{name:'선택 취소'}));expect(screen.queryByRole('button',{name:'이미지 전송'})).toBeNull();expect(sendChatImage).not.toHaveBeenCalled();
 });
 it('서버가 잘못된 이미지라고 거부하면 보관을 취소하고 다시 선택할 수 있다',async()=>{

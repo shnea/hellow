@@ -19,7 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 /** Images use the same queue lock and sequence as text; file capabilities stay outside transcripts. */
 @Service
 public class ChatImageService {
-  static final long MAX_BYTES=5*1024*1024;
+  static final long MAX_BYTES=50*1024*1024;
   private final ChatService chat;private final ChatMessageRepository messages;
   private final PlatformClient platform;private final PlatformProperties properties;private final Clock clock;
   public ChatImageService(ChatService chat,ChatMessageRepository messages,PlatformClient platform,PlatformProperties properties,Clock clock){
@@ -61,7 +61,7 @@ public class ChatImageService {
     }catch(Exception e){throw new ResponseStatusException(BAD_GATEWAY,"이미지를 불러오지 못했습니다. 다시 불러와 주세요.");}
   }
   private String validate(MultipartFile file)throws IOException{
-    if(file.isEmpty()||file.getSize()>MAX_BYTES)throw new ResponseStatusException(BAD_REQUEST,"JPG·PNG 이미지를 최대 5MB까지 보낼 수 있습니다.");
+    if(file.isEmpty()||file.getSize()>MAX_BYTES)throw new ResponseStatusException(BAD_REQUEST,"JPG·PNG 이미지를 최대 50MB까지 보낼 수 있습니다.");
     try(var input=new MemoryCacheImageInputStream(file.getInputStream())){
       var readers=ImageIO.getImageReaders(input);if(!readers.hasNext())throw new IOException();
       var reader=readers.next();try{
