@@ -56,7 +56,7 @@ DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다
 
 - 운영 이미지의 대상 플랫폼은 `linux/amd64`로 한다.
 - 운영 Compose 파일과 배포 스크립트는 위 버전과 `docker-compose` 명령을 기준으로 작성하고 실제 NAS에서 검증한다.
-- Docker Engine 버전, 가용 메모리 및 프로젝트별 자원 제한은 아직 확인하지 않았다.
+- 2026-10-05 SSH에서 Docker24.0.2·Compose2.20.1·linux/amd64, 가용 메모리 약17GB·volume1 약111GB·volume2 약24TB를 확인했다. 프로젝트별 자원 제한은 미정이다.
 - 제공된 출력의 작업 폴더는 `/volume2/homes/ttakji`였다. 2026-10-05 사용자가 실행 구성 경로를 `/volume1/docker/prod/hellow/`, DB·녹음 등 데이터 마운트 루트를 `/volume2/homes/hellow/`로 구분했다. SSH는 `shpark@192.168.0.93:9022`이며 비밀번호는 직접 입력한다.
 
 ## 이미지 레지스트리
@@ -78,7 +78,7 @@ DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다
 - 개발 환경은 `.env.dev`, 운영 환경은 `.env.prod`로 분리한다.
 - 두 환경 파일을 각각 SOPS + age로 암호화하여 Git에 저장한다.
 - 평문 환경 파일과 age 개인키는 Git에 저장하지 않는다.
-- 암호문 파일명, age 수신자 공개키, 개인키 보관·주입 위치는 구현 시 확정한다. 비밀값은 일반 문서에 기록하지 않는다.
+- 암호문은 `.env.dev.enc`/`.env.prod.enc`, 수신자는 `.sops.yaml`에 둔다. PC와 NAS 개인키의 보관 위치·권한·복호화 절차는 [운영 배포](production-deployment.md#환경-파일-암호화)에 둔다. 비밀값은 일반 문서에 기록하지 않는다.
 
 ## 운영 배포 구성
 

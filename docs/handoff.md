@@ -1,5 +1,16 @@
 # 작업 인계 기록
 
+## 2026-10-05 운영 신규 설치·초기 스키마 보완
+
+- 사용자가 운영은 미구성 신규 설치라고 확인하고 지정 경로에 Compose·`.env.prod` 업로드를 요청했다. SSH9022 연결 성공, 두 루트는 비어 있고 기존 Hellow 컨테이너/업무 DB가 없음을 확인했다. NAS Docker24.0.2·Compose2.20.1·amd64와 가용 저장 공간을 실제 확인했다. 다른 프로젝트는 변경하지 않는다.
+- 지정한 실행 루트에 Compose·Nginx·LiveKit·`.env.prod`를 설치했다. NAS SFTP 채널은 닫혀 있어 연결된 SSH 표준입력으로 파일을 전송했다. DB/LiveKit 키는 새로 생성하고 환경 파일600·실행 루트700으로 설정했다. API·웹 `0cd7dce` 이미지를 registry에 게시하고 NAS에서 pull했다. 이 초기 API는 아래 신규 DB 문제로 최종 운영 이미지가 아니다.
+- 사용자가 운영 플랫폼 환경을 생성하고 값을 전달했다. context에서 실제 프로젝트/환경 ID·issuer 일치, **PROD**, integration/files read/write를 확인했다. 기간 미정으로 활성 `영구` 보존 코드를 사용한다. 첫 관리자 설정은 사용자 회원가입 후 실제 issuer/subject로 채우며 현재 `ADMIN_OIDC_ISSUER`/`ADMIN_OIDC_SUB`는 빈 값이다. DEV 키/DB/조직/권한을 운영에 복사하지 않았다.
+- SOPS3.9.0·age1.2.0 공식 도구를 준비하고 SOPS 공식 체크섬을 검사했다. `.env.dev.enc`/`.env.prod.enc`·`.sops.yaml`을 생성했으며 PC에서 전체 값 복호화 일치를 확인했다. 각 개인키는 PC 사용자 홈 Git 밖/해당 사용자 전용 ACL, 운영 키만 NAS 데이터 루트 `secrets/age/prod.agekey` root600/부모700에 보관한다. NAS에서도 `tools/sops`와 암호문을 설치하고 실제 `.env.prod`의 복호화 일치를 확인했다. 평문/키/토큰은 출력·커밋하지 않는다.
+- 최초 빈 운영 DB에서 기존 V3의 `queue_items` 부재로 API가 시작하지 못했다. 초기 테이블이 Hibernate 개발 생성에 의존한 문제를 실제 신규 설치 검사로 발견했다. 실패 DB는 업무 테이블이 없고 Flyway 테이블만 있는 것을 확인한 뒤 **`hellow_first_attempt_20261005_034820`** DB와 동일 이름 `.dump`로 보존하고 새 빈 `hellow` DB를 만들었다. 기존 DB를 삭제하지 않았다.
+- **B25 신규 설치 baseline**을 추가했다. 검증된 V25 백업의 스키마만 격리 복원해35개 테이블·시퀀스·인덱스·제약을 포함하고 업무/고객/조직/권한 데이터는 제외했다. 필수 `routing_lock` 행1개만 초기화한다. V2~V25를 수정하지 않았으며 이력이 있는 DB에서는 B25를 무시한다.
+- B25 포함 API Docker/Java21 전체 build 통과. PostgreSQL17.11의 새 DB에서 Flyway `25/SQL_BASELINE/success`·35개 테이블·Hibernate validate/health를 확인했다. 별도 기존 V25 이력 DB에서도 API health/validate가 통과했고 **마이그레이션 이력·checksum 무변경, 새 DB와 기존 검증 V25의 전체 schema dump 일치**를 확인했다. 증거 `output/production-baseline-proof.json`; 개발 실행 DB에는 접근·변경하지 않았다. 문서93개/398링크·Git 검사 통과.
+- **다음 시작점:** 이 보완 커밋 SHA로 최종 API·동일 웹 이미지 게시/pull → NAS 새 DB B25/internal health → 운영 백업/복원·전 행/열 hash·validate → 정상 worker/Media/웹/Nginx 시작 → HTTPS/OIDC/PRIVATE/WebSocket smoke → 실제 결과 기록. 첫 관리자 회원가입/issuer·subject·첫 조직과 실기기 LTE/녹음 수락은 별도이며 아직 운영 배포 완료로 보고하지 않는다.
+
 ## 2026-10-05 운영 배포 요청·설정 준비
 
 - 사용자가 현재 기능의 운영 반영을 요청했다. 후속 STT/AI/외부 발송 개발은 포함하지 않는다. 실행 구성은 **`/volume1/docker/prod/hellow/`**, 데이터는 **`/volume2/homes/hellow/`**, SSH는 `shpark@192.168.0.93:9022`로 새로 확정했다. 비밀번호는 사용자가 보이는 창에서 직접 입력하며 기록하지 않는다.

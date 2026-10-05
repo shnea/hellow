@@ -1,0 +1,5 @@
+creation_rules:
+  - path_regex: ^\.env\.dev\.enc$
+    age: age1qqzkr3x5k76wj94rzjq0cvmmp7dl8rgmjn8uff5fux5rlq5p6g4qkud37d
+  - path_regex: ^\.env\.prod\.enc$
+    age: age1pzzzezh8kar663tq5tf0jcdf77jttaa727xk4l4hpax0qupmvv2snwnavz

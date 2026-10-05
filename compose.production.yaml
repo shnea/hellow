@@ -126,4 +126,3 @@ services:
       web: {condition: service_healthy}
       api: {condition: service_healthy}
     restart: unless-stopped
-
