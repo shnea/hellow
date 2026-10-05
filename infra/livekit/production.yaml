@@ -13,3 +13,5 @@ turn:
   tls_port: 0
 logging:
   level: info
+redis:
+  address: redis:6379

@@ -1,0 +1,129 @@
+name: hellow-prod
+
+services:
+  db:
+    image: postgres:17.11-alpine
+    environment:
+      TZ: Asia/Seoul
+      POSTGRES_DB: ${DB_NAME:?Set production DB_NAME}
+      POSTGRES_USER: ${DB_USER:?Set production DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set a production DB_PASSWORD}
+    volumes:
+      - /volume2/homes/hellow/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  api:
+    image: registry.shnea.kr/hellow-api:${HELLOW_IMAGE_TAG:?Set verified release SHA}
+    env_file: [.env.prod]
+    environment:
+      TZ: Asia/Seoul
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?Set production DB_NAME}
+      DB_USER: ${DB_USER:?Set production DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?Set a production DB_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      LIVEKIT_INTERNAL_URL: http://livekit:7880
+      LIVEKIT_URL: wss://hellow.shnea.kr/livekit
+      PLATFORM_OIDC_REDIRECT_URI: https://hellow.shnea.kr/auth/callback
+      OIDC_POST_LOGOUT_REDIRECT_URI: https://hellow.shnea.kr/
+    volumes:
+      - /volume2/homes/hellow/recordings:/recordings
+    group_add: ["2000"]
+    depends_on:
+      db: {condition: service_healthy}
+      recording-storage: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 25s
+    restart: unless-stopped
+
+  web:
+    image: registry.shnea.kr/hellow-web:${HELLOW_IMAGE_TAG:?Set verified release SHA}
+    environment:
+      TZ: Asia/Seoul
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - /volume2/homes/hellow/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    command: --config /etc/livekit.yaml
+    environment:
+      TZ: Asia/Seoul
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?Set production LiveKit key}: ${LIVEKIT_API_SECRET:?Set production LiveKit secret}"
+    volumes:
+      - ./infra/livekit/production.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7881:30165"
+      - "7882:30166/udp"
+      - "3478:30168/udp"
+    depends_on:
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+  recording-storage:
+    image: alpine:3.21
+    command: ["sh", "-c", "mkdir -p /recordings && chown root:2000 /recordings && chmod 2770 /recordings"]
+    volumes:
+      - /volume2/homes/hellow/recordings:/recordings
+
+  egress:
+    image: livekit/egress:v1.14.1
+    group_add: ["2000"]
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set production LiveKit key}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set production LiveKit secret}
+      EGRESS_CONFIG_BODY: |
+        ws_url: ws://livekit:7880
+        insecure: true
+        redis:
+          address: redis:6379
+    volumes:
+      - /volume2/homes/hellow/recordings:/recordings
+    depends_on:
+      recording-storage: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      livekit: {condition: service_started}
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      TZ: Asia/Seoul
+    ports:
+      - "30160:8080"
+    volumes:
+      - ./infra/nginx/production.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web: {condition: service_healthy}
+      api: {condition: service_healthy}
+    restart: unless-stopped
+

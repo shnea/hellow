@@ -147,7 +147,7 @@ docker build --target web -t hellow-dev-web:handoff-check .
 | --- | --- |
 | 개발 | PC `192.168.0.55`, `dev-hellow.shnea.kr` |
 | 운영 | NAS `192.168.0.93`, `hellow.shnea.kr`, linux/amd64 |
-| 운영 경로 | `/volume2/homes/hellow/` |
+| 운영 경로 | 실행 구성 `/volume1/docker/prod/hellow/`, 데이터 마운트 `/volume2/homes/hellow/` |
 | 웹 진입 | Nginx 호스트30160, HTTPS에서 WebSocket·공개/직원 경로 처리 |
 | 이미지 | `registry.shnea.kr/hellow-이미지명:커밋SHA` 기준. latest 단독 의존 금지 |
 | 비밀 | SOPS+age 및 환경별 주입, 실제 값 Git 금지 |

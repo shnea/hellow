@@ -57,7 +57,7 @@ DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다
 - 운영 이미지의 대상 플랫폼은 `linux/amd64`로 한다.
 - 운영 Compose 파일과 배포 스크립트는 위 버전과 `docker-compose` 명령을 기준으로 작성하고 실제 NAS에서 검증한다.
 - Docker Engine 버전, 가용 메모리 및 프로젝트별 자원 제한은 아직 확인하지 않았다.
-- 제공된 출력의 작업 폴더는 `/volume2/homes/ttakji`이며, hellow의 배포 경로는 지정된 `/volume2/homes/hellow/`를 유지한다.
+- 제공된 출력의 작업 폴더는 `/volume2/homes/ttakji`였다. 2026-10-05 사용자가 실행 구성 경로를 `/volume1/docker/prod/hellow/`, DB·녹음 등 데이터 마운트 루트를 `/volume2/homes/hellow/`로 구분했다. SSH는 `shpark@192.168.0.93:9022`이며 비밀번호는 직접 입력한다.
 
 ## 이미지 레지스트리
 
@@ -82,11 +82,12 @@ DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다
 
 ## 운영 배포 구성
 
-- 운영 배포 경로: `/volume2/homes/hellow/` (사용자가 지정한 `volume2/homes/hellow/`를 절대 경로로 표기).
+- 운영 실행 구성: `/volume1/docker/prod/hellow/`. DB·녹음·Redis 마운트 데이터는 `/volume2/homes/hellow/` 하위에 둔다.
 - 운영 서버에는 배포·실행에 필요한 최소 파일만 둔다.
 - 대상은 Compose 파일, 필요한 환경 설정, 필요한 경우 암호문 복호화 도구·절차, 마운트할 파일이다.
 - 운영 실행 이미지는 위 레지스트리에서 가져오는 구성을 기준으로 한다. 프로젝트 전체 소스와 개발용 의존성을 운영 배포물에 포함하지 않는다.
 - 서비스 구성, 마운트 목록, 배포 명령, 상태 확인·복구 절차는 실제 구현 시 정한다.
+- 현재 배포 파일과 절차는 [운영 배포](production-deployment.md)에 둔다. 준비·이미지 게시·NAS 반영·실기기 수락을 구분하며 실제 결과는 [인계](handoff.md)가 정본이다.
 
 ## CI/CD 배포 대상 선택
 
