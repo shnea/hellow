@@ -38,7 +38,7 @@ LiveKit `use_external_ip`로 STUN에서 공개 주소를 찾고 UDP TURN을 함�
 | 개발 | `dev-hellow.shnea.kr` | `192.168.0.55:30160` (개발 PC에서 localhost로 접근하는 서비스) |
 | 로컬 테스트 | `dev-hellow.shnea.kr` | 개발 환경과 동일 |
 
-DNS, TLS 종료 위치 및 인증서 관리 방식은 아직 정하지 않았다. 위 표는 지정된 연결 기준이며 실제 연결 검증 결과가 아니다.
+2026-10-05 운영 HTTPS·OIDC 복귀 주소·WebSocket과 배포 PC에서 공개 호스트의 TCP30165/UDP30168 도달성을 실제 확인했다. 기존 reverse proxy를 통해 NAS30160으로 연결되며 DNS/TLS 경로는 동작한다. TLS 종료 위치/인증서 관리의 문서화와 실제 LTE 통화 수락은 별도다. 증거와 현재 실행 상태는 [인계](handoff.md)를 따른다.
 
 ## 운영 NAS 사양
 

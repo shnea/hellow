@@ -1,5 +1,18 @@
 # 작업 인계 기록
 
+## 2026-10-05 운영 NAS 최초 반영 완료
+
+- **운영 API·웹 `0c0b712`, DB B25 설치 완료.** 구성·환경·Nginx·LiveKit·암호문·SOPS는 `/volume1/docker/prod/hellow/`, PostgreSQL/Redis/녹음 임시 파일/백업/운영 age 키는 `/volume2/homes/hellow/`에 둔다. NAS 신규 설치이며 개발 DB·조직·권한을 가져오지 않았다. 첫 시도 실패 DB는 아래 기록대로 보존했다.
+- API 이미지 digest `sha256:1f0e34c7cc7ef563e0e2f96e84d204601f997e94611b6b904cfca1a7a8882d8f`, 웹 `sha256:e52bb1c88d8ccd8fe53a184099f189ae07a0ab5c1f1b2be9bc4b3ff644bea0a1`. 검증된 B25 API build와 동일 웹 소스를 이 커밋 SHA로 게시/pull했다. 배포 기록 커밋과 실행 이미지 SHA는 별도다.
+- worker/공개 입구를 열기 전에 NAS API의 Flyway `25/success`·Hibernate validate/health를 확인하고 실제 신규 DB dump를 생성했다. 백업 **`/volume2/homes/hellow/backups/hellow-first-install-20261005_035230.dump`**, SHA256 **`eaff2142d3c8253f0515713e8aeab6ae7921c5370b6acc7d471067d55d4d91ba`**, 복원 DB **`hellow_restore_20261005_035230`**를 보존한다.35개 업무 테이블+Flyway 이력의 전체 행·열 hash가 복원 직후와 복원 API validate/health 뒤 모두 일치했다. 업무 테이블은 빈 상태이며 `routing_lock` 행1개만 있다.
+- 정상5종 worker를 재개하고 Redis·LiveKit·Egress·웹·Nginx를 실행했다. API12:53:54·웹12:54:15·Nginx12:54:26 KST 시작. API/웹/DB/Redis healthy, Media/Nginx running·재시작0, 실제 Nginx 문법 통과. 다른 NAS 프로젝트의 이미지·시작 시각은 반영 전후 동일했다. API/Egress의 녹음 임시 디렉터리 쓰기 권한과 운영 환경600·age 키 root600을 최종 확인했다.
+- 실제 `https://hellow.shnea.kr/login`/`support` HTTP200, 비인증 직원 `/api/me`401, 운영 OIDC issuer/client/redirect/logout 일치와 PKCE 로그인 주소200을 확인했다. 실제 브라우저 로그인 버튼에서 운영 realm 로그인·회원가입 링크를 확인했다. 로그인/회원가입 완료와 조직 생성은 사용자가 수행할 다음 단계다.
+- 이후 사용자가 회원가입한 첫 관리자 issuer·subject를 전달했다. 전달 변수 `ADMIN_OIDC_SUBJECT`를 코드의 **`ADMIN_OIDC_SUB`**로 매핑해 운영 평문/암호문/NAS에 적용하고 복호화 일치를 재검사했다. 진행 상담0 확인 후 API만 **12:59:57 KST**에 재시작하고13:00:10 Nginx 연결을 reload했다. API health와 실제 관리자 환경 값을 확인했으며 다른 모든 실행 서비스의 이미지·시작 시각은 동일하다. 증거 `output/production-admin-activation-proof.json`. 실제 해당 회원의 로그인/최고관리자 화면 수락은 다음 단계다.
+- 실제 운영 플랫폼 context를 PC와 NAS에서 확인했다. 운영 키로 합성 무음 WAV1644bytes를 **PRIVATE·영구** 저장하고 익명 차단·단기 조회 티켓의 원본 byte hash 일치를 검사했다. 합성 검수 파일 `cd976235-bf36-490d-8e5f-2c122f3241fb`는 플랫폼에 보존했으며 고객 녹음이 아니다. 최종 녹음 저장은 플랫폼이며 NAS `recordings`는 업로드 확인 전 임시 파일이다.
+- HTTPS LiveKit WebSocket 실제101/Accept 검증, 배포 PC→운영 공개 호스트의 TCP30165 연결·UDP30168 TURN Binding 응답을 확인했다.60초 토큰의 합성 signaling 방은 publish/subscribe/data 발신 권한이 없고 실제 통화를 하지 않았다. 실제 LTE/2인 통화·Egress 녹음/재생 수락과 구분한다. LiveKit의 UDP 수신 버퍼 경고는 관찰됐으며 NAS 공통 sysctl은 변경하지 않았다.
+- 증거: `output/production-{baseline-proof,image-publication,http-smoke-proof,file-smoke-proof,media-smoke-proof,nas-backup-proof,nas-activation-proof,nas-final-proof}.json`. 임시 복원 API는 중지하고 DB·dump를 보존했다. PC의 검수 API/DB도 중지하며 사용자 개발/다른 프로젝트 서비스를 재시작하지 않는다.
+- **다음 사용자 단계:** 지정한 운영 관리자 계정으로 로그인 → 첫 조직/직원 권한·공개 접수 설정 → 실제 계정의 채팅/이미지/지식/음성·녹음 수락. 자동 백업/외부 장애영역 복제·NFR·STT/AI·유료 공급자·보류 태블릿 문서 패널은 별도 후속이다. 최초 반영 검사 시 CRM 조직/회원/녹음은0이었고, 이후 최고관리자 값 적용을 완료했다. 플랫폼 회원가입과 CRM Membership 생성은 별개다.
+
 ## 2026-10-05 운영 신규 설치·초기 스키마 보완
 
 - 사용자가 운영은 미구성 신규 설치라고 확인하고 지정 경로에 Compose·`.env.prod` 업로드를 요청했다. SSH9022 연결 성공, 두 루트는 비어 있고 기존 Hellow 컨테이너/업무 DB가 없음을 확인했다. NAS Docker24.0.2·Compose2.20.1·amd64와 가용 저장 공간을 실제 확인했다. 다른 프로젝트는 변경하지 않는다.

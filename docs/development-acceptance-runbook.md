@@ -141,7 +141,7 @@ docker build --target web -t hellow-dev-web:handoff-check .
 
 ## O02 운영 NAS 배포
 
-**현재:** 개발 배포는 반복 검증됐지만 동일 기능의 운영 NAS 배포 완료는 아니다. 상세 환경은 [infrastructure.md](infrastructure.md)가 정본이다.
+**현재:** 2026-10-05 운영 NAS에 API·웹 `0c0b712`와 신규 B25 DB를 반영하고 백업/복원·HTTPS/OIDC 주소·PRIVATE 공급자·WebSocket·PC에서의 미디어 포트 도달성을 확인했다. 첫 관리자/조직·실제 계정 업무와 LTE/녹음 수락은 별도다. 실제 상태·증거는 [작업 인계](handoff.md), 상세 환경은 [infrastructure.md](infrastructure.md)가 정본이다.
 
 | 구분 | 현재 기준 |
 | --- | --- |
@@ -175,7 +175,7 @@ docker build --target web -t hellow-dev-web:handoff-check .
 
 ## O03 백업과 복구 운영
 
-**현재:** 개발 변경 시 수동 백업·복원 검증을 수행했다. 정기 자동 백업과 운영 DR 완료를 의미하지 않는다. 요구사항 68, 77장.
+**현재:** 개발 변경과 2026-10-05 운영 최초 설치에서 수동 백업·별도 DB 복원·전체 행/열 hash·API validate를 검증했다. 정기 자동 백업과 운영 DR 완료를 의미하지 않는다. 요구사항 68, 77장.
 
 - 대상 목록: PostgreSQL, 아직 업로드 확정 전 로컬 녹음, 플랫폼 저장 파일의 별도 책임/복구 계약, 설정·암호화 비밀·필요 인증 키, 업무 Job 상태. 재생성 가능한 검색/집계는 복구 원천과 재생성 절차를 기록한다.
 - 정책: 백업 주기·보존·암호화·외부/별도 장애영역 복제·접근 담당·RPO/RTO를 정한다. 사용자 정책 없이 숫자를 확정하지 않는다.
